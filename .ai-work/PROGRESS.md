@@ -207,6 +207,12 @@
 
 ### Güncel Test Sayısı: 74 birim + 29 canlı = **103 PASS**
 
+### Ek Düzeltme — Eksik Bağımlılık + CI
+- **`requirements.txt`**: `cryptography` eksikti ama `model_routes.py` Fernet kullanıyor
+  → eklendi (`cryptography>=41.0.0`). Opsiyonel RAG paketleri yorum olarak belgelendi.
+- **CI (`.github/workflows/ci.yml`)**: yalnızca 3 test dosyası çalışıyordu → tüm birim suite
+  (`pytest tests/`, canlı hariç) + genişletilmiş import kontrolü (`rag_system`, `ai_agent` eklendi).
+
 ### Açık (güncel)
 - ✅ Git yok → ÇÖZÜLDÜ (T-011)
 - ✅ G3 import ~28s → ÇÖZÜLDÜ (T-012)

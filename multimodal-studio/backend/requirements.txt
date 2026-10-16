@@ -18,6 +18,14 @@ httpx>=0.26.0
 # HTML parsing for web search
 beautifulsoup4>=4.12.0
 
+# Cryptographic key storage (Fernet) — model_routes.py tarafından kullanılır
+cryptography>=41.0.0
+
+# --- Opsiyonel: RAG (Retrieval-Augmented Generation) ---
+# Kurulmazsa RAG devre dışı kalır; uygulama çalışmaya devam eder (lazy/guarded).
+# chromadb>=1.0.0
+# sentence-transformers>=3.0.0
+
 # CORS middleware (built into FastAPI)
 # - Already included via CORSMiddleware in app.py
 

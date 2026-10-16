@@ -39,20 +39,15 @@ jobs:
         pip install -r requirements.txt
         pip install pytest pytest-asyncio httpx beautifulsoup4
 
-    - name: Run calculator & tools tests
+    - name: Run unit tests (live hariç)
       run: |
         cd multimodal-studio/backend
-        python -m pytest tests/test_calculator.py tests/test_tools_spec.py -v --tb=short
-
-    - name: Run catalog & memory tests
-      run: |
-        cd multimodal-studio/backend
-        python -m pytest tests/test_catalog_memory.py -v --tb=short
+        python -m pytest tests/ -v --tb=short
 
     - name: Import check (all modules load)
       run: |
         cd multimodal-studio/backend
-        python -c "import web_tools, tools_spec, memory, tool_executor; print('All modules OK')"
+        python -c "import web_tools, tools_spec, memory, tool_executor, rag_system, ai_agent; print('All modules OK')"
 
   lint:
     runs-on: ubuntu-latest
