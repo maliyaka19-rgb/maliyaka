@@ -133,6 +133,12 @@
         @media (min-width: 769px) {
             .sidebar-overlay { display: none; }
         }
+        /* Orta genişlik (769–1100px): 3 sütun sıkışmasın diye panelleri daralt */
+        @media (min-width: 769px) and (max-width: 1100px) {
+            .sidebar { width: 232px; }
+            .app-layout .project-panel { width: 226px; }
+            .sidebar-title, .project-title { font-size: 0.7rem; }
+        }
         .sidebar-header {
             padding: 16px;
             border-bottom: 1px solid var(--border);
@@ -243,7 +249,7 @@
         }
         .menu-toggle:hover { border-color: var(--accent); background: var(--accent-soft); }
         .icon-btn { min-width: 40px !important; padding: 8px 10px !important; font-size: 1rem !important; }
-        .main-header-title { font-weight: 600; font-size: 1rem; }
+        .main-header-title { font-weight: 600; font-size: 1rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 240px; }
         .main-header-actions { display: flex; gap: 8px; }
         .header-btn {
             background: var(--input-bg) !important;
