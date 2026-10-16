@@ -37,6 +37,9 @@ from fs_routes import router as fs_router
 # Custom Agent Builder Import
 from custom_agent_routes import router as custom_agent_router
 
+# Telegram Integration Import (control + chat)
+from telegram_routes import router as telegram_router
+
 # Video Generation Import (Pollinations.ai)
 from video_generator import get_video_generator
 
@@ -80,6 +83,9 @@ app.include_router(fs_router)
 # Include Custom Agent Router
 app.include_router(custom_agent_router)
 
+# Include Telegram Router (bot control + chat)
+app.include_router(telegram_router)
+
 # CORS configuration (G2 fix)
 # Wildcard "*" cannot be combined with allow_credentials=True and is unsafe for
 # production. We use an explicit allowlist. Zero-config local development keeps
@@ -122,6 +128,28 @@ async def startup_agent():
         "learning_query": _agent_learning_query,
     })
     logger.info("Agent initialized and tools connected")
+
+    # Start Telegram bot if configured and enabled (non-blocking background task)
+    try:
+        from telegram_bot import token_is_set, load_config as _tg_load, start_bot_from_config
+        _tg_cfg = _tg_load()
+        if token_is_set() and _tg_cfg.get("enabled", True):
+            _tg_status = await start_bot_from_config()
+            logger.info("Telegram bot started (running=%s)", _tg_status.get("running"))
+        else:
+            logger.info("Telegram bot not configured/enabled; skipping start")
+    except Exception as e:
+        logger.warning(f"Telegram bot not started: {e}")
+
+
+@app.on_event("shutdown")
+async def shutdown_telegram():
+    """Stop the Telegram bot polling task on shutdown."""
+    try:
+        from telegram_bot import stop_bot
+        await stop_bot()
+    except Exception as e:
+        logger.debug(f"Telegram shutdown error: {e}")
 
 
 async def _agent_code_generation(params: Dict[str, Any]) -> Dict[str, Any]:

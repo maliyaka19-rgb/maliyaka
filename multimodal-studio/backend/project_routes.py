@@ -55,11 +55,18 @@ class ProjectInfo(BaseModel):
 # ============================================================
 
 def _resolve(rel_path: str) -> str:
-    """Resolve relative path safely within working directory."""
-    clean = rel_path.replace("\\", "/").lstrip("/")
-    clean = clean.replace("../", "").replace("..\\", "")
-    full = os.path.abspath(os.path.join(WORKING_DIR, clean))
-    if not full.startswith(os.path.abspath(WORKING_DIR)):
+    """Resolve a relative path safely within the working directory.
+
+    Uses realpath + commonpath so symlinks and sibling-prefix paths
+    (e.g. ``...\\YAPAY ZEKA_backup``) cannot escape the project root.
+    """
+    root = os.path.realpath(WORKING_DIR)
+    clean = (rel_path or "").replace("\\", "/").lstrip("/")
+    full = os.path.realpath(os.path.join(root, clean))
+    try:
+        if os.path.commonpath([root, full]) != root:
+            raise HTTPException(status_code=403, detail="Path traversal detected")
+    except ValueError:
         raise HTTPException(status_code=403, detail="Path traversal detected")
     return full
 
@@ -174,6 +181,13 @@ async def create_file(data: FileCreate):
 async def delete_file(path: str):
     """Delete file or directory."""
     full_path = _resolve(path)
+
+    # Never allow deleting the project root itself (rmtree of the root would
+    # wipe the whole project and is almost always a mistake). Use
+    # DELETE /api/v1/fs/project for intentional project deletion.
+    if os.path.normcase(os.path.realpath(full_path)) == os.path.normcase(os.path.realpath(WORKING_DIR)):
+        raise HTTPException(status_code=403, detail="Proje kökü bu uçla silinemez")
+
     if not os.path.exists(full_path):
         raise HTTPException(status_code=404, detail="Not found")
 

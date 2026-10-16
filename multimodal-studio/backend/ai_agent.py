@@ -210,6 +210,9 @@ class NexusAIAgent:
         working_dir = os.environ.get("NEXUS_WORKING_DIR", os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.tools = ToolExecutor(working_dir=working_dir)
         self.system_prompt = self._build_system_prompt()
+        # Per-chat tool allow-list (set from the active custom agent in chat()).
+        # None/empty => advertise every tool.
+        self._active_tools = None
     
     def _refresh_llm_config(self):
         """Refresh LLM config from model_config.json (latest active provider/model)."""
@@ -301,6 +304,9 @@ Think through problems step-by-step before acting:
 - When running commands, show the output
 - If something fails, debug and fix it
 - **Think before you act** - Complex tasks need planning
+- **COMPLETE MULTI-STEP TASKS**: When the user asks for a multi-step deliverable (create a project, write several files, build a site/app), do ALL the steps with tools BEFORE answering. Do NOT stop after a single tool call, and do NOT merely describe what could be done — actually create/edit every required file, then verify (list files / run the command) and only then report.
+- Never leave a task half-finished. If a tool returns an error, diagnose it and retry with a corrected call instead of giving up.
+- Write file contents IN FULL — never abbreviate with "..." or placeholders.
 
 ## EXAMPLE WORKFLOW
 
@@ -336,12 +342,14 @@ When you need to use tools, call them. Work like a real coding assistant — rea
         
         # Get custom agent system prompt if agent_id provided
         custom_system_prompt = None
+        self._active_tools = None  # reset per chat; set below if a custom agent is used
         if agent_id:
             try:
                 from custom_agents import get_agent
                 custom_agent = get_agent(agent_id)
                 if custom_agent:
                     custom_system_prompt = custom_agent.get("system_prompt")
+                    self._active_tools = custom_agent.get("tools") or None
             except Exception as e:
                 logger.debug(f"Custom agent load error: {e}")
         
@@ -370,6 +378,7 @@ Sen NEXUS-CORE yapay zeka ajanısın. Aşağıdaki araçları kullanabilirsin:
 
 ### Yapay Zeka Araçları
 - generate_code: Üretim hazır kod oluştur
+- generate_image: Gerçek görsel dosyası üret (URL döndürür)
 - generate_visual_prompt: Midjourney/DALL-E/SD için görsel prompt
 - generate_video_prompt: Veo/Sora/Runway için video prompt
 - generate_real_video: Gerçek MP4 video dosyası oluştur (ücretsiz, ~20sn sürer)
@@ -379,7 +388,23 @@ Sen NEXUS-CORE yapay zeka ajanısın. Aşağıdaki araçları kullanabilirsin:
 - search_learning: Geçmiş deneyimlerde ara
 - answer_question: Genel bilgi sorularını cevapla
 
-Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
+## GÖREV TAMAMLAMA PROTOKOLÜ (ÇOK ÖNEMLİ)
+
+Kullanıcı çok adımlı bir görev verdiğinde (örn. "bir site hazırla", "3 dosya oluştur",
+"proje kur ve çalıştır"):
+
+1. **PLANLA**: Görevi küçük, net adımlara böl. Kaç dosya/değişiklik gerektiğini belirle.
+2. **TAMAMEN YÜRÜT**: Görev bitene kadar araçları sırayla çağır. **Tek bir araç çağrısından
+   sonra DURMA.** İstenen TÜM dosyaları oluştur, TÜM düzenlemeleri yap. Yarım bırakma.
+3. **DOĞRULA**: Bitince sonucu kontrol et (dosyaları listele, komutu çalıştır, çıktıyı incele).
+4. **HATA OLURSA**: Araç hata verirse pes etme; hatanın nedenini bul, düzelt ve görevi sürdür.
+5. **RAPORLA**: Ancak her şey bittikten sonra kullanıcıya ne yaptığını özetleyen net bir
+   metin yanıt ver.
+
+Kurallar:
+- Görevi asla "yapılabilir" diye tarif edip bırakma — GERÇEKTEN YAP.
+- Dosya içeriğini tam yaz; "..." ile kısaltma.
+- Türkçe yanıt ver."""
         else:
             system_prompt = self._build_system_prompt(user_message)
         messages = [{"role": "system", "content": system_prompt}]
@@ -414,7 +439,7 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
                 "icon": "🧠"
             })
             
-            max_iterations = 15
+            max_iterations = 25
             for iteration in range(max_iterations):
                 llm_response = await self._call_llm(messages)
                 
@@ -480,6 +505,20 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
                         "tool_call_id": tool_call["id"],
                         "content": json.dumps(tool_result, ensure_ascii=False)
                     })
+
+                    # If a tool failed, nudge the model to RECOVER instead of
+                    # silently continuing with a broken step (root cause of many
+                    # half-finished multi-step tasks).
+                    if isinstance(tool_result, dict) and tool_result.get("success") is False:
+                        err = tool_result.get("error") or tool_result.get("message") or ""
+                        messages.append({
+                            "role": "user",
+                            "content": (
+                                f"[SİSTEM NOTU] '{func_name}' aracı hata verdi: {str(err)[:300]}. "
+                                "Nedeni gider, gerekirse farklı bir yol dene ve görevi tamamla. "
+                                "Kullanıcıya yarım bırakma."
+                            )
+                        })
                     
                     self.memory.add_message(conversation_id, Message(
                         role="assistant", content=message.get("content", ""), tool_calls=[tool_call]
@@ -499,9 +538,9 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
                     provider = getattr(self, 'provider', 'openrouter')
                     
                     if api_key and api_key not in ("sk-placeholder", ""):
-                        # Trim messages to avoid token limits - keep system + last 20 messages
+                        # Trim messages to avoid token limits - keep system + last 30 messages
                         final_messages = [messages[0]] if messages else []
-                        final_messages.extend(messages[-20:])
+                        final_messages.extend(messages[-30:])
                         final_messages.append({
                             "role": "user",
                             "content": f"Kullanıcının sorusu: {user_message}\n\nYukarıdaki tüm araç sonuçlarını analiz et ve kullanıcının sorusuna kapsamlı bir yanıt ver. Sadece metin yanıt ver, tool kullanma."
@@ -718,6 +757,21 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
             return "video"
         return "question"
     
+    def _tools_payload(self) -> list:
+        """Tool specs advertised to the LLM.
+
+        When the active agent declares a tool allow-list we advertise ONLY those
+        tools (this enforces the per-agent capability list instead of treating it
+        as inert metadata). Falls back to all tools when the allow-list is empty
+        or unknown so the agent is never left without tools.
+        """
+        allowed = getattr(self, "_active_tools", None)
+        if not allowed:
+            return TOOLS
+        wanted = set(allowed)
+        filtered = [t for t in TOOLS if t.get("function", {}).get("name") in wanted]
+        return filtered or TOOLS
+
     async def _call_llm(self, messages: List[Dict]) -> Dict:
         """Call the LLM API with tools. Comprehensive multi-provider, multi-model fallback + response validation."""
         import httpx
@@ -789,7 +843,7 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
                     payload = {
                         "model": model,
                         "messages": messages,
-                        "tools": TOOLS,
+                        "tools": self._tools_payload(),
                         "tool_choice": "auto",
                         "temperature": self.llm_config.temperature,
                         "max_tokens": self.llm_config.max_tokens
@@ -800,7 +854,7 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
                     payload = {
                         "model": model,
                         "messages": messages,
-                        "tools": TOOLS,
+                        "tools": self._tools_payload(),
                         "tool_choice": "auto",
                         "temperature": self.llm_config.temperature,
                         "max_tokens": self.llm_config.max_tokens
@@ -924,7 +978,7 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
                             payload = {
                                 "model": model_id,
                                 "messages": messages,
-                                "tools": TOOLS,
+                                "tools": self._tools_payload(),
                                 "tool_choice": "auto",
                                 "temperature": 0.7,
                                 "max_tokens": 4096
@@ -935,7 +989,7 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
                             payload = {
                                 "model": model_id,
                                 "messages": messages,
-                                "tools": TOOLS,
+                                "tools": self._tools_payload(),
                                 "tool_choice": "auto",
                                 "temperature": 0.7,
                                 "max_tokens": 4096
@@ -1214,7 +1268,7 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
                 import httpx
                 async with httpx.AsyncClient(timeout=90.0) as client:
                     resp = await client.post(
-                        f"{self.backend_url}/api/v1/generate/real-video",
+                        f"{self.tools.backend_url}/api/v1/generate/real-video",
                         json={
                             "prompt": user_msg,
                             "duration": 5,

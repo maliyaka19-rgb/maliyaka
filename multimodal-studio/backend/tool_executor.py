@@ -41,14 +41,19 @@ class ToolExecutor:
         self.working_dir = working_dir or os.getcwd()
     
     def _resolve_path(self, relative_path: str) -> str:
-        """Resolve a relative path against the working directory, preventing path traversal."""
-        # Remove leading slashes and normalize
-        clean_path = relative_path.replace('\\', '/').lstrip('/')
-        # Prevent path traversal
-        clean_path = clean_path.replace('../', '').replace('..\\', '')
-        full_path = os.path.abspath(os.path.join(self.working_dir, clean_path))
-        # Verify the resolved path is still within working_dir
-        if not full_path.startswith(os.path.abspath(self.working_dir)):
+        """Resolve a relative path against the working directory, preventing path traversal.
+
+        Uses realpath + commonpath so symlinks and sibling-prefix paths cannot
+        escape the working directory. Absolute paths inside the working dir are
+        still allowed; paths outside it are rejected.
+        """
+        root = os.path.realpath(self.working_dir)
+        clean_path = (relative_path or "").replace('\\', '/').lstrip('/')
+        full_path = os.path.realpath(os.path.join(root, clean_path))
+        try:
+            if os.path.commonpath([root, full_path]) != root:
+                raise ValueError("Path traversal detected")
+        except ValueError:
             raise ValueError("Path traversal detected")
         return full_path
     
@@ -458,6 +463,21 @@ class ToolExecutor:
             elif tool_name == "rag_get_stats":
                 from rag_system import rag_get_stats
                 return await rag_get_stats()
+            
+            elif tool_name == "answer_question":
+                # answer_question is a *direct response* tool: the model should
+                # answer from its own knowledge. We acknowledge it (instead of
+                # returning "Unknown tool") so the agent does not treat it as a
+                # failure and derail the task.
+                return {
+                    "success": True,
+                    "tool": "answer_question",
+                    "question": arguments.get("question", ""),
+                    "instruction": (
+                        "Bu araç doğrudan yanıt içindir: soruyu kendi bilginle, "
+                        "araçsız olarak kullanıcıya metin yanıtı olarak ver."
+                    )
+                }
             
             else:
                 return {"success": False, "error": f"Unknown tool: {tool_name}"}

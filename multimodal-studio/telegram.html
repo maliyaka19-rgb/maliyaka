@@ -1,0 +1,252 @@
+<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>NEXUS-CORE — Telegram Entegrasyonu</title>
+<style>
+  :root {
+    --bg: #F8FAFC;
+    --surface: #FFFFFF;
+    --border: #E2E8F0;
+    --text: #1E293B;
+    --muted: #64748B;
+    --accent: #10B981;
+    --accent-soft: #ECFDF5;
+    --danger: #EF4444;
+    --radius: 12px;
+    --shadow: 0 1px 3px rgba(15,23,42,.06), 0 1px 2px rgba(15,23,42,.04);
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font-family: Inter, "Segoe UI", system-ui, sans-serif; line-height: 1.5;
+  }
+  .wrap { max-width: 780px; margin: 0 auto; padding: 32px 20px 64px; }
+  header { display: flex; align-items: center; gap: 12px; margin-bottom: 8px; }
+  .logo {
+    width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center;
+    background: var(--accent-soft); color: var(--accent); font-size: 20px;
+  }
+  h1 { font-size: 20px; margin: 0; }
+  .sub { color: var(--muted); font-size: 13px; margin: 2px 0 24px; }
+  .card {
+    background: var(--surface); border: 1px solid var(--border); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 20px; margin-bottom: 16px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 14px; display: flex; align-items: center; gap: 8px; }
+  label { display: block; font-size: 13px; font-weight: 600; margin: 12px 0 6px; }
+  input, select {
+    width: 100%; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px;
+    font-size: 14px; background: #fff; color: var(--text); outline: none;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  input:focus, select:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+  button {
+    border: 1px solid var(--border); background: #fff; color: var(--text); cursor: pointer;
+    padding: 9px 16px; border-radius: 10px; font-size: 14px; font-weight: 600;
+    transition: background .15s, border-color .15s, transform .05s;
+  }
+  button:hover { background: #F1F5F9; }
+  button:active { transform: translateY(1px); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { background: #0EA271; }
+  button.danger { color: var(--danger); border-color: #FECACA; }
+  button.danger:hover { background: #FEF2F2; }
+  button:disabled { opacity: .5; cursor: not-allowed; }
+  .status-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+  .stat { background: #F8FAFC; border: 1px solid var(--border); border-radius: 10px; padding: 12px; }
+  .stat .k { font-size: 11px; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); }
+  .stat .v { font-size: 15px; font-weight: 700; margin-top: 4px; word-break: break-all; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 999px; font-size: 12px; font-weight: 700; }
+  .badge.on { background: var(--accent-soft); color: #047857; }
+  .badge.off { background: #FEF2F2; color: #B91C1C; }
+  .toast {
+    position: fixed; bottom: 20px; left: 50%; transform: translateX(-50%) translateY(80px);
+    background: var(--text); color: #fff; padding: 10px 18px; border-radius: 10px; font-size: 13px;
+    opacity: 0; transition: opacity .2s, transform .2s; pointer-events: none; z-index: 50;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast.err { background: var(--danger); }
+  a.back { color: var(--accent); font-size: 13px; text-decoration: none; font-weight: 600; }
+  code { background: #F1F5F9; padding: 1px 6px; border-radius: 6px; font-size: 12px; }
+  ol { margin: 8px 0 0; padding-left: 20px; font-size: 13px; color: var(--muted); }
+  ol li { margin-bottom: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="logo">✈️</div>
+    <div>
+      <h1>Telegram Entegrasyonu</h1>
+      <div class="sub">NEXUS-CORE ajanını Telegram üzerinden kontrol et ve sohbet et.</div>
+    </div>
+  </header>
+
+  <div class="card">
+    <h2>📊 Durum <button id="btn-refresh" style="margin-left:auto;padding:4px 12px;font-size:12px">Yenile</button></h2>
+    <div class="status-grid">
+      <div class="stat"><div class="k">Bot</div><div class="v" id="st-running">—</div></div>
+      <div class="stat"><div class="k">Token</div><div class="v" id="st-token">—</div></div>
+      <div class="stat"><div class="k">Kullanıcı adı</div><div class="v" id="st-username">—</div></div>
+      <div class="stat"><div class="k">İzinli sohbetler</div><div class="v" id="st-allowed">—</div></div>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>⚙️ Yapılandırma</h2>
+    <label for="token">Bot Token</label>
+    <input id="token" type="password" placeholder="123456789:AA... (BotFather'dan)" autocomplete="off" />
+    <div class="hint">Token şifrelenerek saklanır ve arayüzde asla gösterilmez. Boş bırakırsan mevcut token korunur.</div>
+
+    <label for="allowed">İzinli Chat ID'leri (virgülle)</label>
+    <input id="allowed" type="text" placeholder="örn. 123456789, 987654321" />
+    <div class="hint">Boş bırakılırsa herkes kullanabilir. Kendi ID'ni Telegram'da bota <code>/id</code> yazarak öğren.</div>
+
+    <label for="agent">Varsayılan Ajan</label>
+    <select id="agent"><option value="auto">Otomatik</option></select>
+
+    <label for="enabled">Etkin</label>
+    <select id="enabled">
+      <option value="true">Açık</option>
+      <option value="false">Kapalı</option>
+    </select>
+
+    <div class="row">
+      <button class="primary" id="btn-save">💾 Kaydet</button>
+      <button id="btn-start">▶️ Başlat</button>
+      <button class="danger" id="btn-stop">⏹️ Durdur</button>
+    </div>
+  </div>
+
+  <div class="card">
+    <h2>📨 Test Mesajı Gönder</h2>
+    <label for="send-chat">Chat ID</label>
+    <input id="send-chat" type="text" placeholder="123456789" />
+    <label for="send-text">Mesaj</label>
+    <input id="send-text" type="text" placeholder="Merhaba NEXUS!" />
+    <div class="row"><button id="btn-send">Gönder</button></div>
+  </div>
+
+  <div class="card">
+    <h2>🚀 Nasıl Kurulur?</h2>
+    <ol>
+      <li>Telegram'da <b>@BotFather</b>'a git, <code>/newbot</code> yaz ve bir bot oluştur.</li>
+      <li>Verdiği <b>token</b>'ı yukarıdaki alana yapıştır ve <b>Kaydet</b>'e bas.</li>
+      <li><b>Başlat</b>'a bas. Durumda "Çalışıyor" yazmalı.</li>
+      <li>Telegram'da botuna <code>/start</code> yaz. <code>/help</code> ile komutları gör.</li>
+      <li>Komutlar: <code>/new</code> (yeni sohbet), <code>/agents</code>, <code>/agent &lt;id&gt;</code>, <code>/status</code>, <code>/id</code>.</li>
+    </ol>
+    <p class="hint">Not: Sunucunun (backend, port 8000) çalışıyor olması gerekir. Bot, uzun-yoklama (long-polling) ile çalışır; dışarıdan erişim gerekmez.</p>
+  </div>
+
+  <p><a class="back" href="sohbet.html">← Sohbete dön</a></p>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const API = "http://localhost:8000/api/v1/telegram";
+const AGENTS_API = "http://localhost:8000/api/v1/agents";
+const $ = (id) => document.getElementById(id);
+
+function toast(msg, isErr) {
+  const t = $("toast");
+  t.textContent = msg;
+  t.classList.toggle("err", !!isErr);
+  t.classList.add("show");
+  clearTimeout(t._h);
+  t._h = setTimeout(() => t.classList.remove("show"), 2600);
+}
+
+async function api(path, opts) {
+  const res = await fetch(API + path, Object.assign({
+    headers: { "Content-Type": "application/json" }
+  }, opts || {}));
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.detail || ("HTTP " + res.status));
+  return data;
+}
+
+function renderStatus(s) {
+  $("st-running").innerHTML = s.running
+    ? '<span class="badge on">Çalışıyor</span>'
+    : '<span class="badge off">Durdu</span>';
+  $("st-token").innerHTML = s.token_set
+    ? '<span class="badge on">Ayarlı</span>'
+    : '<span class="badge off">Yok</span>';
+  $("st-username").textContent = s.bot_username || "—";
+  $("st-allowed").textContent = (s.allowed_chat_ids && s.allowed_chat_ids.length)
+    ? s.allowed_chat_ids.join(", ") : "Herkes";
+  if (s.allowed_chat_ids && s.allowed_chat_ids.length) {
+    $("allowed").value = s.allowed_chat_ids.join(", ");
+  }
+  if (s.default_agent_id) $("agent").value = s.default_agent_id;
+  $("enabled").value = s.enabled ? "true" : "false";
+}
+
+async function refresh() {
+  try { renderStatus(await api("/status")); }
+  catch (e) { toast("Durum alınamadı: " + e.message, true); }
+}
+
+async function loadAgents() {
+  try {
+    const res = await fetch(AGENTS_API);
+    const data = await res.json();
+    const list = Array.isArray(data) ? data : (data.agents || []);
+    const sel = $("agent");
+    sel.innerHTML = '<option value="auto">Otomatik</option>';
+    list.forEach(a => {
+      const o = document.createElement("option");
+      o.value = a.id; o.textContent = (a.icon ? a.icon + " " : "") + (a.name || a.id);
+      sel.appendChild(o);
+    });
+  } catch (e) { /* sessiz */ }
+}
+
+function parseIds(str) {
+  return (str || "").split(",").map(s => s.trim()).filter(Boolean).map(Number).filter(n => !isNaN(n));
+}
+
+$("btn-refresh").onclick = refresh;
+$("btn-save").onclick = async () => {
+  const body = {
+    allowed_chat_ids: parseIds($("allowed").value),
+    enabled: $("enabled").value === "true",
+    default_agent_id: $("agent").value || "auto"
+  };
+  if ($("token").value.trim()) body.token = $("token").value.trim();
+  try {
+    const s = await api("/config", { method: "POST", body: JSON.stringify(body) });
+    $("token").value = "";
+    renderStatus(s);
+    toast("Kaydedildi");
+  } catch (e) { toast("Kaydedilemedi: " + e.message, true); }
+};
+$("btn-start").onclick = async () => {
+  try { renderStatus(await api("/start", { method: "POST" })); toast("Başlatıldı"); }
+  catch (e) { toast("Başlatılamadı: " + e.message, true); }
+};
+$("btn-stop").onclick = async () => {
+  try { renderStatus(await api("/stop", { method: "POST" })); toast("Durduruldu"); }
+  catch (e) { toast("Durdurulamadı: " + e.message, true); }
+};
+$("btn-send").onclick = async () => {
+  const chat_id = Number($("send-chat").value);
+  const text = $("send-text").value.trim();
+  if (!chat_id || !text) return toast("Chat ID ve mesaj gerekli", true);
+  try {
+    const r = await api("/send", { method: "POST", body: JSON.stringify({ chat_id, text }) });
+    if (r.success) toast("Mesaj gönderildi");
+    else toast("Gönderilemedi: " + (r.error || "bilinmeyen"), true);
+  } catch (e) { toast("Gönderilemedi: " + e.message, true); }
+};
+
+loadAgents().then(refresh);
+</script>
+</body>
+</html>

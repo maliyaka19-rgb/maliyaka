@@ -10,6 +10,7 @@ from typing import Optional, List
 import os
 import json
 import string
+import shutil
 from pathlib import Path
 
 router = APIRouter(prefix="/api/v1/fs", tags=["filesystem"])
@@ -288,11 +289,100 @@ async def get_recent_projects():
     return {"success": True, "projects": valid_projects}
 
 
+class CreateProjectRequest(BaseModel):
+    path: str
+    name: str
+
+
 @router.delete("/recent-projects")
-async def clear_recent_projects():
-    """Clear recent projects list."""
+async def clear_recent_projects(path: Optional[str] = None):
+    """Clear the recent projects list, or remove a single entry when `path` is given."""
+    if path:
+        recent = _load_recent()
+        target = os.path.normcase(os.path.abspath(path))
+        remaining = [p for p in recent if os.path.normcase(os.path.abspath(p.get("path", ""))) != target]
+        _save_recent(remaining)
+        return {"success": True, "removed": len(recent) - len(remaining)}
     _save_recent([])
     return {"success": True}
+
+
+@router.post("/create-project", summary="Create a new project folder")
+async def create_project(req: CreateProjectRequest):
+    """Create a new project folder inside `path` (parent directory) and return its full path."""
+    parent = os.path.abspath(req.path)
+    name = (req.name or "").strip()
+
+    if not name:
+        raise HTTPException(status_code=400, detail="Proje adı boş olamaz")
+    if any(sep in name for sep in ("/", "\\", "..")):
+        raise HTTPException(status_code=400, detail="Proje adı geçersiz karakter içeriyor")
+    if not os.path.isdir(parent):
+        raise HTTPException(status_code=404, detail="Üst klasör bulunamadı")
+
+    target = os.path.join(parent, name)
+    if os.path.exists(target):
+        raise HTTPException(status_code=409, detail="Bu isimde bir dosya/klasör zaten var")
+
+    try:
+        os.makedirs(target, exist_ok=False)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Klasör oluşturulamadı: {e}")
+
+    return {"success": True, "path": target, "name": name}
+
+
+def _is_protected_dir(path: str) -> bool:
+    """Refuse to delete dangerous roots (drive roots, home, the app itself)."""
+    p = os.path.abspath(path)
+    if os.path.dirname(p) == p:  # drive root, e.g. C:\
+        return True
+    home = os.path.abspath(os.path.expanduser("~"))
+    backend_dir = os.path.dirname(os.path.abspath(__file__))
+    studio_root = os.path.dirname(backend_dir)
+    protected = {os.path.normcase(home), os.path.normcase(backend_dir), os.path.normcase(studio_root)}
+    return os.path.normcase(p) in protected
+
+
+@router.delete("/project", summary="Delete a project folder")
+async def delete_project(path: str):
+    """
+    Recursively delete a project folder. Refuses drive roots, the user home and
+    the application directories. Closes the project first if it is the currently
+    open one, and removes it from the recent list.
+    """
+    global _current_workdir, _project_open
+
+    if not path:
+        raise HTTPException(status_code=400, detail="path gerekli")
+
+    target = os.path.abspath(path)
+    if not os.path.exists(target):
+        raise HTTPException(status_code=404, detail="Proje bulunamadı")
+    if not os.path.isdir(target):
+        raise HTTPException(status_code=400, detail="Bu bir klasör değil")
+    if _is_protected_dir(target):
+        raise HTTPException(status_code=403, detail="Bu klasör güvenlik nedeniyle silinemez")
+
+    # If deleting the open project, reset the working dir first
+    if os.path.normcase(target) == os.path.normcase(os.path.abspath(_current_workdir)):
+        try:
+            await close_project()
+        except Exception:
+            pass
+
+    try:
+        shutil.rmtree(target)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Proje silinemedi: {e}")
+
+    # Remove from recent list too
+    recent = _load_recent()
+    remaining = [p for p in recent if os.path.normcase(os.path.abspath(p.get("path", ""))) != os.path.normcase(target)]
+    if len(remaining) != len(recent):
+        _save_recent(remaining)
+
+    return {"success": True, "path": target, "message": "Proje silindi"}
 
 
 @router.get("/home")
