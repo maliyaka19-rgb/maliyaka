@@ -186,3 +186,79 @@ Ozet: **34/36 PASS**
 - **Proxy üzerinden yükleme**: **PASS**
 - **Kenar durumları**: **PASS**
 - **Regresyon (backend testleri etkilenmedi)**: **PASS**
+
+---
+
+## Oturum 10 — Ajan gücü + proje + Telegram + UI (2026-10-17)
+
+### Birim testleri — 125 PASS / 0 FAIL
+| Grup | Adet | Sonuç |
+|------|------|-------|
+| `test_telegram.py` (YENİ) | 19 | ✅ PASS |
+| `test_project_fs.py` (YENİ) | 8 | ✅ PASS |
+| `test_agent_strength.py` (YENİ) | 6 | ✅ PASS |
+| Mevcut (calc/fallback/rag/rate-limit/response/tools/catalog) | 92 | ✅ PASS |
+| **Toplam** | **125** | **PASS** |
+
+Komut: `python -m pytest tests/ -q --ignore=tests/test_api_live.py` → `125 passed`.
+
+### CANLI — Ajan gücü (gerçek Groq, uçtan uca, taklit yok)
+| Adım | Sonuç |
+|------|-------|
+| `POST /api/v1/ai/chat` (agent_id=`coder`; "3 dosyalı Python projesi oluştur") | ✅ **200, 77.3 sn** |
+| `success` | ✅ `True` |
+| `tools_used` | ✅ `['write_file','write_file','write_file','list_files']` (yaz + **doğrula**) |
+| `main.py` | ✅ 2016 B / 73 satır (gerçek içerik) |
+| `utils.py` | ✅ 2293 B / 80 satır |
+| `README.md` | ✅ 2038 B / 69 satır |
+| Yanıt | ✅ anlamlı özet — "tam yanıt üretemiyorum" YOK |
+
+**Sınıflandırma: PASS** (eski zayıf/yarım görev davranışı giderildi).
+
+### CANLI — Proje/dosya yönetimi (backend uçları)
+| İşlem | Sonuç |
+|-------|-------|
+| `POST /fs/create-project` | ✅ 200 |
+| `POST /fs/create-project` (aynı ad) | ✅ 409 |
+| `POST /project/create` / `GET /project/file` / `GET /project/tree` | ✅ 200 |
+| `POST /project/rename` | ✅ 200 |
+| `DELETE /project/file` | ✅ 200 |
+| `DELETE /project/file?path=.` (kök) | ✅ **403** (engellendi) |
+| `GET /project/file?path=../../../../Windows/win.ini` | ✅ **403** (traversal engellendi) |
+| `DELETE /fs/project` | ✅ 200; klasör gerçekten silindi |
+
+**Sınıflandırma: PASS**
+
+### CANLI — Telegram uçları
+| Kontrol | Sonuç |
+|---------|-------|
+| `GET /telegram/status` | ✅ 200; **token sızmıyor** (`token_set:false`) |
+| `POST /telegram/config` | ✅ 200; kaydedildi, token şifreli |
+| `POST /telegram/start` (token yok) | ✅ **400** (zarif hata) |
+| `POST /telegram/send` (bot kapalı) | ✅ `success:false` (zarif) |
+| `telegram_config.json` | ✅ düz metin token YOK |
+| Gerçek Telegram botu (token ile) | ⏳ **NOT RUN** (kullanıcı token'ı gerekir) |
+
+**Sınıflandırma: PASS** (kod+arayüz); gerçek bot bağlantısı **BLOCKED** (token kullanıcıya bağlı).
+
+### CANLI — Arayüz (gerçek Chromium, `sohbet.html`)
+| Kontrol | Sonuç |
+|---------|-------|
+| `node --check js/app.js` | ✅ |
+| Konsol hatası | ✅ **0** |
+| Tema | ✅ `data-theme=light`, `--bg=#F8FAFC`, `--accent=#3B82F6` |
+| Tema geçişi | ✅ light→dark→light |
+| Ajan modali | ✅ açılıyor, 12 ajan kartı |
+| Proje: dosya oluştur / yeniden adlandır / sil | ✅ UI'den çalışıyor |
+| Proje: projeyi sil (çift onay) | ✅ klasör silindi, panel kapandı, recent temiz |
+| Yeni id'ler (menu/theme/new-file/delete-project/...) | ✅ mevcut |
+| Telegram bağlantısı (header ✈️) | ✅ `telegram.html`'e gidiyor |
+
+**Sınıflandırma: PASS**
+
+### Genel sınıflandırma (Oturum 10)
+- Ajan güçlendirme: **PASS**
+- Proje kaydet/sil: **PASS**
+- Telegram (kod+arayüz): **PASS**; gerçek bot bağlantısı: **BLOCKED** (token)
+- Light UI: **PASS**
+- Regresyon: **PASS** (125 birim)

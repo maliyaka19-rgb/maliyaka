@@ -370,3 +370,84 @@ Eski sunucu logları (`sh_146a5ddd…out`):
 
 ### Değişen dosyalar
 - `multimodal-studio/js/app.js`, `multimodal-studio/css/style.css`, `multimodal-studio/sohbet.html`
+
+---
+
+## Oturum 10 — Kullanıcı istekleri: ajan gücü + proje yönetimi + Telegram + light UI (2026-10-17 01:20–02:00) ✅
+
+Kullanıcının 4 maddesi tek oturumda, onay istenmeden tamamlandı.
+
+### 1) Ajanları güçlendir (TAMAM, canlı doğrulandı)
+- **Ajan başına araç allow-list artık ZORUNLU**: `ai_agent._tools_payload()` yalnızca aktif ajanın
+  `tools` listesindeki araçları LLM'e bildirir (önceden yalnızca metadata'ydı, etkisizdi).
+  Bu ayrıca istek boyutunu küçültür (araç dizisi tek başına ~2.8k token).
+- **`max_iterations` 15 → 25**.
+- **Çok adımlı görev tamamlama protokolü** (paylaşılan ajan son-eki + ana prompt): PLANLA → TAMAMEN
+  YÜRÜT (tek araç çağrısından sonra DURMA) → DOĞRULA → hata olursa düzelt → RAPORLA.
+- **Araç hatası toparlanma**: bir araç `success=false` dönerse modele düzeltici sistem notu eklenir.
+- **413 koruması**: `_safe_window()` istek penceresini system + güvenli son pencereye indirir
+  (budama daima `user` sınırında başlar; yetim `tool` mesajı üretmez; 28k karakter tavanı).
+  Kök neden: uzun görevlerde biriken araç çıktıları Groq ücretsiz TPM 8000 sınırını aşıyordu.
+- `answer_question` aracı executor'da uygulandı (önceden "Unknown tool" hatası veriyordu).
+- Bug fix: `self.backend_url` → `self.tools.backend_url`.
+- **CANLI KANIT**: `coder` ajanı "3 dosyalı Python projesi oluştur" görevini **77 sn'de** tamamladı;
+  `tools_used=['write_file','write_file','write_file','list_files']`; main.py 2016B/73 satır,
+  utils.py 2293B/80, README.md 2038B/69 — hepsi gerçek içerikle yazıldı, ardından doğrulandı.
+
+### 2) Proje kaydet/sil (TAMAM, canlı doğrulandı)
+- **Backend yeni uçlar** (`fs_routes.py`): `POST /api/v1/fs/create-project` (409/400 kontrolleri),
+  `DELETE /api/v1/fs/project?path=` (korumalı: sürücü kökü/home/uygulama dizinleri silinemez;
+  açık projeyse önce kapatır; recent listesinden de çıkarır), `DELETE /api/v1/fs/recent-projects?path=`
+  (tekli kaldırma; `path` yoksa tümünü temizler).
+- **Güvenlik sıkılaştırma**: `project_routes._resolve` ve `tool_executor._resolve_path` artık
+  `realpath + commonpath` kullanır (sembolik link ve kardeş-önek kaçışını engeller). Proje **kökünü**
+  `DELETE /project/file` ile silme engellendi (403).
+- **Arayüz** (frontend): yeni dosya/klasör, dosya başına yeniden adlandır/sil, projeyi sil (çift onay),
+  tarayıcıda yeni klasör, son açılanlardan tekli kaldırma; proje açılınca ağaç otomatik yüklenir.
+- Bug fix: `createNewChat`/`renameChat` çift `JSON.stringify`; `FS_API` kullanım sırası; ölü `#sidebar-overlay`.
+- **CANLI KANIT (tarayıcı)**: geçici proje aç → UI'den `ui_test.txt` oluştur → `ui_renamed.txt`'e
+  yeniden adlandır → sil → projeyi sil; klasör gerçekten silindi, `current-project` kapandı,
+  recent listesi temiz. Backend uçları ayrıca uçtan uca (open→create→read→rename→delete→403→sil) PASS.
+
+### 3) Telegram entegrasyonu (TAMAM, test edildi)
+- **Yeni modüller**: `backend/telegram_bot.py` (uzun-yoklamalı, `httpx` ham Bot API; token Fernet ile
+  şifreli saklanır, asla loglanmaz/döndürülmez; komutlar: `/start`, `/help`, `/new`, `/reset`,
+  `/agents`, `/agent <id>`, `/status`, `/id`; izinli chat-id allowlist; 4000 karakter bölme;
+  hataya dayanıklı poll döngüsü) ve `backend/telegram_routes.py` (`/api/v1/telegram/status|config|start|stop|send`).
+- `app.py`: router kaydı + startup'ta (token varsa) bot başlatma + shutdown'da durdurma.
+- **Arayüz**: `multimodal-studio/telegram.html` — durum, token/izinli id/ajan/etkin ayarı, başlat/durdur,
+  test mesajı, BotFather kurulum rehberi (light tema). Sohbet header'ına ✈️ bağlantısı eklendi.
+- **Testler**: 19 hermetic test (`httpx.MockTransport`; komut ayrıştırma, allowlist, mesaj→ajan akışı,
+  `/new`, `/agent`, 9000 karakter bölme, token sızıntısı yok).
+- **CANLI KANIT**: `/status` 200 (token yok, sızmıyor); `/start` token'sız → zarif 400;
+  `/send` bot çalışmıyorken → `success:false`; `telegram_config.json`'da düz metin token yok.
+- **NOT (kullanıcı eylemi)**: gerçek Telegram botu için @BotFather'dan token girilip "Başlat"a
+  basılmalı (bu adım kullanıcıya bağlı; kod ve arayüz hazır).
+
+### 4) Arayüz modernizasyonu (TAMAM, tarayıcıda doğrulandı)
+- **Light mode (varsayılan)**: `:root` açık palet (`#F8FAFC`/`#FFFFFF`, kenarlık `#E2E8F0`,
+  metin `#1E293B`, vurgu `#3B82F6`), `[data-theme="dark"]` eski koyu paleti korur; header'da tema
+  geçişi (`localStorage.nexus_theme`, sayfa öncesi flaş yok).
+- 3 sütunlu yapı korundu (sidebar + proje paneli + ana sohbet); mobilde hamburger + backdrop;
+  boş durumda 6 hızlı şablon; **ajan modali** artık açılıyor (`#agent-selector-btn` tıklanabilir, 12 ajan ızgarası).
+- **CANLI KANIT (tarayıcı)**: `data-theme=light`, `--bg=#F8FAFC`, `--accent=#3B82F6`; tema geçişi
+  light→dark→light; ajan modali 12 kart; **0 konsol hatası**; ekran görüntüsü alındı.
+
+### Test Durumu — 125 birim PASS
+| Dosya | Test | Sonuç |
+|-------|------|-------|
+| test_telegram.py (yeni) | 19 | ✅ |
+| test_project_fs.py (yeni) | 8 | ✅ |
+| test_agent_strength.py (yeni) | 6 | ✅ |
+| Diğer (calc/fallback/rag/rate-limit/...) | 92 | ✅ |
+
+### Commit'ler
+- `e5fe107` — ajan gücü + Telegram + proje uçları
+- `aae631e` — light UI + proje/dosya arayüzü + ajan modali
+- `6685825` — `_safe_window` (413 koruması)
+
+### Açık (kullanıcıya bağlı / kritik olmayan)
+- Gerçek Telegram botu için token gerekir (kod hazır).
+- Çoklu-sağlayıcı yedekliliği: yalnızca **groq** geçerli (openrouter `401`, openai `429/404`).
+- Web araması canlı testi NOT RUN.
+

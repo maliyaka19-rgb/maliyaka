@@ -313,3 +313,33 @@ sağlayıcı** ≤3 kez yeniden denenir; `rate_limited` durumunda `_fallback_cha
 1. **Geçerli OpenRouter/OpenAI anahtarı** → gerçek çoklu-sağlayıcı yedekliliği.
 2. İstemci tarafı Pollinations **402 kuyruğu** ve web araması için canlı test.
 3. Kullanılmayan Next.js `frontend/` kaldır/tamamla.
+
+---
+
+## Oturum 10 — Nihai durum: 4 kullanıcı isteği tamamlandı (2026-10-17 02:00) ✅
+
+Kullanıcının gece verdiği 4 madde, onay istenmeden tamamlandı ve **canlı** doğrulandı.
+
+### 1) Ajanlar güçlendirildi — PASS
+- Araç allow-list **zorunlu** kılındı (`_tools_payload`), tamamlama protokolü (PLANLA→YÜRÜT→DOĞRULA→RAPORLA),
+  `max_iterations` 25, araç-hatası toparlanma, `_safe_window` (413/TPM koruması), `answer_question`, bug fix.
+- **Kanıt**: `coder` ajanı 3 dosyalı Python projesini **77 sn'de** tamamladı (`write_file`×3 + `list_files`).
+
+### 2) Proje kaydet/sil — PASS
+- Yeni uçlar (`create-project`, `delete-project`, tekli recent kaldırma); `realpath+commonpath` güvenliği;
+  proje kökü silme ve traversal engellendi. Arayüzde dosya/klasör oluştur-yeniden adlandır-sil + projeyi sil.
+- **Kanıt**: backend uçtan uca + gerçek tarayıcıda proje akışı PASS.
+
+### 3) Telegram entegrasyonu — PASS (kod+arayüz); gerçek bot BLOCKED (token)
+- Ham Bot API + uzun yoklama (`telegram_bot.py`), kontrol API (`telegram_routes.py`), ayar sayfası
+  (`telegram.html`), sohbet header'ında ✈️ bağlantısı; token şifreli, asla sızmıyor. 19 test PASS.
+- **Kullanıcı adımı**: @BotFather token'ını girip "Başlat"a basmak.
+
+### 4) Arayüz modernizasyonu — PASS
+- Light mode (varsayılan) + koyu tema geçişi; 3 sütun; mobil menü; 6 hızlı şablon; ajan modali çalışıyor.
+- **Kanıt**: gerçek Chromium'da **0 konsol hatası**, tema geçişi, proje akışı, ajan modali PASS.
+
+### Genel
+- **Test**: 125 birim PASS (39 yeni: 19 telegram + 8 proje/fs + 6 ajan + 6 window).
+- **Commit**: `e5fe107`, `aae631e`, `6685825` (çalışma ağacı temiz).
+- **Açık**: gerçek Telegram token'ı; çoklu-sağlayıcı anahtarı (yalnızca groq geçerli); web araması canlı testi NOT RUN.

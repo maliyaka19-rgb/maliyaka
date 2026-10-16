@@ -82,3 +82,39 @@
   ileride ek olarak değerlendirilebilir.
 - **Etki**: Canlı doğrulandı — 3 dosyalı çok adımlı görev artık **hatasız** tamamlanıyor;
   10 yeni regresyon testi.
+
+## D-011 — Ajan yeteneği: araç allow-list'i zorunlu kıl + tamamlama protokolü
+- **Tarih**: 2026-10-17
+- **Bağlam**: Ajanların `tools` alanı yalnızca metadata'ydı; LLM'e **her zaman 20 aracın tamamı**
+  bildiriliyordu. Ayrıca prompt'lar görevi "tarif edip bırakma"ya izin veriyordu → zayıf/yarım görevler.
+- **Karar**: `_tools_payload()` aktif ajanın allow-list'ini **uygular**; paylaşılan ajan son-ekine
+  ve ana prompt'a "PLANLA → TAMAMEN YÜRÜT → DOĞRULA → RAPORLA" protokolü eklendi; `max_iterations`
+  15→25; araç hatasında düzeltici sistem notu; `answer_question` uygulandı.
+- **Gerekçe**: §3.2 "görevi bitir, yarım bırakma"; allow-list hem doğru yetkiyi hem küçük istek boyutunu sağlar.
+- **Etki**: CANLI — `coder` 3 dosyalı görevi 77 sn'de tamamladı (`write_file`×3 + `list_files` doğrulama).
+
+## D-012 — İstek penceresi: `_safe_window` ile 413 (TPM) koruması
+- **Bağlam**: Uzun çok adımlı görevde biriken araç çıktıları Groq ücretsiz **TPM 8000**'i aştı →
+  HTTP 413 → fallback zinciri tükendi → kural-tabanlı "Üzgünüm..." yanıtı. (Araç dizisi tek başına ~2.8k token.)
+- **Karar**: `_call_llm`, mesajları `_safe_window()` ile budar: system + son ~20 mesaj; budama daima
+  bir `user` (veya tool_calls'sız assistant) sınırında başlar → **yetim `tool` mesajı üretilmez**;
+  ek olarak 28k karakter tavanı.
+- **Alternatif**: Geçmişi tamamen kırpmak (bağlam kaybı) veya prompt'u küçültmek (yetenek kaybı) — reddedildi.
+- **Etki**: +3 test; canlı görev 413 olmadan tamamlandı.
+
+## D-013 — Telegram: ham Bot API + uzun yoklama, sır şifreli
+- **Bağlam**: Kullanıcı Telegram'dan kontrol + sohbet istedi; hesapta ağır bağımlılık yok.
+- **Karar**: Yeni kütüphane eklemek yerine mevcut `httpx` ile **ham Telegram Bot API** + uzun yoklama
+  (`getUpdates`); token `model_routes._encrypt_key` (Fernet) ile **şifreli** saklanır ve API asla
+  token'ı döndürmez (`token_set` boolean). `telegram_config.json` `.gitignore`'a eklendi.
+- **Gerekçe**: §7/§10 — gereksiz bağımlılık ve sahte sistem kurma; §11 — sır sızdırma yok.
+- **Etki**: 19 hermetic test PASS; uçlar canlı doğrulandı. Gerçek bot için kullanıcı token'ı gerekir.
+
+## D-014 — Arayüz: light mode varsayılan + 3 sütun, mevcut JS'i koruyarak
+- **Bağlam**: Kullanıcı light/modern bir arayüz istedi; mevcut `js/app.js` 100KB+ ve işlevsel.
+- **Karar**: Sıfırdan Tailwind yeniden yazımı yerine **CSS değişkenlerini** light'a çevir +
+  `[data-theme="dark"]` ile koyuyu koru; eksik işlevleri (proje/dosya işlemleri, ajan modali,
+  mobil menü) ekle. İşlevselliği bozmadan modernize et.
+- **Gerekçe**: §3.9 — geri alınabilir, düşük riskli; çalışan 103KB JS'i atmamak.
+- **Etki**: Tarayıcıda 0 konsol hatası; tema geçişi, proje akışı ve ajan modali doğrulandı.
+
