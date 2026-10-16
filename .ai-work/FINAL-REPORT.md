@@ -15,7 +15,8 @@ yanıtı yerine kural-tabanlı fallback dönüyordu; RAG altyapısı hiç başla
 düz metin yazılıyordu. Bu oturumda **5 gerçek hata** tespit edilip düzeltildi ve bağımsız olarak doğrulandı.
 
 **Sonuç**: Platform artık gerçekten çalışıyor — uçtan uca sohbet **2.4 saniyede** doğru yanıt üretiyor,
-görsel üretimi gerçek JPEG döndürüyor, **100 test PASS**. Kalan maddeler kritik olmayan üretim-hazırlığı
+görsel üretimi gerçek JPEG döndürüyor, **103 test PASS**. Ayrıca Git sürüm kontrolü kuruldu ve
+G3 import performansı düzeltildi (28.7s → 0.89s). Kalan maddeler kritik olmayan üretim-hazırlığı
 önerileridir.
 
 ---
@@ -52,7 +53,7 @@ görsel üretimi gerçek JPEG döndürüyor, **100 test PASS**. Kalan maddeler k
 | R4 | Groq eski model adı 404 | P1 | ✅ Geçerli model (`openai/gpt-oss-120b`) kullanılıyor |
 | R5 | Güvenlik taraması yok | P1 | ✅ YAPILDI |
 | R6 | API entegrasyon testleri yok | P1 | ✅ YAPILDI (29 canlı test) |
-| R7 | Git yok | P2 | ⚠️ BLOCKED → zip yedek |
+| R7 | Git yok | P2 | ✅ ÇÖZÜLDÜ (T-011) |
 | R8 | Video üretimi doğrulanmadı | P2 | ⏳ NOT RUN (opsiyonel) |
 
 ---
@@ -104,9 +105,10 @@ görsel üretimi gerçek JPEG döndürüyor, **100 test PASS**. Kalan maddeler k
 | `test_catalog_memory.py` | 13 | ✅ PASS |
 | `test_fallback.py` | 19 | ✅ PASS |
 | `test_tools_spec.py` | 7 | ✅ PASS |
-| **Birim toplam** | **71** | **✅ PASS** |
+| `test_rag_lazy.py` | 3 | ✅ PASS |
+| **Birim toplam** | **74** | **✅ PASS** |
 | `test_api_live.py` (canlı) | 29 | ✅ PASS |
-| **GENEL TOPLAM** | **100** | **✅ PASS** |
+| **GENEL TOPLAM** | **103** | **✅ PASS** |
 
 Uçtan uca canlı test: Login 200 → Chat 200 (**2.4 sn**), yanıt `2 + 2 = 4.`
 
@@ -142,18 +144,21 @@ Uçtan uca canlı test: Login 200 → Chat 200 (**2.4 sn**), yanıt `2 + 2 = 4.`
 |--------|------|-------|
 | Sohbet gecikmesi (uçtan uca) | ~60 sn | **2.4 sn** |
 | Fallback çağrı sayısı (başarılı istek) | ~20 | 1 |
-| Birim test suite süresi | ~30 sn | ~29 sn |
+| `import ai_agent` | 28.7 sn | **0.89 sn** |
+| `import rag_system` | 27.7 sn | **0.14 sn** |
+| Birim test suite süresi | ~28 sn | **3.5 sn** |
 | Canlı test suite | — | 9 sn |
 
-**Not (G3)**: `import ai_agent` ~28 sn sürüyor (embedding/sentence-transformers import zinciri);
-sunucu açılışını ve testleri yavaşlatıyor. Lazy import önerilir (fonksiyonel engel değil).
+**G3 ÇÖZÜLDÜ (T-012)**: `rag_system` ağır bağımlılıkları (chromadb/sentence-transformers) lazy import
+edilerek modül yüklemesinden çıkarıldı; ayrıca import anındaki `get_collection()` kaldırıldı.
 
 ---
 
 ## 11. Geri Alınabilirlik / Sürüm Kontrolü
 
-- **Git**: BLOCKED (kurulu değil / PATH'te yok).
-- **İkame**: `.backup/v61-pre-v3-20261016-2256.zip` (127 KB, değişiklik öncesi anlık görüntü).
+- **Git**: ✅ **ÇÖZÜLDÜ (T-011)** — winget ile Git v2.55.0.5 kuruldu; repo `git init -b main`
+  ile başlatıldı; ilk commit `abee6d8` (61 dosya). Sırlar/kullanıcı verisi `.gitignore` ile hariç.
+- **İkame (yedek)**: `.backup/v61-pre-v3-20261016-2256.zip` (127 KB, değişiklik öncesi anlık görüntü).
 - Tüm değişiklikler hedefli ve geri alınabilir (dosya bazlı).
 
 ---
@@ -164,19 +169,22 @@ sunucu açılışını ve testleri yavaşlatıyor. Lazy import önerilir (fonksi
   openai limitli (429/404). Çoklu sağlayıcı yedekliliği bu hesap için sınırlı.
 - **Pollinations**: ücretsiz limit **1 görsel / 45 sn / IP** → 402 döner (kod doğru).
 - **Video üretimi (R8)**: NOT RUN.
-- **G2/G3**: üretim öncesi iyileştirme önerileri.
+- **G2**: CORS geniş (`allow_origins=["*"]`) — üretim öncesi daraltılmalı. (G3 ✅ çözüldü.)
 - Kimlik bilgileri hiçbir teste/rapora **gömülmedi** (env değişkeni ile verilir).
 
 ---
 
 ## 13. Sonuç ve Öneriler
 
-**Genel sonuç: PASS.** Platform artık gerçekten çalışıyor ve doğrulandı (100 test + uçtan uca canlı akış).
+**Genel sonuç: PASS.** Platform artık gerçekten çalışıyor ve doğrulandı (103 test + uçtan uca canlı akış).
+Ek olarak Git sürüm kontrolü (T-011) ve G3 performans optimizasyonu (T-012) tamamlandı.
 
-**Öneriler (öncelik sırası):**
-1. **Git'i kur** → gerçek sürüm kontrolü (R7).
-2. Geçerli **OpenRouter/OpenAI** anahtarı ekle → çoklu sağlayıcı yedekliliği (P0).
-3. **G2**: CORS'u bilinen origin'lerle sınırla.
-4. **G3**: `ai_agent` import zincirini lazy yap → başlangıç süresi ~30 sn → <3 sn.
-5. **R8**: Video üretimini gerçek dosya çıktısıyla doğrula.
-6. Pollinations 402 için frontend'de otomatik retry/kuyruk ekle.
+**Tamamlanan ek işler:**
+- ✅ **Git kuruldu** → gerçek sürüm kontrolü (R7). İlk commit `abee6d8`.
+- ✅ **G3**: `import ai_agent` 28.7s → 0.89s (lazy import).
+
+**Kalan öneriler (öncelik sırası):**
+1. Geçerli **OpenRouter/OpenAI** anahtarı ekle → çoklu sağlayıcı yedekliliği (P0).
+2. **G2**: CORS'u bilinen origin'lerle sınırla.
+3. **R8**: Video üretimini gerçek dosya çıktısıyla doğrula.
+4. Pollinations 402 için frontend'de otomatik retry/kuyruk ekle.

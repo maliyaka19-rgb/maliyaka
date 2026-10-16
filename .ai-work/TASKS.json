@@ -153,6 +153,36 @@
       "artifact_references": [".ai-work/FINAL-REPORT.md"],
       "created_at": "2026-10-16T22:57:00",
       "updated_at": "2026-10-17T01:05:00"
+    },
+    {
+      "task_id": "T-011",
+      "description": "Sürüm kontrolü: Git kurulumu + ilk commit (R7)",
+      "assigned_agent": "DevOps Engineer",
+      "dependencies": ["T-010"],
+      "status": "COMPLETED",
+      "attempt_count": 1,
+      "acceptance_criteria": "git kurulu, repo başlatıldı, sırlar hariç ilk commit atıldı",
+      "model_id": "mimo-v2.6-flash-free",
+      "error_report": "Git PATH'te yoktu → winget ile kuruldu (v2.55.0.5). Sır/kullanıcı verisi/medya .gitignore ile hariç tutuldu.",
+      "test_results": "PASS: 61 dosya commit edildi (ilk commit). Sır kontrolü temiz: .env, .encryption_key, model_config.json, auth_data/, brain_data/, generated_videos/, .next/ commit EDİLMEDİ.",
+      "artifact_references": [".gitignore", ".git"],
+      "created_at": "2026-10-17T01:10:00",
+      "updated_at": "2026-10-17T01:20:00"
+    },
+    {
+      "task_id": "T-012",
+      "description": "G3: rag_system ağır bağımlılıklarını lazy import yap (performans)",
+      "assigned_agent": "Backend Engineer",
+      "dependencies": ["T-010"],
+      "status": "COMPLETED",
+      "attempt_count": 2,
+      "acceptance_criteria": "import ai_agent süresi belirgin düşer, RAG hâlâ çalışır",
+      "model_id": "mimo-v2.6-flash-free",
+      "error_report": "İlk denemede chromadb hâlâ yükleniyordu: modül sonundaki 'Initialize on import' bloğu get_collection() çağırıyordu → kaldırıldı (ilk kullanımda lazy oluşturuluyor).",
+      "test_results": "PASS: import ai_agent 28.7s→0.89s; import rag_system 27.7s→0.14s; test suite ~28s→3.5s. RAG canlı: add=True, search sonuç bulundu. 3 yeni koruma testi (test_rag_lazy.py).",
+      "artifact_references": ["backend/rag_system.py", "backend/tests/test_rag_lazy.py"],
+      "created_at": "2026-10-17T01:10:00",
+      "updated_at": "2026-10-17T01:25:00"
     }
   ]
 }

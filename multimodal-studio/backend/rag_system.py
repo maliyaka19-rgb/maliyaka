@@ -340,9 +340,6 @@ async def rag_get_stats() -> Dict:
     return get_stats()
 
 
-# Initialize on import
-try:
-    get_collection()
-    logger.info("RAG system initialized")
-except Exception as e:
-    logger.warning(f"RAG init deferred: {e}")
+# NOT: Koleksiyon artık import anında DEĞİL, ilk kullanımda (get_collection)
+# tembel olarak oluşturulur. Böylece `import rag_system` / `import ai_agent`
+# ağır bağımlılıkları (chromadb, sentence-transformers) yüklemez (G3 optimizasyonu).

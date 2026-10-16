@@ -176,3 +176,39 @@
 - Git yok (BLOCKED) → zip yedek
 - G2: CORS geniş; G3: import ~28s
 - Yalnızca groq sağlayıcısı tam çalışıyor (openrouter/openai anahtarları geçersiz/limitli)
+
+---
+
+## Oturum 6 — Git + G3 Optimizasyonu (2026-10-17 01:25) ✅
+
+### T-011 — Git Sürüm Kontrolü (COMPLETED)
+- Git PATH'te yoktu → **winget ile kuruldu** (Git v2.55.0.5).
+- Repo: `C:\Users\HP\Desktop\YAPAY ZEKA` (`git init -b main`), ilk commit `abee6d8`.
+- **`.gitignore` genişletildi**. Commit DIŞI bırakılanlar (doğrulandı):
+  `.env`, `.encryption_key`, `model_config.json`, `chroma_db/`, `auth_data/`,
+  `brain_data/`, `learning_registry/`, `generated_videos/`, `.next/`, `node_modules/`, `.backup/`.
+- Commit edilen: **61 dosya** (kaynak kod + testler + dokümanlar + `.ai-work/`).
+- İçerik sır taraması: temiz.
+
+### T-012 — G3 Lazy-Import Optimizasyonu (COMPLETED)
+- **Kök neden**: `rag_system.py` modül seviyesinde `chromadb` + `sentence_transformers`
+  import ediyordu (torch/transformers zinciri) → her `import ai_agent` **~28s**.
+- **Düzeltme**:
+  1. Ağır importlar modül seviyesinden çıkarıldı; varlık kontrolü `importlib.util.find_spec`
+     ile ucuz yapıldı; gerçek import `get_chroma_client()` / `get_embedding_model()` içine taşındı.
+  2. Modül sonundaki `get_collection()` (Initialize on import) kaldırıldı → ilk kullanımda lazy.
+- **Ölçüm**:
+  | Metrik | Önce | Sonra |
+  |--------|------|-------|
+  | `import ai_agent` | 28.7s | **0.89s** |
+  | `import rag_system` | 27.7s | **0.14s** |
+  | Test suite | ~28s | **3.5s** |
+- **Doğrulama**: RAG canlı (add=True, search sonuç bulundu). 3 yeni koruma testi: `test_rag_lazy.py`.
+
+### Güncel Test Sayısı: 74 birim + 29 canlı = **103 PASS**
+
+### Açık (güncel)
+- ✅ Git yok → ÇÖZÜLDÜ (T-011)
+- ✅ G3 import ~28s → ÇÖZÜLDÜ (T-012)
+- ⚠️ G2: CORS geniş (üretim öncesi daraltılmalı)
+- ⚠️ Yalnızca groq sağlayıcısı tam çalışıyor (openrouter/openai anahtarları geçersiz/limitli)
