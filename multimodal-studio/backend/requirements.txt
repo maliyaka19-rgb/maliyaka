@@ -21,6 +21,13 @@ beautifulsoup4>=4.12.0
 # Cryptographic key storage (Fernet) — model_routes.py tarafından kullanılır
 cryptography>=41.0.0
 
+# Video generation — frame-based (Pollinations frames + moviepy).
+# ZORUNLU: video_generator.py numpy/PIL'i modül üstünde import eder; bu paketler
+# eksikse uygulama hiç başlamaz (app.py video_generator'ı import eder).
+numpy>=1.26.0
+Pillow>=10.0.0
+moviepy>=1.0.3
+
 # --- Opsiyonel: RAG (Retrieval-Augmented Generation) ---
 # Kurulmazsa RAG devre dışı kalır; uygulama çalışmaya devam eder (lazy/guarded).
 # chromadb>=1.0.0

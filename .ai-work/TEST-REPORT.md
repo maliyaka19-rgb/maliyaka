@@ -42,3 +42,52 @@ Ozet: **34/36 PASS**
 | PASS | GET | `/api/v1/auth/chats` | 200 |
 | PASS | POST | `/api/v1/generate/visual` | 200 |
 | PASS | POST | `/api/v1/ai/chat` | 200 |
+
+---
+
+## Ek — Oturum 7 Testleri (2026-10-17)
+
+### Otomatik test paketi
+| Grup | Adet | Komut | Sonuç |
+|------|------|-------|-------|
+| Birim (canlı hariç) | 82 | `python -m pytest tests/ -q` | ✅ PASS |
+| Canlı API | 29 | `python -m pytest tests/test_api_live.py -m live` | ✅ PASS |
+| **Toplam** | **111** | | **✅ 0 FAIL** |
+
+### Yeni regresyon testleri — `tests/test_response_validation.py` (8)
+| Test | Amaç | Sonuç |
+|------|------|-------|
+| `test_validate_plain_content_response` | normal içerik yanıtı geçerli | ✅ |
+| `test_validate_tool_call_without_content` | **araç çağrısı, content yok → geçerli** (Groq regresyonu) | ✅ |
+| `test_validate_tool_call_with_content` | content=null + tool_calls geçerli | ✅ |
+| `test_validate_rejects_empty_message` | ne content ne tool_calls → geçersiz | ✅ |
+| `test_validate_rejects_non_assistant_role` | role≠assistant → geçersiz | ✅ |
+| `test_validate_rejects_bad_tool_call_type` | tool_call type≠function → geçersiz | ✅ |
+| `test_validate_rejects_missing_choices` | choices yok → geçersiz | ✅ |
+| `test_user_message_sent_once_to_llm` | kullanıcı mesajı LLM'e **1 kez** gider | ✅ |
+
+### Statik analiz / lint
+- `ruff check --select=E9,F63,F7,F82 .` → **All checks passed!** (önce 8× `F821`).
+- `node --check js/app.js` → OK.
+- `python -c "import web_tools, tools_spec, memory, tool_executor, rag_system, ai_agent, app"` → OK.
+
+### F821 düzeltme doğrulaması (doğrudan)
+| Kontrol | Sonuç |
+|---------|-------|
+| `tool_executor.CALCULATOR.evaluate("12 * 8")` | ✅ `{'success': True, 'result': 96, ...}` |
+| `app._javascript_express_template(...)` | ✅ üretildi |
+| `app._typescript_nextjs_template(...)` | ✅ üretildi |
+| `from auth import save_users` | ✅ |
+| `agent_routes.deque` | ✅ |
+| `web_tools.os` | ✅ |
+
+### R8 — Video üretimi (manuel, T-016)
+| Adım | Sonuç |
+|------|-------|
+| `POST /api/v1/generate/real-video` | ✅ 200 (40.9 sn) |
+| Üretilen dosya | ✅ `vid_*.mp4`, 37.752 bayt, geçerli `ftyp` imzası |
+| `GET /api/v1/videos/{id}` | ✅ 200 `video/mp4` |
+
+### CORS (G2) canlı doğrulama
+- `GET /health` (`Origin: http://localhost:8080`) → `Access-Control-Allow-Origin: http://localhost:8080` ✅
+  (wildcard yerine açık allowlist).

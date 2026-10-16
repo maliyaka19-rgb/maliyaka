@@ -24,6 +24,10 @@ except ImportError:
 
 logger = logging.getLogger("nexus-agent-v6")
 
+# "calculate" aracı tarafından kullanılan modül seviyesinde hesap makinesi örneği
+# (önceden tanımsız `CALCULATOR` adı NameError veriyordu → araç çöküyordu).
+CALCULATOR = SafeCalculator()
+
 # ============================================================
 # TOOL EXECUTION ENGINE
 # ============================================================

@@ -80,14 +80,29 @@ app.include_router(fs_router)
 # Include Custom Agent Router
 app.include_router(custom_agent_router)
 
-# CORS configuration for production
+# CORS configuration (G2 fix)
+# Wildcard "*" cannot be combined with allow_credentials=True and is unsafe for
+# production. We use an explicit allowlist. Zero-config local development keeps
+# working (frontend on :8080, API/docs on :8000, Next.js dev on :3000);
+# production can override/extend via comma-separated CORS_ORIGINS.
+_DEV_ORIGINS = [
+    "http://localhost:8080", "http://127.0.0.1:8080",
+    "http://localhost:8000", "http://127.0.0.1:8000",
+    "http://localhost:3000", "http://127.0.0.1:3000",
+]
+_env_origins = [
+    o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",")
+    if o.strip() and o.strip() != "*"
+]
+allowed_origins = sorted(set(_env_origins) | set(_DEV_ORIGINS))
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # Configure appropriately for production
+    allow_origins=allowed_origins,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
+logger.info("CORS allowed origins: %s", allowed_origins)
 
 
 # ============================================================
@@ -549,6 +564,59 @@ if __name__ == "__main__":
     return template
 
 
+def _javascript_express_template(prompt: str, complexity: str) -> str:
+    """Generate JavaScript Express code template."""
+    
+    complexity_map = {
+        "low": "...",
+        "medium": "// Moderate complexity implementation",
+        "high": "// Advanced implementation with error handling"
+    }
+    
+    template = f'''// Generated Code: {prompt}
+// Complexity: {complexity}
+
+const express = require("express");
+const app = express();
+app.use(express.json());
+
+{complexity_map.get(complexity, complexity_map["medium"])}
+
+app.get("/", (req, res) => {{
+    res.json({{ message: "Merhaba Dünya" }});
+}});
+
+const PORT = process.env.PORT || 3000;
+app.listen(PORT, () => console.log(`Server running on port ${{PORT}}`));
+'''
+    
+    return template
+
+
+def _typescript_nextjs_template(prompt: str, complexity: str) -> str:
+    """Generate TypeScript Next.js code template."""
+    
+    complexity_map = {
+        "low": "...",
+        "medium": "// Moderate complexity implementation",
+        "high": "// Advanced implementation with error handling"
+    }
+    
+    template = f'''// Generated Code: {prompt}
+// Complexity: {complexity}
+
+import type {{ NextApiRequest, NextApiResponse }} from "next";
+
+{complexity_map.get(complexity, complexity_map["medium"])}
+
+export default function handler(req: NextApiRequest, res: NextApiResponse) {{
+    res.status(200).json({{ message: "Merhaba Dünya" }});
+}}
+'''
+    
+    return template
+
+
 def _python_django_template(prompt: str, complexity: str) -> str:
     """Generate Python Django code template."""
     
@@ -684,12 +752,24 @@ async def generate_image(request: ImageGenerationRequest):
         # Build URL
         image_url = f"https://image.pollinations.ai/prompt/{encoded_prompt}?width={request.width}&height={request.height}{model_param}{seed_param}{enhance_param}&nologo=true"
         
-        # Test the URL
+        # Test the URL (bounded retry + backoff for Pollinations 402 FREE_LIMIT)
         import httpx
+        import asyncio
+        last_status = None
         async with httpx.AsyncClient(timeout=30.0) as client:
-            resp = await client.head(image_url)
-            if resp.status_code != 200:
-                raise HTTPException(status_code=500, detail="Image generation failed - Pollinations returned error")
+            for attempt in range(3):
+                resp = await client.head(image_url)
+                last_status = resp.status_code
+                if resp.status_code == 200:
+                    break
+                if attempt < 2:
+                    # 402 = ücretsiz katman hız limiti → bekle ve tekrar dene
+                    await asyncio.sleep(2 * (attempt + 1) if resp.status_code == 402 else (attempt + 1))
+        if last_status != 200:
+            raise HTTPException(
+                status_code=500,
+                detail=f"Image generation failed - Pollinations returned {last_status}"
+            )
         
         duration = time.time() - start_time
         

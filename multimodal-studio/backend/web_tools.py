@@ -4,6 +4,7 @@ Web Tools for NEXUS-CORE
 SafeCalculator + free web search (DuckDuckGo HTML scraping, SerpAPI fallback).
 Extracted from ai_agent.py (Phase 3.2 modularization).
 """
+import os
 import ast
 import operator
 import math

@@ -786,6 +786,18 @@
             transition: width 0.8s ease;
             width: 0%;
         }
+        /* Indeterminate bar: gerçek ilerleme bilinmediğinde sahte yüzde gösterme
+           (MASTER PROMPT §13). Kayar bir bant ile "çalışıyor" durumunu bildirir. */
+        .live-status-progress.indeterminate .live-progress-bar {
+            width: 40%;
+            transition: none;
+            animation: indeterminate 1.2s ease-in-out infinite;
+        }
+        @keyframes indeterminate {
+            0% { margin-left: 0%; }
+            50% { margin-left: 60%; }
+            100% { margin-left: 0%; }
+        }
         @keyframes pulse {
             0%, 100% { transform: scale(1); }
             50% { transform: scale(1.3); }

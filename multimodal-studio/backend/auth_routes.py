@@ -21,7 +21,7 @@ from auth import (
     create_access_token, hash_password,
     verify_google_token, verify_apple_token,
     GOOGLE_CLIENT_ID, APPLE_CLIENT_ID, OAUTH_REDIRECT_URI,
-    generate_apple_client_secret
+    generate_apple_client_secret, save_users
 )
 
 # Import AI agent to access conversation memory

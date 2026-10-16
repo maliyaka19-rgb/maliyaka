@@ -100,11 +100,15 @@ def _validate_response(data: Dict) -> bool:
                 return False
             if message.get("role") != "assistant":
                 return False
-            # content can be string or null
-            if "content" not in message:
-                return False
             # tool_calls validation if present
             tool_calls = message.get("tool_calls")
+            # OpenAI-uyumlu sağlayıcılar (ör. Groq gpt-oss-120b), asistan yalnızca
+            # araç çağrısı ürettiğinde "content" alanını tamamen atlar (null bile
+            # göndermez). Bu GEÇERLİ bir yanıttır → content veya tool_calls'ten en
+            # az biri bulunmalıdır. (Aksi halde geçerli araç çağrıları reddedilip
+            # gereksiz fallback zinciri tetikleniyordu.)
+            if tool_calls is None and "content" not in message:
+                return False
             if tool_calls is not None:
                 if not isinstance(tool_calls, list):
                     return False
@@ -312,9 +316,6 @@ When you need to use tools, call them. Work like a real coding assistant — rea
         
         conv = self.memory.get_or_create(conversation_id)
         
-        # Add user message
-        self.memory.add_message(conversation_id, Message(role="user", content=user_message))
-        
         # Build message history for LLM with DYNAMIC brain context
         if custom_system_prompt:
             # Use custom agent's system prompt with full capabilities
@@ -356,6 +357,11 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
             messages.extend(stored[-10:])
         
         messages.append({"role": "user", "content": user_message})
+        
+        # Persist user message AFTER building the prompt to avoid duplication:
+        # get_history() already returns stored messages, so adding it before the
+        # prompt build made the current user message appear twice to the LLM.
+        self.memory.add_message(conversation_id, Message(role="user", content=user_message))
         
         # Detect intent for brain recording
         intent = self._detect_intent(user_message)

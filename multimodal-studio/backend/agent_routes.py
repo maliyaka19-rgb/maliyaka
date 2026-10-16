@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 import asyncio
+from collections import deque
 
 from agent_core import get_agent, run_agent, get_agent_status, NexusAgent
 

@@ -218,3 +218,67 @@
 - ✅ G3 import ~28s → ÇÖZÜLDÜ (T-012)
 - ⚠️ G2: CORS geniş (üretim öncesi daraltılmalı)
 - ⚠️ Yalnızca groq sağlayıcısı tam çalışıyor (openrouter/openai anahtarları geçersiz/limitli)
+
+---
+
+## Oturum 7 — MASTER PROMPT V3 Tam Denetim + Tamamlama (2026-10-17 00:40) ✅
+
+Kullanıcı MASTER PROMPT V3 metnini bütün olarak verdi → prompt satır satır denetlendi, eksik
+güvenli maddeler otonom tamamlandı. **Gerçek uzman görev aktarımı** (alt ajanlar) kullanıldı.
+
+### Gerçek uzman görev aktarımı (§4/§16) — COMPLETED
+- `explore` alt ajanı #1: **Video altyapı denetimi** (dosya:satır kanıtlı rapor).
+- `explore` alt ajanı #2: **Frontend ↔ backend entegrasyon denetimi** (dosya:satır kanıtlı rapor).
+- Bağımsız bulgular gerçek düzeltmelere dönüştürüldü.
+
+### Bu oturumda düzeltilen gerçek hatalar
+1. **`_validate_response` — KRİTİK**: OpenAI-uyumlu sağlayıcılar (Groq gpt-oss-120b) asistan yalnızca
+   araç çağrısı ürettiğinde `content` alanını **hiç göndermiyordu**; doğrulayıcı bunu geçersiz sayıp
+   ~20 modelden oluşan fallback zincirini tetikliyor → sohbet kural-tabanlı yanıta düşüyordu.
+   Düzeltme: `content` VEYA `tool_calls`'ten en az biri yeterli.
+2. **Mükerrer kullanıcı mesajı**: `chat()` kullanıcı mesajını hafızaya erken ekliyor, sonra
+   `get_history()` ile tekrar çekip bir kez daha `append` ediyordu → LLM'e **iki kez** gidiyordu
+   (token israfı + model karışması). Düzeltme: kalıcılık prompt kurulduktan SONRA yapılır.
+3. **G2 CORS**: `allow_origins=["*"]` + `allow_credentials=True` (geçersiz/güvensiz) →
+   `CORS_ORIGINS` env + güvenli yerel varsayılanlar (8080/8000/3000). Doğrulandı:
+   `Access-Control-Allow-Origin: http://localhost:8080`.
+4. **8 adet `F821` (tanımsız isim)** — CI lint geçmiyordu, tümü gerçek çökme noktası:
+   - `tool_executor.py`: `CALCULATOR` tanımsızdı → `calculate` aracı çöküyordu → modül-seviyesi
+     `CALCULATOR = SafeCalculator()`.
+   - `web_tools.py`: `os` import edilmemiş → SerpAPI araması çöküyordu → `import os`.
+   - `agent_routes.py`: `deque` tanımsız → oturum hafızası silme çöküyordu → `from collections import deque`.
+   - `auth_routes.py`: `save_users` modül seviyesinde yoktu (yalnız yerel import) → üst import'a eklendi.
+   - `app.py`: `_javascript_express_template`, `_typescript_nextjs_template` tanımsız → kod üretimi
+     (JS/Express, TS/Next.js) çöküyordu → iki şablon eklendi.
+5. **Frontend görsel proxy** (`js/app.js`): görece `/api/v1/image/proxy` çağrısı sayfa 8080'den
+   servis edildiğinden **8080'e** gidiyordu → görseller yüklenmiyordu → mutlak `http://localhost:8000`.
+6. **Sahte ilerleme** (§13): live-status çubuğu sabit yüzdeyle doluyordu → **belirsiz (indeterminate)**
+   animasyona çevrildi (gerçek ilerleme yokken sahte yüzde gösterilmez).
+7. **Pollinations 402 retry**: `/api/v1/generate/image` artık 402'de sınırlı retry + backoff yapıyor.
+8. **Eksik bağımlılıklar** (`requirements.txt`): `numpy`, `Pillow`, `moviepy` — `video_generator`
+   modül üstünde import ediyor; eksikse uygulama **başlamaz**.
+9. **Frontend video oynatıcı** (`js/app.js`): yanıttaki `.mp4` URL'leri `<video controls>` ile render edilir.
+
+### R8 — Video üretimi doğrulandı (COMPLETED, P2 kapandı)
+- `POST /api/v1/generate/real-video` → **200**, `vid_*.mp4` (37.752 bayt), geçerli `ftyp` imzası,
+  `GET /api/v1/videos/{id}` → 200 `video/mp4`. Yöntem: Pollinations kareleri + moviepy (ücretsiz).
+- Not: Pollinations 402 nedeniyle bazı kareler üretilemedi (1/3); endpoint yine de geçerli video döndü.
+- Gerçek video modeli (Veo/Sora/Runway) hesapta yok → **entegre edilmedi** (§10: sahte sistem kurma).
+
+### `.ai-work/DECISIONS.md` oluşturuldu (§6 gereği) — 9 karar kaydı.
+
+### Güncel Test Sayısı
+| Tür | Sayı | Sonuç |
+|-----|------|-------|
+| Birim (`pytest tests/`) | 82 | ✅ PASS |
+| Canlı (`-m live`) | 29 | ✅ PASS |
+| **TOPLAM** | **111** | ✅ **0 FAIL** |
+- Yeni: `tests/test_response_validation.py` (8 test — araç çağrısı + mükerrer mesaj regresyonu).
+- `ruff check --select=E9,F63,F7,F82`: **All checks passed!** (önce 8 hata).
+
+### Açık (güncel)
+- ⚠️ Yalnızca **groq** tam çalışıyor; openrouter anahtarı **401**, openai **429/404**
+  → çoklu-sağlayıcı yedekliliği sınırlı (kullanıcı geçerli anahtar sağlamalı).
+- ⚠️ **Groq TPM limiti (8000)**: sistem prompt'u ~2.8k token; çok adımlı araç kullanımında
+  dakikalık token limiti aşılabiliyor (429). Tek adımlı sohbetler sorunsuz.
+- ⚠️ Next.js `frontend/` derlenemez (eksik `components/`) — aktif arayüz `sohbet.html`.

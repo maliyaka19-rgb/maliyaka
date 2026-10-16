@@ -13,6 +13,9 @@
         const CHAT_API = 'http://localhost:8000/api/v1/ai/chat';
         const AUTH_API = 'http://localhost:8000/api/v1/auth';
         const MODELS_API = 'http://localhost:8000/api/v1/models';
+        // Backend kökenli MUTLAK URL: sayfa 8080'de servis edildiğinden görece
+        // `/api/v1/image/proxy` isteği 8080'e giderdi ve görseller yüklenmezdi.
+        const IMAGE_PROXY_API = 'http://localhost:8000/api/v1/image/proxy';
 
         // ===== STATE =====
         let token = null;
@@ -436,73 +439,27 @@
         // ============================================================
         let statusInterval = null;
         
-        function getStatusMessages(txt) {
-            // Only show single "Thinking" step
-            return [
-                { icon: '🤖', text: 'Düşünüyor...' }
-            ];
-        }
-        
         function addLiveStatus(txt) {
+            // MASTER PROMPT §13: gerçek ilerleme bilgisi olmadan sahte yüzde
+            // gösterme. Belirsiz (indeterminate) bir "çalışıyor" göstergesi kullan.
             removeTyping();
-            const messages = getStatusMessages(txt);
-            let stepIndex = 0;
-            
             const div = document.createElement('div');
             div.className = 'typing-msg';
             div.innerHTML = `
                 <div class="live-status" id="live-status">
                     <div class="live-status-steps">
-                        ${messages.map((m, i) => `
-                            <div class="live-step ${i === 0 ? 'active' : 'pending'}" data-index="${i}">
-                                <span class="live-step-icon">${m.icon}</span>
-                                <span class="live-step-text">${m.text}</span>
-                                <span class="live-step-check"></span>
-                            </div>
-                        `).join('')}
+                        <div class="live-step active">
+                            <span class="live-step-icon">🤖</span>
+                            <span class="live-step-text">Düşünüyor...</span>
+                        </div>
                     </div>
-                    <div class="live-status-progress">
-                        <div class="live-progress-bar" id="live-progress"></div>
+                    <div class="live-status-progress indeterminate" aria-hidden="true">
+                        <div class="live-progress-bar"></div>
                     </div>
                 </div>
             `;
             msgs.appendChild(div);
             msgs.scrollTop = msgs.scrollHeight;
-            
-            // Animate through steps
-            const steps = div.querySelectorAll('.live-step');
-            const progressBar = div.querySelector('#live-progress');
-            
-            function advanceStep() {
-                if (stepIndex > 0) {
-                    steps[stepIndex - 1].classList.remove('active');
-                    steps[stepIndex - 1].classList.add('done');
-                    steps[stepIndex - 1].querySelector('.live-step-check').textContent = '✓';
-                }
-                if (stepIndex < steps.length) {
-                    steps[stepIndex].classList.add('active');
-                    stepIndex++;
-                    if (progressBar) {
-                        progressBar.style.width = ((stepIndex / steps.length) * 100) + '%';
-                    }
-                    msgs.scrollTop = msgs.scrollHeight;
-                }
-            }
-            
-            // First step is already active, advance every 2-3 seconds
-            if (progressBar) progressBar.style.width = (1 / messages.length * 100) + '%';
-            stepIndex = 1;
-            
-            statusInterval = setInterval(() => {
-                if (stepIndex < steps.length) {
-                    advanceStep();
-                } else {
-                    // All steps done, add final "working" indicator
-                    clearInterval(statusInterval);
-                    statusInterval = null;
-                }
-            }, 2500);
-            
             return div;
         }
         
@@ -613,7 +570,7 @@
                             const caption = prompt ? prompt.substring(0, 80) + (prompt.length > 80 ? '...' : '') : `Görsel ${idx + 1}`;
                             
                             html += `<div class="generated-image" style="margin-top:12px;border-radius:8px;overflow:hidden;border:1px solid var(--border);">
-                                <img src="/api/v1/image/proxy?url=${encodeURIComponent(img.url)}" alt="${caption}" style="max-width:100%;height:auto;display:block;" loading="lazy" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
+                                <img src="${IMAGE_PROXY_API}?url=${encodeURIComponent(img.url)}" alt="${caption}" style="max-width:100%;height:auto;display:block;" loading="lazy" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
                                 <div style="padding:8px;font-size:0.75rem;color:var(--fg-muted);background:var(--bg-surface);border-top:1px solid var(--border);display:none;color:var(--accent);">
                                     Görsel yüklenemedi: ${caption}
                                 </div>
@@ -624,6 +581,15 @@
                         });
                     }
                     
+                    // Render generated videos (.mp4) as a playable <video> (Aşama 9/13)
+                    const videoUrls = [...new Set([...data.response.matchAll(/https?:\/\/[^\s)"'<>]+\.mp4/g)].map(m => m[0]))];
+                    videoUrls.forEach(vu => {
+                        html += `<div class="generated-video" style="margin-top:12px;border-radius:8px;overflow:hidden;border:1px solid var(--border);">
+                            <video src="${vu}" controls preload="metadata" playsinline style="max-width:100%;display:block;background:#000;"></video>
+                            <div style="padding:8px;font-size:0.7rem;color:var(--fg-muted);background:var(--bg-surface);border-top:1px solid var(--border);">🎥 Üretilen video</div>
+                        </div>`;
+                    });
+
                     if (data.tools_used?.length) {
                         const labels = {
                             read_file: '📖 Oku',
