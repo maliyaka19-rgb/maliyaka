@@ -282,3 +282,56 @@ güvenli maddeler otonom tamamlandı. **Gerçek uzman görev aktarımı** (alt a
 - ⚠️ **Groq TPM limiti (8000)**: sistem prompt'u ~2.8k token; çok adımlı araç kullanımında
   dakikalık token limiti aşılabiliyor (429). Tek adımlı sohbetler sorunsuz.
 - ⚠️ Next.js `frontend/` derlenemez (eksik `components/`) — aktif arayüz `sohbet.html`.
+
+---
+
+## Oturum 8 — Çok adımlı görev çökmesi: 429 dayanıklılığı (2026-10-17) ✅
+
+Kullanıcı raporu: sohbette **"bana bu projede bir yemek blog sitesi hazırla ve kaydet"**
+gibi çok adımlı bir görev verildiğinde ajan birkaç dosya yazdıktan sonra
+*"Üzgünüm, şu anda tam yanıt üretemiyorum. LLM API'sine erişimde sorun yaşıyorum."*
+mesajıyla düşüyordu. **Bu, yemek bloguna özgü değildi: her çok adımlı görevde oluyordu.**
+
+### Kök neden (canlı log kanıtı)
+Eski sunucu logları (`sh_146a5ddd…out`):
+```
+00:43:57  POST groq 200   → write_file(app.py)
+00:43:59  POST groq 200   → write_file(base.html)
+00:44:01  POST groq 429   → "Rate limit reached for model openai/gpt-oss-120b ...
+                            on tokens per minute (TPM): Limit 8000, Used 5982"
+00:44:01  Fallback trying: openrouter/... (401) → ... → openai (429/404) → kural-tabanlı fallback
+```
+1. Groq **TPM 8000** limiti; sistem prompt'u + geçmiş ≈ 3k token/istek → ~3 çağrıda limit dolar.
+2. `_call_llm` **her hatada** (429 dahil) `_fallback_chain`'e düşüyordu.
+3. `_fallback_chain`, `failed_provider`'ı (groq) **listedan tamamen çıkarıyordu** → geçerli
+   anahtara sahip **tek** sağlayıcı elenmiş oluyordu → zincir boşa düşüp kural-tabanlı yedeğe gidiyordu.
+
+### Düzeltme (`backend/ai_agent.py`)
+1. **429 → bekle & AYNI sağlayıcıyı yeniden dene.** `_parse_retry_after()` yeni yardımcı:
+   `Retry-After` başlığı veya Groq/OpenAI mesajındaki "try again in 12.5s / 1m30s" ifadesini
+   okur (≤90sn tavan). `_call_llm` artık `_RATE_LIMIT_MAX_RETRIES = 3` kez, her seferinde
+   `asyncio.sleep(wait)` ile bekleyip **aynı** provider/model'i tekrar dener.
+2. **Rate-limit'te sağlayıcıyı DÜŞÜRME.** `_fallback_chain(..., rate_limited=True)` alır; bu durumda
+   `failed_provider` zincirin **başına** konur (diğer modelleri ayrı TPM kovalarına sahiptir).
+   Yalnızca **sert** hata (401/404/validasyon) sağlayıcıyı eler.
+3. **Son araçsız çağrıya** da aynı 429-retry eklendi.
+4. `max_iterations` **10 → 15** (çok dosyalı görevler için).
+5. `import asyncio` eklendi (eksikti).
+
+### Doğrulama
+- **Birim regresyon** `tests/test_rate_limit_retry.py` (**10 test**): retry-after parse (başlık/gövde/
+  dakika/tavan/varsayılan), 429→retry→başarı, retry bütçesi = `MAX+1`, rate-limit'te sağlayıcı korunur,
+  sert hatada sağlayıcı elenir.
+- **Tam paket**: `pytest tests/ -q` → **92 PASS** (82 eski + 10 yeni), 29 canlı deselected.
+- **Canlı (gerçek API + gerçek HTTP)**: yeni sunucuya `POST /api/v1/ai/chat` ile çok adımlı istek:
+  - `tools_used: ['write_file','write_file','write_file']` → **3 dosya** (`app.py`, `index.html`, `style.css`).
+  - Yanıt: anlamlı özet — **hata mesajı YOK** → **PASS**.
+  - Sunucu logu: `200, 200, 429→26s bekle→200, 429→33s bekle→429→2s bekle→200`
+    → retry mekanizması canlı doğrulandı.
+- `python -m py_compile ai_agent.py` → OK; `ruff --select=E9,F63,F7,F82` → All checks passed!
+
+### Açık (güncel)
+- ⚠️ Yalnızca **groq** tam çalışıyor (openrouter 401, openai 429/404). Çoklu-sağlayıcı yedekliliği
+  için kullanıcı geçerli anahtar sağlamalı. **Ancak artık 429 tek başına görevi çökertmez**
+  (bekle-yeniden dene + aynı sağlayıcının diğer modelleri).
+- ⚠️ Aynı dakikada çok çağrı → yine bekleme olur (toplam süre artabilir). Bu doğru davranıştır.

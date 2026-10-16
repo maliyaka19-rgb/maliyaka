@@ -22,6 +22,7 @@ from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field, asdict
 from collections import deque
 import logging
+import asyncio
 import httpx
 
 # Load .env file
@@ -125,6 +126,40 @@ def _validate_response(data: Dict) -> bool:
         return True
     except Exception:
         return False
+
+
+# How many times to retry the SAME provider/model after a 429 (rate limit)
+# before falling back to other models/providers.
+_RATE_LIMIT_MAX_RETRIES = 3
+
+
+def _parse_retry_after(response, default: float = 20.0) -> float:
+    """Extract a sane wait time (seconds) from a 429 response.
+
+    Prefers the ``Retry-After`` header; falls back to parsing Groq/OpenAI-style
+    messages such as "Please try again in 12.5s" or "in 1m30s". Sleeps are
+    capped so a bad value can never hang the request for minutes.
+    """
+    try:
+        header = response.headers.get("retry-after") or response.headers.get("Retry-After")
+        if header:
+            try:
+                return max(1.0, min(float(header), 90.0))
+            except (TypeError, ValueError):
+                pass
+    except Exception:
+        pass
+    try:
+        body = response.text or ""
+    except Exception:
+        body = ""
+    m = re.search(r"try again in\s+(\d+)m([\d.]+)s", body, re.IGNORECASE)
+    if m:
+        return max(1.0, min(int(m.group(1)) * 60 + float(m.group(2)) + 1.0, 120.0))
+    m = re.search(r"try again in\s+([\d.]+)\s*s", body, re.IGNORECASE)
+    if m:
+        return max(1.0, min(float(m.group(1)) + 1.0, 90.0))
+    return default
 
 
 class NexusAIAgent:
@@ -379,7 +414,7 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
                 "icon": "🧠"
             })
             
-            max_iterations = 10
+            max_iterations = 15
             for iteration in range(max_iterations):
                 llm_response = await self._call_llm(messages)
                 
@@ -487,15 +522,25 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
                             headers["X-Title"] = "NEXUS-CORE"
                         
                         async with httpx.AsyncClient(timeout=90) as client:
-                            resp = await client.post(f"{base_url}/chat/completions", headers=headers, json=payload)
-                            if resp.status_code == 200:
+                            resp = None
+                            for attempt in range(_RATE_LIMIT_MAX_RETRIES + 1):
+                                resp = await client.post(f"{base_url}/chat/completions", headers=headers, json=payload)
+                                if resp.status_code != 429 or attempt >= _RATE_LIMIT_MAX_RETRIES:
+                                    break
+                                wait = _parse_retry_after(resp)
+                                logger.warning(
+                                    f"Final call rate limited (429); waiting {wait:.1f}s "
+                                    f"before retry {attempt + 1}/{_RATE_LIMIT_MAX_RETRIES}"
+                                )
+                                await asyncio.sleep(wait)
+                            if resp is not None and resp.status_code == 200:
                                 data = resp.json()
                                 choices = data.get("choices", [])
                                 if choices:
                                     full_response = choices[0].get("message", {}).get("content", "")
                                     logger.info(f"Final response generated: {len(full_response)} chars")
                             else:
-                                logger.warning(f"Final call failed: {resp.status_code}")
+                                logger.warning(f"Final call failed: {resp.status_code if resp is not None else '?'}")
                 except Exception as fe:
                     logger.warning(f"Final response generation failed: {fe}")
             
@@ -769,9 +814,23 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
                         headers["HTTP-Referer"] = "http://localhost:8080"
                         headers["X-Title"] = "NEXUS-CORE"
                 
-                response = await client.post(url, headers=headers, json=payload)
-                
-                if response.status_code == 200:
+                # Rate-limit aware retry: a 429 (e.g. Groq TPM limit) is TEMPORARY,
+                # so wait for the quota window to refill and retry the SAME provider
+                # /model before cascading. This is exactly what lets multi-step tool
+                # tasks (write 3-4 files) survive the per-minute token cap.
+                response = None
+                for attempt in range(_RATE_LIMIT_MAX_RETRIES + 1):
+                    response = await client.post(url, headers=headers, json=payload)
+                    if response.status_code != 429 or attempt >= _RATE_LIMIT_MAX_RETRIES:
+                        break
+                    wait = _parse_retry_after(response)
+                    logger.warning(
+                        f"Rate limited (429) on {provider}/{model}; waiting "
+                        f"{wait:.1f}s before retry {attempt + 1}/{_RATE_LIMIT_MAX_RETRIES}"
+                    )
+                    await asyncio.sleep(wait)
+
+                if response is not None and response.status_code == 200:
                     data = response.json()
                     if provider == "gemini" and "candidates" in data:
                         data = self._normalize_gemini_response(data)
@@ -783,9 +842,16 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
                     
                     return {"success": True, "data": data}
                 
-                # Any error -> trigger fallback chain
-                logger.warning(f"LLM API error {response.status_code} from {provider}/{model}: {response.text[:200]}")
-                return await self._fallback_chain(messages, failed_provider=provider, failed_model=model)
+                # Any error -> trigger fallback chain. If the failure was a pure
+                # rate limit we keep this provider (its other models have separate
+                # quota buckets) instead of dropping the only working provider.
+                status = response.status_code if response is not None else "?"
+                rate_limited = response is not None and response.status_code == 429
+                detail = response.text[:200] if response is not None else "no response"
+                logger.warning(f"LLM API error {status} from {provider}/{model}: {detail}")
+                return await self._fallback_chain(
+                    messages, failed_provider=provider, failed_model=model, rate_limited=rate_limited
+                )
         
         except httpx.TimeoutException:
             logger.warning(f"Timeout calling {provider}/{model}")
@@ -797,13 +863,17 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
             logger.warning(f"LLM call failed: {e}")
             return await self._fallback_chain(messages, failed_provider=provider, failed_model=model)
     
-    async def _fallback_chain(self, messages: List[Dict], failed_provider: str = None, failed_model: str = None) -> Dict:
+    async def _fallback_chain(self, messages: List[Dict], failed_provider: str = None, failed_model: str = None, rate_limited: bool = False) -> Dict:
         """
         Comprehensive fallback chain:
         1. Try other models from SAME provider (priority order)
         2. Try other providers in priority order (Groq > OpenRouter > Gemini > Together > OpenAI > Anthropic)
         3. Each provider tries its models in priority order
         4. Final fallback: rule-based agent
+
+        ``rate_limited=True`` means the original provider only hit a 429 (temporary
+        quota), so it is KEPT (and tried first): its other models have independent
+        per-model quota buckets and usually succeed immediately.
         """
         from model_routes import MODEL_CATALOG, _is_valid_key, _load_config
         
@@ -813,9 +883,13 @@ Kullanıcı sorduğunda bu araçları kullan. Türkçe yanıt ver."""
         # Provider priority order (free first, then paid)
         provider_priority = ["groq", "openrouter", "gemini", "together", "openai", "anthropic"]
         
-        # Remove failed provider from priority list if specified
+        # A rate-limited provider is NOT removed from the chain: its sibling models
+        # have separate limits, so we try it first. Only a hard failure drops it.
         if failed_provider:
-            provider_priority = [p for p in provider_priority if p != failed_provider]
+            if rate_limited:
+                provider_priority = [failed_provider] + [p for p in provider_priority if p != failed_provider]
+            else:
+                provider_priority = [p for p in provider_priority if p != failed_provider]
         
         for provider_id in provider_priority:
             provider_info = MODEL_CATALOG.get(provider_id)

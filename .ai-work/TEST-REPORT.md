@@ -91,3 +91,59 @@ Ozet: **34/36 PASS**
 ### CORS (G2) canlı doğrulama
 - `GET /health` (`Origin: http://localhost:8080`) → `Access-Control-Allow-Origin: http://localhost:8080` ✅
   (wildcard yerine açık allowlist).
+
+---
+
+## Ek — Oturum 8 Testleri: 429 dayanıklılığı (2026-10-17)
+
+### Otomatik test paketi
+| Grup | Adet | Komut | Sonuç |
+|------|------|-------|-------|
+| Birim (canlı hariç) | **92** | `python -m pytest tests/ -q` | ✅ PASS |
+| Canlı API (`live`) | 29 | `python -m pytest tests/test_api_live.py -m live` | ✅ PASS |
+| **Toplam** | **121** | | **✅ 0 FAIL** |
+
+> Not: birim sayısı 82 → 92 (10 yeni 429-regresyon testi). Canlı 29 test bu oturumda yeniden
+> çalıştırılmadı (deselected); önceki Oturum 7 sonucu geçerli.
+
+### Yeni regresyon testleri — `tests/test_rate_limit_retry.py` (10)
+| Test | Amaç | Sonuç |
+|------|------|-------|
+| `test_parse_retry_after_header` | `Retry-After` başlığı okunur | ✅ |
+| `test_parse_retry_after_body_seconds` | "try again in 7.5s" okunur | ✅ |
+| `test_parse_retry_after_body_minutes` | "in 1m30s" → ~90sn | ✅ |
+| `test_parse_retry_after_default_when_unparseable` | ayrıştırılamazsa varsayılan | ✅ |
+| `test_parse_retry_after_header_is_capped` | 9999 → tavan 90 | ✅ |
+| `test_call_llm_retries_429_then_succeeds` | 2×429 → retry → başarı | ✅ |
+| `test_call_llm_exhausted_429_marks_fallback_rate_limited` | tükenince `rate_limited=True` | ✅ |
+| `test_call_llm_uses_retry_budget` | deneme = `MAX_RETRIES+1` | ✅ |
+| `test_fallback_keeps_rate_limited_provider` | 429'da sağlayıcı **korunur**, kardeş model denenir | ✅ |
+| `test_fallback_drops_provider_on_hard_failure` | sert hatada sağlayıcı **elenir** | ✅ |
+
+### Canlı uçtan-uca doğrulama (gerçek Groq + gerçek HTTP)
+| Adım | Sonuç |
+|------|-------|
+| `POST /api/v1/auth/login` | ✅ 200 |
+| `POST /api/v1/fs/open-project` (geçici dizin) | ✅ 200 |
+| `POST /api/v1/ai/chat` ("…yemek blog… 3 dosya oluştur") | ✅ 200 (**77 sn**) |
+| `tools_used` | ✅ `['write_file','write_file','write_file']` |
+| Yanıt | ✅ anlamlı özet — **"tam yanıt üretemiyorum" YOK** |
+| Üretilen dosyalar | ✅ `app.py` (1898 B), `index.html` (867 B), `style.css` (655 B) |
+
+**Sunucu log kanıtı (retry devrede):**
+```
+429 → Rate limited (429) on groq/openai/gpt-oss-120b; waiting 26.0s before retry 1/3
+200 (retry başarılı)
+429 → waiting 33.0s before retry 1/3   (yeni iterasyon)
+429 → waiting 2.0s before retry 2/3    (aynı çağrı, 2. deneme)
+200 (retry başarılı)
+```
+
+### Statik analiz
+- `python -m py_compile ai_agent.py` → OK
+- `ruff check --select=E9,F63,F7,F82 ai_agent.py` → **All checks passed!**
+
+### SINIFLANDIRMA
+- **Birim 429-retry**: **PASS**
+- **Canlı çok adımlı görev (eski FAIL senaryosu)**: **PASS**
+- **Regresyon**: **PASS** (mevcut 82 + yeni 10)

@@ -289,3 +289,27 @@ mükerrer mesaj, 8× `F821` (CI lint), frontend görsel/video/ilerleme düzeltme
 2. **Groq TPM** için sistem prompt'unu küçült veya akıllı rate-limit/backoff ekle.
 3. İstemci tarafı Pollinations **402 kuyruğu** (görsel) ve web araması için canlı test.
 4. Kullanılmayan Next.js `frontend/`'i kaldır veya tamamla (şu an ölü kod).
+
+---
+
+## 18. Ek — Oturum 8: Çok adımlı görev çökmesi düzeltildi (2026-10-17)
+
+**Sorun (kullanıcı raporu).** Sohbette çok adımlı görev (ör. "bu projede yemek blog sitesi
+hazırla ve kaydet") verildiğinde ajan birkaç dosya yazdıktan sonra
+*"Üzgünüm, şu anda tam yanıt üretemiyorum…"* ile düşüyordu.
+
+**Kök neden.** Groq **TPM 8000** limiti; 2–3 araç çağrısından sonra `429`. Eski kod her hatada
+fallback zincirine düşüp **tek geçerli sağlayıcıyı (groq) eliyordu** → zincir boşa düşüyordu.
+(Bu, yukarıdaki öneri #2'nin "akıllı rate-limit/backoff" kısmıdır — **uygulandı**.)
+
+**Düzeltme** (`backend/ai_agent.py`): 429'da `Retry-After`/mesaj ayrıştırılıp beklenir ve **aynı
+sağlayıcı** ≤3 kez yeniden denenir; `rate_limited` durumunda `_fallback_chain` sağlayıcıyı
+**düşürmez** (kardeş modelleri dener); son çağrıya da retry; `max_iterations` 10→15.
+
+**Doğrulama.** Birim **92 PASS** (10 yeni regresyon) + canlı çok adımlı görev **PASS**
+(3×`write_file`, anlamlı yanıt, hata yok). Sunucu logu: `429→26s→200`, `429→33s→429→2s→200`.
+
+**Kalan öneriler (güncel):**
+1. **Geçerli OpenRouter/OpenAI anahtarı** → gerçek çoklu-sağlayıcı yedekliliği.
+2. İstemci tarafı Pollinations **402 kuyruğu** ve web araması için canlı test.
+3. Kullanılmayan Next.js `frontend/` kaldır/tamamla.

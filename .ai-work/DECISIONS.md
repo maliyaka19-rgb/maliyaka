@@ -64,3 +64,21 @@
   video altyapı denetimi ve frontend entegrasyon denetimi.
 - **Gerekçe**: §4 & §16 — "en az bir gerçek uzman görev aktarımı doğrulanmalı".
 - **Etki**: İki bağımsız ajan raporu dosya:satır kanıtlarıyla alındı; bulgular düzeltmelere dönüştü.
+
+## D-010 — 429 (rate limit): bekle & aynı sağlayıcıyı yeniden dene; sağlayıcıyı düşürme
+- **Tarih**: 2026-10-17
+- **Bağlam**: Çok adımlı görevlerde (birden çok `write_file`) Groq **TPM 8000** limiti dolunca
+  429 alınıyor; eski kod her hatada fallback zincirine düşüp **tek geçerli sağlayıcıyı (groq)
+  eliyordu** → görev "Üzgünüm, tam yanıt üretemiyorum" ile bitiyordu.
+- **Karar**:
+  1. `_call_llm` bir 429'da **bekler** (`Retry-After` / "try again in Xs" ayrıştırılır) ve **aynı
+     provider/model'i** `_RATE_LIMIT_MAX_RETRIES = 3` kez yeniden dener.
+  2. `_fallback_chain`, `rate_limited=True` iken **sağlayıcıyı düşürmez**; aksine başa alıp diğer
+     modellerini dener (ayrı TPM kovaları). Yalnızca **sert** hata (401/404/validasyon) sağlayıcıyı eler.
+  3. Son araçsız çağrıya da retry; `max_iterations` 10→15.
+- **Gerekçe**: §12 — kota hatalarını izle, gereksiz çağrıyı azalt; §3.9 — gerçek/geri alınabilir.
+  429 **geçicidir**; doğru tepki bekleyip yeniden denemektir, sağlayıcıyı elden çıkarmak değil.
+- **Alternatif**: Sistem prompt'unu küçültmek (TPM'i düşürür) — ek ajan yeteneği kaybı riski;
+  ileride ek olarak değerlendirilebilir.
+- **Etki**: Canlı doğrulandı — 3 dosyalı çok adımlı görev artık **hatasız** tamamlanıyor;
+  10 yeni regresyon testi.
