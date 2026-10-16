@@ -1,0 +1,500 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Çoklu Ortam Yaratıcı Stüdyo</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: 'Segoe UI', sans-serif;
+      background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
+      min-height: 100vh;
+      color: #fff;
+      padding: 20px;
+    }
+
+    header {
+      text-align: center;
+      padding: 40px 20px 30px;
+    }
+
+    header h1 {
+      font-size: 2.2rem;
+      background: linear-gradient(90deg, #a78bfa, #60a5fa, #34d399);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      margin-bottom: 8px;
+    }
+
+    header p {
+      color: #a0aec0;
+      font-size: 0.95rem;
+    }
+
+    .tabs {
+      display: flex;
+      justify-content: center;
+      gap: 12px;
+      margin: 20px 0 30px;
+      flex-wrap: wrap;
+    }
+
+    .tab-btn {
+      padding: 12px 28px;
+      border: 2px solid transparent;
+      border-radius: 50px;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+      transition: all 0.3s;
+      background: rgba(255,255,255,0.07);
+      color: #cbd5e0;
+    }
+
+    .tab-btn:hover { background: rgba(255,255,255,0.15); }
+
+    .tab-btn.active {
+      background: linear-gradient(135deg, #7c3aed, #2563eb);
+      color: white;
+      border-color: transparent;
+      box-shadow: 0 4px 20px rgba(124,58,237,0.4);
+    }
+
+    .panel {
+      display: none;
+      max-width: 750px;
+      margin: 0 auto;
+      background: rgba(255,255,255,0.06);
+      border: 1px solid rgba(255,255,255,0.12);
+      border-radius: 20px;
+      padding: 35px;
+      backdrop-filter: blur(10px);
+    }
+
+    .panel.active { display: block; }
+
+    .panel h2 {
+      font-size: 1.4rem;
+      margin-bottom: 6px;
+      color: #e2e8f0;
+    }
+
+    .panel > p {
+      color: #94a3b8;
+      margin-bottom: 25px;
+      font-size: 0.9rem;
+    }
+
+    label {
+      display: block;
+      margin-bottom: 16px;
+    }
+
+    label span {
+      display: block;
+      margin-bottom: 6px;
+      font-weight: 600;
+      font-size: 0.88rem;
+      color: #a78bfa;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    input, textarea, select {
+      width: 100%;
+      padding: 12px 16px;
+      background: rgba(255,255,255,0.08);
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 10px;
+      color: #fff;
+      font-size: 0.95rem;
+      transition: border 0.2s;
+      font-family: inherit;
+    }
+
+    input:focus, textarea:focus, select:focus {
+      outline: none;
+      border-color: #7c3aed;
+      background: rgba(255,255,255,0.12);
+    }
+
+    select option { background: #1e1b4b; color: #fff; }
+
+    textarea { resize: vertical; }
+
+    .btn {
+      width: 100%;
+      padding: 15px;
+      margin-top: 20px;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.3s;
+      background: linear-gradient(135deg, #7c3aed, #2563eb);
+      color: white;
+      letter-spacing: 0.03em;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 8px 25px rgba(124,58,237,0.5);
+    }
+
+    .btn:active { transform: translateY(0); }
+
+    .btn:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+      transform: none;
+    }
+
+    .result-box {
+      margin-top: 25px;
+      background: rgba(0,0,0,0.3);
+      border: 1px solid rgba(255,255,255,0.1);
+      border-radius: 12px;
+      padding: 20px;
+      display: none;
+    }
+
+    .result-box h3 {
+      color: #34d399;
+      margin-bottom: 12px;
+      font-size: 1rem;
+    }
+
+    .result-box pre {
+      white-space: pre-wrap;
+      word-break: break-word;
+      font-size: 0.85rem;
+      color: #e2e8f0;
+      font-family: 'Consolas', monospace;
+      line-height: 1.6;
+    }
+
+    .copy-btn {
+      margin-top: 12px;
+      padding: 8px 18px;
+      background: #059669;
+      border: none;
+      border-radius: 8px;
+      color: white;
+      cursor: pointer;
+      font-size: 0.85rem;
+      font-weight: 600;
+      transition: background 0.2s;
+    }
+
+    .copy-btn:hover { background: #047857; }
+
+    .error-box {
+      margin-top: 15px;
+      padding: 14px;
+      background: rgba(239,68,68,0.15);
+      border: 1px solid rgba(239,68,68,0.3);
+      border-radius: 10px;
+      color: #fca5a5;
+      font-size: 0.88rem;
+      display: none;
+    }
+
+    .loading {
+      text-align: center;
+      padding: 15px;
+      color: #a78bfa;
+      display: none;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 20px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      margin-left: 8px;
+      background: rgba(52,211,153,0.2);
+      color: #34d399;
+      border: 1px solid rgba(52,211,153,0.3);
+    }
+  </style>
+</head>
+<body>
+
+<header>
+  <h1>🧠 Çoklu Ortam Yaratıcı Stüdyo</h1>
+  <p>NEXUS-CORE v5.0 — Yapay Zeka İçerik Üretim Platformu</p>
+</header>
+
+<!-- SEKMELER -->
+<div class="tabs">
+  <button class="tab-btn active" onclick="goster('kod')">💻 Kod Üretici</button>
+  <button class="tab-btn" onclick="goster('gorsel')">🎨 Görsel Prompt</button>
+  <button class="tab-btn" onclick="goster('video')">🎬 Video Yönetmeni</button>
+</div>
+
+<!-- ===== KOD ÜRETİCİ ===== -->
+<div id="panel-kod" class="panel active">
+  <h2>💻 Kod Üretici <span class="badge">✓ Hazır</span></h2>
+  <p>Ne tür bir kod istediğinizi Türkçe yazın, sistem otomatik üretsin.</p>
+
+  <label>
+    <span>📝 Ne istiyorsunuz?</span>
+    <textarea id="kod-prompt" rows="4" placeholder="Örn: Kullanıcı girişi yapan, şifreli ve JWT token döndüren bir API endpoint yaz"></textarea>
+  </label>
+
+  <label>
+    <span>🖥️ Programlama Dili</span>
+    <select id="kod-dil">
+      <option value="python">Python</option>
+      <option value="javascript">JavaScript</option>
+      <option value="typescript">TypeScript</option>
+    </select>
+  </label>
+
+  <label>
+    <span>⚙️ Framework</span>
+    <select id="kod-fw">
+      <option value="fastapi">FastAPI</option>
+      <option value="flask">Flask</option>
+      <option value="express">Express</option>
+      <option value="nextjs">Next.js</option>
+    </select>
+  </label>
+
+  <label>
+    <span>📊 Karmaşıklık Seviyesi</span>
+    <select id="kod-karmasiklik">
+      <option value="low">Basit</option>
+      <option value="medium" selected>Orta</option>
+      <option value="high">Gelişmiş</option>
+    </select>
+  </label>
+
+  <button class="btn" onclick="kodUret()">🚀 Kodu Üret</button>
+
+  <div class="loading" id="kod-loading">⏳ Kod üretiliyor...</div>
+  <div class="error-box" id="kod-hata"></div>
+  <div class="result-box" id="kod-sonuc">
+    <h3>✅ Üretilen Kod</h3>
+    <pre id="kod-cikti"></pre>
+    <button class="copy-btn" onclick="kopyala('kod-cikti')">📋 Kopyala</button>
+  </div>
+</div>
+
+<!-- ===== GÖRSEL PROMPT ===== -->
+<div id="panel-gorsel" class="panel">
+  <h2>🎨 Görsel Prompt Üretici <span class="badge">✓ Hazır</span></h2>
+  <p>Görsel parametrelerini girin, Midjourney / DALL-E / Stable Diffusion için prompt alın.</p>
+
+  <label>
+    <span>🧍 Özne — Ne görmek istiyorsunuz?</span>
+    <textarea id="g-ozne" rows="3" placeholder="Örn: Fütüristik şehirde yürüyen bir kadın, metalik kıyafet, parlak gözler"></textarea>
+  </label>
+
+  <label>
+    <span>🌅 Çevre & Işık — Ortam nasıl?</span>
+    <textarea id="g-cevre" rows="3" placeholder="Örn: Gün batımı ışığı, siber punk sokaklar, neon ışıklar, yağmurlu hava"></textarea>
+  </label>
+
+  <label>
+    <span>📷 Kamera & Lens — Çekim nasıl?</span>
+    <textarea id="g-kamera" rows="3" placeholder="Örn: 35mm lens, f/1.8 diyafram, sinematik alan derinliği, yakın çekim"></textarea>
+  </label>
+
+  <label>
+    <span>🎭 Stil</span>
+    <select id="g-stil">
+      <option value="cinematic">Sinematik</option>
+      <option value="realistic">Gerçekçi</option>
+      <option value="conceptual">Kavramsal</option>
+      <option value="minimalist">Minimalist</option>
+    </select>
+  </label>
+
+  <button class="btn" onclick="gorselUret()">✨ Prompt Üret</button>
+
+  <div class="loading" id="gorsel-loading">⏳ Prompt oluşturuluyor...</div>
+  <div class="error-box" id="gorsel-hata"></div>
+  <div class="result-box" id="gorsel-sonuc">
+    <h3>✅ Yapay Zeka Görsel Promptu</h3>
+    <pre id="gorsel-cikti"></pre>
+    <button class="copy-btn" onclick="kopyala('gorsel-cikti')">📋 Kopyala</button>
+  </div>
+</div>
+
+<!-- ===== VİDEO YÖNETMENİ ===== -->
+<div id="panel-video" class="panel">
+  <h2>🎬 Video Yönetmeni <span class="badge">✓ Hazır</span></h2>
+  <p>Sahne bilgilerini girin, Google Veo / Sora / Runway için video promptu alın.</p>
+
+  <label>
+    <span>⏱️ Zaman Kodu</span>
+    <input id="v-zaman" type="text" placeholder="Örn: 00:00 - 00:04" value="00:00 - 00:04" />
+  </label>
+
+  <label>
+    <span>🎥 Kamera Hareketi</span>
+    <select id="v-kamera">
+      <option value="FPV drone dive">FPV Drone Dalışı</option>
+      <option value="Dolly zoom">Dolly Zoom</option>
+      <option value="Parallax pan">Paralaks Pan</option>
+      <option value="Orbit shot">Orbit Çekimi</option>
+      <option value="Handheld tracking">El Kamerasıyla Takip</option>
+      <option value="Static wide shot">Sabit Geniş Açı</option>
+    </select>
+  </label>
+
+  <label>
+    <span>🏃 Hareket & Dinamik — Ne oluyor sahnede?</span>
+    <textarea id="v-hareket" rows="3" placeholder="Örn: Kadın hızla koşuyor, saçları rüzgarda uçuşuyor, arka planda arabalar geçiyor"></textarea>
+  </label>
+
+  <label>
+    <span>🤖 Hedef Video Yapay Zekası</span>
+    <select id="v-model">
+      <option value="veo">Google Veo</option>
+      <option value="sora">OpenAI Sora</option>
+      <option value="runway">Runway Gen-3</option>
+      <option value="luma">Luma Dream Machine</option>
+    </select>
+  </label>
+
+  <button class="btn" onclick="videoUret()">🎬 Video Promptu Üret</button>
+
+  <div class="loading" id="video-loading">⏳ Video promptu oluşturuluyor...</div>
+  <div class="error-box" id="video-hata"></div>
+  <div class="result-box" id="video-sonuc">
+    <h3>✅ Sinematik Video Promptu</h3>
+    <pre id="video-cikti"></pre>
+    <button class="copy-btn" onclick="kopyala('video-cikti')">📋 Kopyala</button>
+  </div>
+</div>
+
+<script>
+  const API = "http://localhost:8000";
+
+  function goster(sekme) {
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.getElementById('panel-' + sekme).classList.add('active');
+    event.target.classList.add('active');
+  }
+
+  function yukleniyorGoster(id, goster) {
+    document.getElementById(id + '-loading').style.display = goster ? 'block' : 'none';
+  }
+
+  function hataGoster(id, mesaj) {
+    const el = document.getElementById(id + '-hata');
+    el.textContent = '❌ Hata: ' + mesaj;
+    el.style.display = 'block';
+  }
+
+  function sonucGoster(id, metin) {
+    document.getElementById(id + '-sonuc').style.display = 'block';
+    document.getElementById(id + '-cikti').textContent = metin;
+  }
+
+  function temizle(id) {
+    document.getElementById(id + '-hata').style.display = 'none';
+    document.getElementById(id + '-sonuc').style.display = 'none';
+    document.getElementById(id + '-loading').style.display = 'none';
+  }
+
+  function kopyala(elId) {
+    const text = document.getElementById(elId).textContent;
+    navigator.clipboard.writeText(text).then(() => {
+      alert('✅ Panoya kopyalandı!');
+    });
+  }
+
+  async function kodUret() {
+    const prompt = document.getElementById('kod-prompt').value.trim();
+    if (!prompt) { alert('Lütfen ne istediğinizi yazın!'); return; }
+
+    temizle('kod');
+    yukleniyorGoster('kod', true);
+
+    try {
+      const r = await fetch(API + '/api/v1/generate/code', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          prompt,
+          language: document.getElementById('kod-dil').value,
+          framework: document.getElementById('kod-fw').value,
+          complexity: document.getElementById('kod-karmasiklik').value
+        })
+      });
+      const veri = await r.json();
+      yukleniyorGoster('kod', false);
+      sonucGoster('kod', veri.code || JSON.stringify(veri, null, 2));
+    } catch(e) {
+      yukleniyorGoster('kod', false);
+      hataGoster('kod', 'Sunucuya bağlanılamadı. Backend çalışıyor mu?');
+    }
+  }
+
+  async function gorselUret() {
+    const ozne = document.getElementById('g-ozne').value.trim();
+    const cevre = document.getElementById('g-cevre').value.trim();
+    const kamera = document.getElementById('g-kamera').value.trim();
+    if (!ozne || !cevre || !kamera) { alert('Lütfen tüm alanları doldurun!'); return; }
+
+    temizle('gorsel');
+    yukleniyorGoster('gorsel', true);
+
+    try {
+      const r = await fetch(API + '/api/v1/generate/visual', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          subject: ozne,
+          environment: cevre,
+          camera: kamera,
+          style: document.getElementById('g-stil').value
+        })
+      });
+      const veri = await r.json();
+      yukleniyorGoster('gorsel', false);
+      sonucGoster('gorsel', veri.final_prompt_english || JSON.stringify(veri, null, 2));
+    } catch(e) {
+      yukleniyorGoster('gorsel', false);
+      hataGoster('gorsel', 'Sunucuya bağlanılamadı. Backend çalışıyor mu?');
+    }
+  }
+
+  async function videoUret() {
+    const hareket = document.getElementById('v-hareket').value.trim();
+    if (!hareket) { alert('Lütfen sahne dinamiklerini yazın!'); return; }
+
+    temizle('video');
+    yukleniyorGoster('video', true);
+
+    try {
+      const r = await fetch(API + '/api/v1/generate/video', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          timecode: document.getElementById('v-zaman').value,
+          camera_movement: document.getElementById('v-kamera').value,
+          motion_dynamics: hareket,
+          video_model: document.getElementById('v-model').value
+        })
+      });
+      const veri = await r.json();
+      yukleniyorGoster('video', false);
+      sonucGoster('video', veri.final_prompt_english || JSON.stringify(veri, null, 2));
+    } catch(e) {
+      yukleniyorGoster('video', false);
+      hataGoster('video', 'Sunucuya bağlanılamadı. Backend çalışıyor mu?');
+    }
+  }
+</script>
+
+</body>
+</html>

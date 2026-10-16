@@ -1,0 +1,13 @@
+Image Analysis Results
+======================
+Format: PNG
+Size: (1341, 590)
+Mode: RGBA
+Unique colors: 5733
+Average RGBA: [ 25.14490198  24.29164676  40.66696495 255.        ]
+Bright pixels (>200): 1.0%
+Dark pixels (<50): 94.5%
+Top 100px avg brightness: 30.8
+Bottom 100px avg brightness: 28.2
+Left 100px avg brightness: 31.7
+Right 100px avg brightness: 27.2

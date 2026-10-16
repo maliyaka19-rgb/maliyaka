@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS-CORE — Sohbet</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="css/style.css?v=61">
+</head>
+<body>
+    <!-- Simple Background -->
+    <div class="bg-simple"></div>
+
+    <div class="app-layout">
+        <!-- Sidebar -->
+        <aside class="sidebar" id="sidebar">
+            <div class="sidebar-header">
+                <span class="sidebar-title">Sohbetler</span>
+                <button class="new-chat-btn" id="new-chat-btn" aria-label="Yeni sohbet">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5">
+                        <line x1="12" y1="5" x2="12" y2="19"></line>
+                        <line x1="5" y1="12" x2="19" y2="12"></line>
+                    </svg>
+                    Yeni
+                </button>
+            </div>
+            <div class="chat-list" id="chat-list">
+                <div class="empty-chats">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
+                        <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+                    </svg>
+                    Henüz sohbet yok<br><span style="font-size:.7rem">"Yeni" butonuyla başlayın</span>
+                </div>
+            </div>
+            <div class="user-menu">
+                <div class="user-info">
+                    <div class="user-avatar" id="user-avatar"></div>
+                    <div class="user-details">
+                        <div class="user-name" id="user-name"></div>
+                        <div class="user-email" id="user-email"></div>
+                    </div>
+                    <button class="logout-btn" id="logout-btn">Çıkış</button>
+                </div>
+            </div>
+        </aside>
+
+        <!-- Project Panel (OpenCode-style File Explorer) -->
+        <aside class="project-panel" id="project-panel">
+            <div class="project-header">
+                <span class="project-title">📁 <span id="project-name">Proje</span></span>
+                <div class="project-actions">
+                    <button class="project-action-btn" id="btn-open-project" title="Proje Seç">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                            <line x1="12" y1="11" x2="12" y2="17"></line>
+                            <line x1="9" y1="14" x2="15" y2="14"></line>
+                        </svg>
+                    </button>
+                    <button class="project-action-btn" id="btn-refresh-tree" title="Yenile">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="23 4 23 10 17 10"></polyline>
+                            <polyline points="1 20 1 14 7 14"></polyline>
+                            <path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"></path>
+                        </svg>
+                    </button>
+                    <button class="project-action-btn btn-exit-project" id="btn-close-project" title="Projeden Çık">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"></path>
+                            <polyline points="16 17 21 12 16 7"></polyline>
+                            <line x1="21" y1="12" x2="9" y2="12"></line>
+                        </svg>
+                    </button>
+                    <button class="project-action-btn" id="btn-hide-panel" title="Paneli Kapat">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                    </button>
+                </div>
+            </div>
+            <div class="file-tree" id="file-tree">
+                <div class="file-tree-empty">📁 Proje açmak için + butonuna tıklayın</div>
+            </div>
+            <div class="recent-projects" id="recent-projects" style="display:none">
+                <div class="recent-title">Son Açılanlar</div>
+                <div id="recent-list"></div>
+            </div>
+        </aside>
+
+        <!-- Main Chat Area -->
+        <main class="main">
+            <header class="main-header">
+                <h3 class="main-header-title" id="chat-title">Yeni Sohbet</h3>
+                <div class="main-header-actions">
+                    <button class="model-btn" id="model-btn" title="AI Model seç">
+                        <span class="model-dot" id="model-status-dot"></span>
+                        <span id="model-btn-text">Model</span>
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <polyline points="6 9 12 15 18 9"></polyline>
+                        </svg>
+                    </button>
+                    <button class="header-btn" id="project-toggle" aria-label="Proje panelini aç/kapat">
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
+                        </svg>
+                        Proje
+                    </button>
+                </div>
+            </header>
+
+            <div class="chat-body">
+                <div id="messages"></div>
+
+                <div id="welcome" class="welcome">
+                    <div class="welcome-icon">🤖</div>
+                    <h2>NEXUS-CORE</h2>
+                    <p>Gerçek Yapay Zeka Agent'ı hazır. Size nasıl yardımcı olabilirim?</p>
+                    <div class="welcome-suggestions" id="suggestions">
+                        <button class="sugg" data-q="Python'da hello world yaz">Python Hello World</button>
+                        <button class="sugg" data-q="FastAPI ile REST API oluştur">FastAPI REST API</button>
+                        <button class="sugg" data-q="Cyberpunk tema için Midjourney promptu hazırla">Midjourney Prompt</button>
+                        <button class="sugg" data-q="Ürün lansmanı için video sahnesi tasarla">Video Sahnesi</button>
+                        <button class="sugg" data-q="Yapay zeka nedir?">Yapay Zeka Sorusu</button>
+                        <button class="sugg" data-q="React ile basit bir todo uygulaması yaz">React Todo</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="input-area">
+                <div class="input-wrap">
+                    <div class="agent-selector-btn" id="agent-selector-btn" style="cursor: default; pointer-events: none;">
+                        <span class="agent-icon" id="current-agent-icon">🤖</span>
+                    </div>
+                    
+                    <!-- Upload Button (Unified) -->
+                    <div class="upload-wrapper" style="position: relative; margin-right: 8px;">
+                        <button type="button" class="upload-btn" id="upload-btn" title="Dosya, video veya görsel yükle" style="background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); padding: 10px; color: var(--fg); cursor: pointer; display: flex; align-items: center; gap: 4px; transition: all 0.2s ease;">
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="6 9 12 15 18 9"/></svg>
+                        </button>
+                        <div class="upload-dropdown" id="upload-dropdown" style="position: absolute; bottom: 100%; right: 0; margin-bottom: 8px; background: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-md); box-shadow: var(--shadow-lg); min-width: 180px; display: none; z-index: 100; padding: 4px;">
+                            <button type="button" class="dropdown-item" id="upload-file" style="width: 100%; text-align: left; padding: 10px 12px; background: transparent; border: none; color: var(--fg); cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 0.85rem; border-radius: var(--radius-sm);" style="transition: background 0.15s;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+                                <span>📄 Belge / Dosya</span>
+                            </button>
+                            <button type="button" class="dropdown-item" id="upload-video" style="width: 100%; text-align: left; padding: 10px 12px; background: transparent; border: none; color: var(--fg); cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 0.85rem; border-radius: var(--radius-sm);" style="transition: background 0.15s;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>
+                                <span>🎬 Video</span>
+                            </button>
+                            <button type="button" class="dropdown-item" id="upload-image" style="width: 100%; text-align: left; padding: 10px 12px; background: transparent; border: none; color: var(--fg); cursor: pointer; display: flex; align-items: center; gap: 8px; font-size: 0.85rem; border-radius: var(--radius-sm);" style="transition: background 0.15s;">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 21 21 15"/></svg>
+                                <span>🖼️ Görsel</span>
+                            </button>
+                        </div>
+                    </div>
+                    
+                    <!-- Hidden file inputs -->
+                    <input type="file" id="file-input" style="display: none;" accept=".txt,.pdf,.doc,.docx,.md,.js,.ts,.py,.html,.css,.json,.csv,.xml,.png,.jpg,.jpeg,.gif,.webp">
+                    <input type="file" id="video-input" style="display: none;" accept="video/*">
+                    <input type="file" id="image-input" style="display: none;" accept="image/*">
+
+                    <textarea id="message-input" placeholder="Ne sormak istiyorsunuz?" rows="1" disabled></textarea>
+                    <button id="send-btn" disabled>
+                        <div class="send-btn-content">
+                            <span>Gönder</span>
+                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                <line x1="22" y1="2" x2="11" y2="13"></line>
+                                <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                            </svg>
+                        </div>
+                        <div class="spinner" style="display:none"></div>
+                    </button>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <!-- Agent Selection Modal -->
+    <div class="agent-modal-overlay" id="agent-modal-overlay">
+        <div class="agent-modal">
+            <div class="agent-modal-header">
+                <span class="agent-modal-title">🤖 Ajan Seç veya Oluştur</span>
+                <button class="agent-modal-close" id="agent-modal-close">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="agent-modal-body">
+                <!-- Agent List View -->
+                <div id="agent-list-view">
+                    <div class="agent-grid" id="agent-grid">
+                        <!-- Agents will be loaded here -->
+                    </div>
+                </div>
+                
+                <!-- Agent Editor View -->
+                <div class="agent-editor" id="agent-editor">
+                    <div class="agent-editor-field">
+                        <label class="agent-editor-label">Ajan Adı</label>
+                        <input type="text" class="agent-editor-input" id="agent-name-input" placeholder="Örn: Kod Uzmanı, Öğretmen...">
+                    </div>
+                    
+                    <div class="agent-editor-field">
+                        <label class="agent-editor-label">Açıklama</label>
+                        <input type="text" class="agent-editor-input" id="agent-desc-input" placeholder="Bu ajan ne yapar?">
+                    </div>
+                    
+                    <div class="agent-editor-field">
+                        <label class="agent-editor-label">İkon</label>
+                        <div class="agent-icon-picker" id="agent-icon-picker">
+                            <div class="icon-option selected" data-icon="🤖">🤖</div>
+                            <div class="icon-option" data-icon="👨‍💻">👨‍💻</div>
+                            <div class="icon-option" data-icon="👨‍🏫">👨‍🏫</div>
+                            <div class="icon-option" data-icon="🎨">🎨</div>
+                            <div class="icon-option" data-icon="📊">📊</div>
+                            <div class="icon-option" data-icon="🔬">🔬</div>
+                            <div class="icon-option" data-icon="✍️">✍️</div>
+                            <div class="icon-option" data-icon="🗣️">🗣️</div>
+                            <div class="icon-option" data-icon="🧠">🧠</div>
+                            <div class="icon-option" data-icon="⚡">⚡</div>
+                            <div class="icon-option" data-icon="🎯">🎯</div>
+                            <div class="icon-option" data-icon="💼">💼</div>
+                        </div>
+                    </div>
+                    
+                    <div class="agent-editor-field">
+                        <label class="agent-editor-label">Renk</label>
+                        <div class="color-picker" id="agent-color-picker">
+                            <div class="color-option selected" data-color="#6366f1" style="background:#6366f1"></div>
+                            <div class="color-option" data-color="#10b981" style="background:#10b981"></div>
+                            <div class="color-option" data-color="#f59e0b" style="background:#f59e0b"></div>
+                            <div class="color-option" data-color="#ef4444" style="background:#ef4444"></div>
+                            <div class="color-option" data-color="#ec4899" style="background:#ec4899"></div>
+                            <div class="color-option" data-color="#8b5cf6" style="background:#8b5cf6"></div>
+                            <div class="color-option" data-color="#06b6d4" style="background:#06b6d4"></div>
+                            <div class="color-option" data-color="#84cc16" style="background:#84cc16"></div>
+                        </div>
+                    </div>
+                    
+                    <div class="agent-editor-field">
+                        <label class="agent-editor-label">Sistem Promptu (Ajanın Kişiliği)</label>
+                        <textarea class="agent-editor-input agent-editor-textarea" id="agent-prompt-input" placeholder="Sen bir yazılım geliştirme uzmanısın. Her zaman en iyi pratikleri uygularsın..."></textarea>
+                    </div>
+                    
+                    <div class="agent-editor-field">
+                        <label class="agent-editor-label">Araçlar (Bu ajan hangi araçları kullanabilir?)</label>
+                        <div class="tools-selector" id="agent-tools-selector">
+                            <!-- Tools will be loaded here -->
+                        </div>
+                    </div>
+                    
+                    <div class="agent-editor-footer">
+                        <button class="agent-btn agent-btn-secondary" id="agent-cancel-btn">İptal</button>
+                        <button class="agent-btn agent-btn-primary" id="agent-save-btn">💾 Kaydet</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Project Browser Modal -->
+    <div class="project-browser-overlay" id="project-browser-overlay">
+        <div class="project-browser-modal">
+            <div class="project-browser-header">
+                <span class="project-browser-title">📂 Proje Klasörü Seç</span>
+                <button class="project-browser-close" id="project-browser-close">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="project-browser-path">
+                <input type="text" class="path-input" id="path-input" placeholder="Yol girin veya gezin...">
+                <button class="path-nav-btn" id="path-go" title="Git">→</button>
+            </div>
+            <div class="project-browser-body" id="browser-body">
+                <div class="browser-empty">Sürücüler yükleniyor...</div>
+            </div>
+            <div class="browser-quick-access">
+                <button class="quick-btn" id="quick-home">🏠 Ana Dizin</button>
+                <button class="quick-btn" id="quick-desktop">🖥️ Masaüstü</button>
+                <button class="quick-btn" id="quick-documents">📁 Belgeler</button>
+            </div>
+            <div class="project-browser-footer">
+                <button class="browser-btn browser-btn-cancel" id="browser-cancel">İptal</button>
+                <button class="browser-btn browser-btn-open" id="browser-open" disabled>Projeyi Aç</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Model Selection Modal -->
+    <div class="model-overlay" id="model-overlay">
+        <div class="model-modal">
+            <div class="model-modal-header">
+                <span class="model-modal-title">🧠 AI Model Seç</span>
+                <button class="model-modal-close" id="model-modal-close">
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                        <line x1="18" y1="6" x2="6" y2="18"></line>
+                        <line x1="6" y1="6" x2="18" y2="18"></line>
+                    </svg>
+                </button>
+            </div>
+            <div class="model-modal-body">
+                <!-- Provider Selection View -->
+                <div id="provider-view">
+                    <!-- Auto Agent Selection -->
+                    <div class="provider-card" id="auto-agent-card" style="border-color: var(--accent); background: rgba(99, 102, 241, 0.1); margin-bottom: 16px;">
+                        <div class="provider-icon" style="font-size: 2rem;">🤖</div>
+                        <div class="provider-info">
+                            <div class="provider-name">Otomatik Ajan Seçimi</div>
+                            <div class="provider-desc">Sorunuza göre en uygun ajanı otomatik seçer</div>
+                        </div>
+                        <span class="model-item-recommended" style="margin-left: auto;">⭐ Önerilen</span>
+                    </div>
+                    
+                    <div style="font-size: 0.85rem; color: var(--fg-muted); margin: 12px 0 8px; font-weight: 600;">AI Ajanları (12)</div>
+                    <div class="provider-grid" id="agent-grid-modal"></div>
+                    
+                    <div style="font-size: 0.85rem; color: var(--fg-muted); margin: 16px 0 8px; font-weight: 600;">AI Modelleri</div>
+                    <div class="provider-grid" id="provider-grid"></div>
+                    
+                    <!-- API Key Section -->
+                    <div class="api-key-section">
+                        <div class="api-key-title">🔑 API Key Ayarla</div>
+                        <div class="api-key-input-group">
+                            <input type="password" class="api-key-input" id="api-key-input" placeholder="API key girin...">
+                            <button class="api-key-save" id="api-key-save">Kaydet</button>
+                        </div>
+                        <div class="api-key-help" id="api-key-help">
+                            Seçili sağlayıcı için API key girin.
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Model Selection View -->
+                <div id="model-view" class="model-list">
+                    <div class="model-list-header">
+                        <button class="model-list-back" id="model-list-back">← Geri</button>
+                        <span class="model-list-title" id="model-list-title">Modeller</span>
+                    </div>
+                    <div class="model-items" id="model-items"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Code Editor Modal -->
+    <div class="editor-overlay" id="editor-overlay">
+        <div class="editor-modal">
+            <div class="editor-header">
+                <div class="editor-file-info">
+                    <span class="editor-file-name" id="editor-file-name">dosya.py</span>
+                    <span class="editor-file-path" id="editor-file-path">src/dosya.py</span>
+                </div>
+                <div class="editor-actions">
+                    <button class="editor-btn editor-btn-save" id="editor-save" disabled>
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"></path>
+                            <polyline points="17 21 17 13 7 13 7 21"></polyline>
+                            <polyline points="7 3 7 8 15 8"></polyline>
+                        </svg>
+                        Kaydet
+                    </button>
+                    <button class="editor-btn editor-btn-close" id="editor-close">
+                        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                            <line x1="18" y1="6" x2="6" y2="18"></line>
+                            <line x1="6" y1="6" x2="18" y2="18"></line>
+                        </svg>
+                        Kapat
+                    </button>
+                </div>
+            </div>
+            <div class="editor-body">
+                <div class="editor-line-numbers" id="editor-line-numbers">1</div>
+                <textarea class="editor-content" id="editor-content" spellcheck="false"></textarea>
+            </div>
+            <div class="editor-status">
+                <div class="editor-status-item">
+                    <span class="editor-status-dot" id="editor-status-dot"></span>
+                    <span id="editor-status-text">Kaydedildi</span>
+                </div>
+                <div class="editor-status-item">
+                    <span id="editor-line-count">1 satır</span>
+                    <span>•</span>
+                    <span id="editor-file-size">0 B</span>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="js/app.js?v=61"></script>
+</body>
+</html>

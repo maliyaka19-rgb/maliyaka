@@ -1,0 +1,382 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>NEXUS-CORE v5.0 - Multimodal Creative Studio</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f0f1a; color: #e4e4e7; min-height: 100vh; padding: 20px; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        header { text-align: center; padding: 30px 0; border-bottom: 1px solid #27272a; margin-bottom: 30px; }
+        h1 { font-size: 2.5rem; background: linear-gradient(135deg, #3b82f6, #a855f7, #ec4899); -webkit-background-clip: text; -webkit-text-fill-color: transparent; margin-bottom: 10px; }
+        .subtitle { color: #71717a; font-size: 1.1rem; }
+        .status { display: inline-flex; align-items: center; gap: 8px; padding: 8px 16px; border-radius: 20px; font-size: 0.85rem; margin-top: 15px; }
+        .status.online { background: rgba(34, 197, 94, 0.15); color: #22c55e; border: 1px solid rgba(34, 197, 94, 0.3); }
+        .status .dot { width: 8px; height: 8px; border-radius: 50%; background: #22c55e; animation: pulse 2s infinite; }
+        @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.5; } }
+        .tabs { display: flex; gap: 8px; margin-bottom: 24px; flex-wrap: wrap; justify-content: center; }
+        .tab { padding: 12px 24px; background: #18181b; border: 1px solid #27272a; border-radius: 8px; color: #a1a1aa; cursor: pointer; transition: all 0.2s; font-weight: 500; }
+        .tab:hover { border-color: #3f3f46; color: #e4e4e7; }
+        .tab.active { background: linear-gradient(135deg, #3b82f6, #8b5cf6); border-color: transparent; color: white; }
+        .panel { display: none; background: #18181b; border: 1px solid #27272a; border-radius: 12px; padding: 24px; }
+        .panel.active { display: block; animation: fadeIn 0.3s; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .section { margin-bottom: 24px; }
+        .section:last-child { margin-bottom: 0; }
+        label { display: block; margin-bottom: 8px; font-weight: 500; color: #d4d4d8; font-size: 0.9rem; }
+        textarea, input, select { width: 100%; background: #0f0f1a; border: 1px solid #27272a; border-radius: 8px; padding: 12px; color: #e4e4e7; font-family: inherit; font-size: 0.95rem; transition: border-color 0.2s; }
+        textarea:focus, input:focus, select:focus { outline: none; border-color: #3b82f6; }
+        textarea { min-height: 100px; resize: vertical; font-family: 'Consolas', 'Monospace'; }
+        .row { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+        @media (max-width: 768px) { .row { grid-template-columns: 1fr; } }
+        button.primary { width: 100%; padding: 14px 24px; background: linear-gradient(135deg, #3b82f6, #8b5cf6); border: none; border-radius: 8px; color: white; font-weight: 600; font-size: 1rem; cursor: pointer; transition: opacity 0.2s, transform 0.1s; }
+        button.primary:hover { opacity: 0.9; }
+        button.primary:active { transform: scale(0.98); }
+        button.primary:disabled { opacity: 0.5; cursor: not-allowed; }
+        .output { background: #0f0f1a; border: 1px solid #27272a; border-radius: 8px; padding: 16px; margin-top: 16px; font-family: 'Consolas', 'Monospace'; font-size: 0.85rem; line-height: 1.6; max-height: 400px; overflow: auto; white-space: pre-wrap; word-break: break-word; }
+        .output-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; padding-bottom: 12px; border-bottom: 1px solid #27272a; }
+        .output-title { font-weight: 600; color: #a1a1aa; }
+        .copy-btn { padding: 6px 12px; background: #27272a; border: 1px solid #3f3f46; border-radius: 6px; color: #a1a1aa; cursor: pointer; font-size: 0.8rem; transition: all 0.2s; }
+        .copy-btn:hover { background: #3f3f46; color: white; }
+        .copy-btn.copied { background: #22c55e; border-color: #22c55e; color: white; }
+        .error { background: rgba(239, 68, 68, 0.1); border-color: rgba(239, 68, 68, 0.3); color: #fca5a5; }
+        .success { background: rgba(34, 197, 94, 0.1); border-color: rgba(34, 197, 94, 0.3); color: #86efac; }
+        .loading { display: inline-flex; align-items: center; gap: 8px; }
+        .spinner { width: 16px; height: 16px; border: 2px solid rgba(255,255,255,0.3); border-top-color: white; border-radius: 50%; animation: spin 0.8s linear infinite; }
+        @keyframes spin { to { transform: rotate(360deg); } }
+        .api-url { font-size: 0.75rem; color: #71717a; text-align: center; margin-top: 20px; font-family: monospace; }
+        .api-url code { background: #0f0f1a; padding: 2px 6px; border-radius: 4px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>NEXUS-CORE v5.0</h1>
+            <p class="subtitle">Multimodal Creative Studio — Code · Visual · Video · Learning</p>
+            <div class="status online" id="statusIndicator">
+                <span class="dot"></span>
+                <span id="statusText">Backend bağlanıyor...</span>
+            </div>
+        </header>
+
+        <div class="tabs">
+            <button class="tab active" data-tab="code">💻 Kod Üret</button>
+            <button class="tab" data-tab="visual">🎨 Görsel Prompt</button>
+            <button class="tab" data-tab="video">🎬 Video Prompt</button>
+            <button class="tab" data-tab="learning">🧠 Learning</button>
+        </div>
+
+        <!-- CODE PANEL -->
+        <div class="panel active" id="panel-code">
+            <div class="section">
+                <label>Ne kodlamak istiyorsunuz?</label>
+                <textarea id="codePrompt" placeholder="Örn: Create a FastAPI REST API for user management with JWT authentication, PostgreSQL, and role-based access control"></textarea>
+            </div>
+            <div class="row">
+                <div class="section">
+                    <label>Dil</label>
+                    <select id="codeLanguage">
+                        <option value="python">Python</option>
+                        <option value="javascript">JavaScript</option>
+                        <option value="typescript">TypeScript</option>
+                    </select>
+                </div>
+                <div class="section">
+                    <label>Framework</label>
+                    <select id="codeFramework">
+                        <option value="fastapi">FastAPI</option>
+                        <option value="flask">Flask</option>
+                        <option value="express">Express</option>
+                        <option value="nextjs">Next.js</option>
+                    </select>
+                </div>
+            </div>
+            <div class="section">
+                <label>Karmaşıklık</label>
+                <select id="codeComplexity">
+                    <option value="low">Basit</option>
+                    <option value="medium" selected>Orta</option>
+                    <option value="high">İleri</option>
+                </select>
+            </div>
+            <button class="primary" id="btnCode" onclick="generateCode()">Kod Üret</button>
+            <div class="output-header" id="codeOutputHeader" style="display:none;">
+                <span class="output-title">Üretilen Kod</span>
+                <button class="copy-btn" onclick="copyOutput('codeOutput')">Kopyala</button>
+            </div>
+            <div class="output" id="codeOutput" style="display:none;"></div>
+        </div>
+
+        <!-- VISUAL PANEL -->
+        <div class="panel" id="panel-visual">
+            <div class="section">
+                <label>Subject (Özne) — Detaylı tanım</label>
+                <textarea id="visualSubject" placeholder="Örn: Cyberpunk samurai warrior, neon-lit armor, glowing katana, rain-soaked Tokyo streets, hyper-realistic, 8k"></textarea>
+            </div>
+            <div class="section">
+                <label>Environment & Lighting (Çevre & Işık)</label>
+                <textarea id="visualEnvironment" placeholder="Örn: Volumetric fog, bioluminescent neon signs, dramatic rim lighting, cyberpunk atmosphere, global illumination, golden hour"></textarea>
+            </div>
+            <div class="section">
+                <label>Camera & Lens (Kamera & Lens)</label>
+                <textarea id="visualCamera" placeholder="Örn: 35mm lens, f/1.8 aperture, low angle hero shot, cinematic depth of field, motion blur on rain"></textarea>
+            </div>
+            <div class="section">
+                <label>Style</label>
+                <select id="visualStyle">
+                    <option value="cinematic">Cinematic</option>
+                    <option value="realistic">Realistic</option>
+                    <option value="conceptual">Conceptual</option>
+                    <option value="minimalist">Minimalist</option>
+                </select>
+            </div>
+            <button class="primary" id="btnVisual" onclick="generateVisual()">Prompt Oluştur</button>
+            <div class="output-header" id="visualOutputHeader" style="display:none;">
+                <span class="output-title">Midjourney / SD / DALL-E Prompt</span>
+                <button class="copy-btn" onclick="copyOutput('visualOutput')">Kopyala</button>
+            </div>
+            <div class="output" id="visualOutput" style="display:none;"></div>
+        </div>
+
+        <!-- VIDEO PANEL -->
+        <div class="panel" id="panel-video">
+            <div class="section">
+                <label>Timecode</label>
+                <input type="text" id="videoTimecode" value="[00:00 - 00:05]" placeholder="[00:00 - 00:05]">
+            </div>
+            <div class="section">
+                <label>Camera Movement</label>
+                <select id="videoCamera">
+                    <option value="FPV drone dive through urban canyon">FPV drone dive</option>
+                    <option value="Dolly zoom (zolly)">Dolly zoom</option>
+                    <option value="Parallax pan">Parallax pan</option>
+                    <option value="Orbit shot around subject">Orbit shot</option>
+                    <option value="Slow dolly push in">Slow dolly push</option>
+                    <option value="Crane shot rising">Crane shot rising</option>
+                </select>
+            </div>
+            <div class="section">
+                <label>Motion Dynamics</label>
+                <textarea id="videoMotion" placeholder="Örn: High velocity descent 30m/s, debris particles scattering, camera rolls 45 degrees, smooth deceleration"></textarea>
+            </div>
+            <div class="section">
+                <label>Video Model</label>
+                <select id="videoModel">
+                    <option value="veo">Google Veo</option>
+                    <option value="sora">OpenAI Sora</option>
+                    <option value="runway">Runway Gen-3</option>
+                    <option value="luma">Luma Dream Machine</option>
+                </select>
+            </div>
+            <button class="primary" id="btnVideo" onclick="generateVideo()">Video Prompt Oluştur</button>
+            <div class="output-header" id="videoOutputHeader" style="display:none;">
+                <span class="output-title">Veo / Sora / Runway Prompt</span>
+                <button class="copy-btn" onclick="copyOutput('videoOutput')">Kopyala</button>
+            </div>
+            <div class="output" id="videoOutput" style="display:none;"></div>
+        </div>
+
+        <!-- LEARNING PANEL -->
+        <div class="panel" id="panel-learning">
+            <div class="section">
+                <button class="primary" onclick="loadLearningReport()" style="margin-bottom: 16px;">Learning Raporu Getir</button>
+            </div>
+            <div class="output-header" id="learningOutputHeader" style="display:none;">
+                <span class="output-title">Learning Registry Report</span>
+                <button class="copy-btn" onclick="copyOutput('learningOutput')">Kopyala</button>
+            </div>
+            <div class="output" id="learningOutput" style="display:none;"></div>
+        </div>
+
+        <div class="api-url">
+            Backend API: <code>http://localhost:8000</code> | Docs: <code>http://localhost:8000/docs</code>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = 'http://localhost:8000/api/v1';
+
+        // Tab switching
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.addEventListener('click', () => {
+                document.querySelectorAll('.tab').forEach(t => t.classList.remove('active'));
+                document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+                tab.classList.add('active');
+                document.getElementById('panel-' + tab.dataset.tab).classList.add('active');
+            });
+        });
+
+        // Check backend status
+        async function checkBackend() {
+            try {
+                const res = await fetch('http://localhost:8000/health');
+                if (res.ok) {
+                    document.getElementById('statusText').textContent = 'Backend bağlı ✓';
+                    document.getElementById('statusIndicator').classList.add('online');
+                }
+            } catch (e) {
+                document.getElementById('statusText').textContent = 'Backend bağlanamıyor - http://localhost:8000 çalışıyor mu?';
+                document.getElementById('statusIndicator').classList.remove('online');
+                document.getElementById('statusIndicator').style.background = 'rgba(239,68,68,0.15)';
+                document.getElementById('statusIndicator').style.color = '#ef4444';
+                document.getElementById('statusIndicator').style.borderColor = 'rgba(239,68,68,0.3)';
+            }
+        }
+        checkBackend();
+        setInterval(checkBackend, 30000);
+
+        // Show loading state
+        function setLoading(btnId, loading) {
+            const btn = document.getElementById(btnId);
+            if (loading) {
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner"></span> İşleniyor...';
+            } else {
+                btn.disabled = false;
+                btn.innerHTML = btn.dataset.originalText || btn.textContent;
+            }
+        }
+
+        // Show output
+        function showOutput(outputId, headerId, content, isError = false) {
+            const output = document.getElementById(outputId);
+            const header = document.getElementById(headerId);
+            output.textContent = content;
+            output.style.display = 'block';
+            header.style.display = 'flex';
+            output.className = 'output' + (isError ? ' error' : ' success');
+        }
+
+        // Copy to clipboard
+        function copyOutput(outputId) {
+            const output = document.getElementById(outputId);
+            navigator.clipboard.writeText(output.textContent).then(() => {
+                const btn = output.previousElementSibling.querySelector('.copy-btn');
+                btn.textContent = 'Kopyalandı!';
+                btn.classList.add('copied');
+                setTimeout(() => {
+                    btn.textContent = 'Kopyala';
+                    btn.classList.remove('copied');
+                }, 2000);
+            });
+        }
+
+        // GENERATE CODE
+        async function generateCode() {
+            const btn = document.getElementById('btnCode');
+            btn.dataset.originalText = btn.textContent;
+            setLoading('btnCode', true);
+            hideOutput('codeOutput', 'codeOutputHeader');
+
+            try {
+                const res = await fetch(API_BASE + '/generate/code', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        prompt: document.getElementById('codePrompt').value,
+                        language: document.getElementById('codeLanguage').value,
+                        framework: document.getElementById('codeFramework').value,
+                        complexity: document.getElementById('codeComplexity').value
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showOutput('codeOutput', 'codeOutputHeader', data.code);
+                } else {
+                    showOutput('codeOutput', 'codeOutputHeader', 'Hata: ' + (data.detail || 'Bilinmeyen hata'), true);
+                }
+            } catch (e) {
+                showOutput('codeOutput', 'codeOutputHeader', 'Bağlantı hatası: ' + e.message + '\n\nBackend çalışıyor mu? http://localhost:8000/health', true);
+            }
+            setLoading('btnCode', false);
+        }
+
+        // GENERATE VISUAL
+        async function generateVisual() {
+            const btn = document.getElementById('btnVisual');
+            btn.dataset.originalText = btn.textContent;
+            setLoading('btnVisual', true);
+            hideOutput('visualOutput', 'visualOutputHeader');
+
+            try {
+                const res = await fetch(API_BASE + '/generate/visual', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        subject: document.getElementById('visualSubject').value,
+                        environment: document.getElementById('visualEnvironment').value,
+                        camera: document.getElementById('visualCamera').value,
+                        style: document.getElementById('visualStyle').value
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showOutput('visualOutput', 'visualOutputHeader', data.final_prompt_english);
+                } else {
+                    showOutput('visualOutput', 'visualOutputHeader', 'Hata: ' + (data.detail || 'Bilinmeyen hata'), true);
+                }
+            } catch (e) {
+                showOutput('visualOutput', 'visualOutputHeader', 'Bağlantı hatası: ' + e.message, true);
+            }
+            setLoading('btnVisual', false);
+        }
+
+        // GENERATE VIDEO
+        async function generateVideo() {
+            const btn = document.getElementById('btnVideo');
+            btn.dataset.originalText = btn.textContent;
+            setLoading('btnVideo', true);
+            hideOutput('videoOutput', 'videoOutputHeader');
+
+            try {
+                const res = await fetch(API_BASE + '/generate/video', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        timecode: document.getElementById('videoTimecode').value,
+                        camera_movement: document.getElementById('videoCamera').value,
+                        motion_dynamics: document.getElementById('videoMotion').value,
+                        video_model: document.getElementById('videoModel').value
+                    })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    showOutput('videoOutput', 'videoOutputHeader', data.final_prompt_english);
+                } else {
+                    showOutput('videoOutput', 'videoOutputHeader', 'Hata: ' + (data.detail || 'Bilinmeyen hata'), true);
+                }
+            } catch (e) {
+                showOutput('videoOutput', 'videoOutputHeader', 'Bağlantı hatası: ' + e.message, true);
+            }
+            setLoading('btnVideo', false);
+        }
+
+        // LOAD LEARNING REPORT
+        async function loadLearningReport() {
+            const btn = event.target;
+            btn.dataset.originalText = btn.textContent;
+            setLoading('btnVideo', true); // reuse
+            hideOutput('learningOutput', 'learningOutputHeader');
+
+            try {
+                const res = await fetch(API_BASE + '/learning/report');
+                const data = await res.json();
+                if (data.report) {
+                    showOutput('learningOutput', 'learningOutputHeader', data.report);
+                } else {
+                    showOutput('learningOutput', 'learningOutputHeader', 'Rapor boş', true);
+                }
+            } catch (e) {
+                showOutput('learningOutput', 'learningOutputHeader', 'Bağlantı hatası: ' + e.message, true);
+            }
+            setLoading('btnVideo', false);
+        }
+
+        function hideOutput(outputId, headerId) {
+            document.getElementById(outputId).style.display = 'none';
+            document.getElementById(headerId).style.display = 'none';
+        }
+    </script>
+</body>
+</html>

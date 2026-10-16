@@ -1,0 +1,63 @@
+# ============================================================
+# NEXUS-CORE v6.1 — Git ignore
+# KURAL: Sırlar, kullanıcı verisi ve üretilen medya ASLA commit edilmez.
+# ============================================================
+
+# --- Git / IDE ---
+.git
+.claude/settings.local.json
+.vscode/
+.idea/
+
+# --- Python ---
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+.venv/
+venv/
+env/
+
+# --- Frontend / Node ---
+node_modules/
+**/node_modules/
+.next/
+**/.next/
+dist/
+build/
+
+# --- Sırlar & çalışma-zamanı config (ASLA commit) ---
+.env
+*.env
+**/.env.local
+.encryption_key
+**/.encryption_key
+model_config.json
+**/model_config.json
+
+# --- Kullanıcı & öğrenme verisi (çalışma-zamanı, gizli) ---
+**/auth_data/
+**/brain_data/
+**/learning_registry/
+**/recent_projects.json
+
+# --- Veri / vektör deposu ---
+chroma_db/
+**/chroma_db/
+*.db
+*.sqlite3
+
+# --- Üretilen medya & yüklemeler ---
+uploads/
+**/uploads/
+videos/
+**/videos/
+generated_videos/
+**/generated_videos/
+
+# --- Yedekler ---
+.backup/
+**/.backup/
+
+# --- AI çalışma önbelleği ---
+.ai-work/cache/
