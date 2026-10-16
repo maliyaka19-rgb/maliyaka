@@ -353,8 +353,8 @@ Eski sunucu logları (`sh_146a5ddd…out`):
 ### Düzeltme (`multimodal-studio/js/app.js`, `css/style.css`, `sohbet.html`)
 1. `md()` yeniden yazıldı: kod blokları korunur; `![alt](url)` ve çıplak pollinations URL'leri
    **gerçek `<img>`** olarak render edilir; tüm pollinations URL'leri `/api/v1/image/proxy` üzerinden.
-2. Yükleniyor iskeleti + `onload`/`onerror`; hata durumunda **3 denemeye kadar** yeniden dener,
-   sonra tıklanabilir bağlantı gösterir.
+2. Yükleniyor iskeleti + `onload`/`onerror`; hata durumunda artan beklemeyle (**8s/20s/35s**)
+   yeniden dener, sonra tıklanabilir bağlantı gösterir.
 3. `loading="lazy"` → **`loading="eager"`** (kök neden).
 4. Yeni CSS: `.chat-figure`, `.chat-image`, `.chat-figure-cap`, `loaded`/`failed` durumları.
 5. Eski (kırık) yedek görsel bloğu kaldırıldı; `sohbet.html` v63'e yükseltildi (önbellek kırma).

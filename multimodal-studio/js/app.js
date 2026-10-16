@@ -497,21 +497,25 @@
             const fig = img.closest('.chat-figure');
             if (fig) fig.classList.add('loaded');
         };
+        // Pollinations ücretsiz katmanı kısa süreli 402 (rate limit) döndürür ve
+        // ~30-60 sn içinde toparlanır. Bu yüzden artan beklemeyle yeniden deneriz.
+        const IMG_RETRY_DELAYS = [8000, 20000, 35000];
         window.chatImgError = function (img) {
             const fig = img.closest('.chat-figure');
             if (!fig) return;
             const n = parseInt(img.dataset.retry || '0', 10);
             const state = fig.querySelector('.chat-figure-state');
-            if (n < 2) {
+            if (n < IMG_RETRY_DELAYS.length) {
                 img.dataset.retry = String(n + 1);
-                if (state) state.textContent = '⏳ Görsel bekleniyor… (deneme ' + (n + 2) + '/3)';
+                const secs = Math.round(IMG_RETRY_DELAYS[n] / 1000);
+                if (state) state.textContent = '⏳ Pollinations limiti; ' + secs + ' sn sonra tekrar denenecek (' + (n + 1) + '/' + IMG_RETRY_DELAYS.length + ')…';
                 setTimeout(function () {
                     const sep = img.dataset.src.indexOf('?') > -1 ? '&' : '?';
                     img.src = img.dataset.src + sep + '_r=' + (n + 1);
-                }, 4000 * (n + 1));
+                }, IMG_RETRY_DELAYS[n]);
             } else {
                 fig.classList.add('failed');
-                if (state) state.textContent = '⚠️ Görsel yüklenemedi (Pollinations ücretsiz limiti olabilir). Yukarıdaki bağlantıdan deneyin.';
+                if (state) state.textContent = '⚠️ Görsel yüklenemedi (Pollinations ücretsiz limiti). Yukarıdaki bağlantıdan deneyin.';
             }
         };
 

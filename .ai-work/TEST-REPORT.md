@@ -168,6 +168,14 @@ Ozet: **34/36 PASS**
 | Çoklu görsel (2 markdown + 1 çıplak) | ✅ (3 figür) |
 | Literal `![` metni kalmıyor | ✅ |
 | `node --check js/app.js` | ✅ |
+| Retry: ilk deneme başarısız → backoff → başarı | ✅ 14 sn'de 256×256 yüklendi (`retryCount=1`) |
+| Backoff gecikmeleri (402 toparlanma penceresi) | ✅ 8s / 20s / 35s |
+
+### Gerçek backend notu (402 gözlemi)
+- Gerçek ajan isteğinde (taklit yok) proxy 3 kez **402** (Pollinations ücretsiz limiti) döndürdü;
+  UI doğru davrandı: 3 deneme + "Görsel yüklenemedi" mesajı + tıklanabilir bağlantı.
+- Limit ölçümü: ~1 dakika içinde toparlandı (sonraki istek 200, 24 KB). Bu yüzden frontend backoff'u
+  **8s/20s/35s** olarak artırıldı; böylece kısa süreli 402'de görsel otomatik olarak kendini toparlar.
 
 ### Önceki (kırık) davranış kanıtı
 - `img.complete=false`, `naturalWidth=0`, `currentSrc=""`, 75 sn boyunca **hiç ağ isteği yok**
