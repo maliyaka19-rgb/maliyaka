@@ -16,6 +16,9 @@
         // Backend kökenli MUTLAK URL: sayfa 8080'de servis edildiğinden görece
         // `/api/v1/image/proxy` isteği 8080'e giderdi ve görseller yüklenmezdi.
         const IMAGE_PROXY_API = 'http://localhost:8000/api/v1/image/proxy';
+        // Proje/dosya ve dosya sistemi uç noktaları (dosya ağacı, editör, proje tarayıcı).
+        const PROJECT_API = 'http://localhost:8000/api/v1/project';
+        const FS_API = 'http://localhost:8000/api/v1/fs';
 
         // ===== STATE =====
         let token = null;
@@ -34,6 +37,39 @@
         const welcome = document.getElementById('welcome');
         const chatTitle = document.getElementById('chat-title');
         const chatList = document.getElementById('chat-list');
+
+        // ===== THEME (light varsayılan, localStorage'da saklanır) =====
+        const themeToggleBtn = document.getElementById('theme-toggle');
+        let currentTheme = localStorage.getItem('nexus_theme') || 'light';
+
+        function applyTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            if (themeToggleBtn) themeToggleBtn.textContent = theme === 'dark' ? '☀️' : '🌙';
+        }
+        applyTheme(currentTheme);
+
+        if (themeToggleBtn) {
+            themeToggleBtn.addEventListener('click', () => {
+                currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
+                localStorage.setItem('nexus_theme', currentTheme);
+                applyTheme(currentTheme);
+            });
+        }
+
+        // ===== MOBILE SIDEBAR =====
+        const sidebarOverlay = document.getElementById('sidebar-overlay');
+        const menuToggleBtn = document.getElementById('menu-toggle');
+
+        function openSidebar() {
+            sidebar.classList.add('open');
+            if (sidebarOverlay) sidebarOverlay.classList.add('active');
+        }
+        function closeSidebar() {
+            sidebar.classList.remove('open');
+            if (sidebarOverlay) sidebarOverlay.classList.remove('active');
+        }
+        if (menuToggleBtn) menuToggleBtn.addEventListener('click', openSidebar);
+        if (sidebarOverlay) sidebarOverlay.addEventListener('click', closeSidebar);
 
         // ===== HELPERS =====
         function $(sel){ return document.querySelector(sel); }
@@ -243,7 +279,7 @@
                 } else {
                     welcome.classList.remove('hidden');
                 }
-                sidebar.classList.remove('open');
+                closeSidebar();
                 inp.focus();
             } catch (e) {
                 console.error('Sohbet seçilemedi:', e);
@@ -262,7 +298,7 @@
             if (chat) {
                 chatTitle.textContent = chat.title || 'Sohbet';
                 loadGuestMessages(chat);
-                sidebar.classList.remove('open');
+                closeSidebar();
                 inp.focus();
             }
         }
@@ -281,7 +317,7 @@
                 return;
             }
             try {
-                const data = await apiCall('/chats', 'POST', { method: 'POST', body: JSON.stringify({ title: 'Yeni Sohbet' }) });
+                const data = await apiCall('/chats', 'POST', { title: 'Yeni Sohbet' });
                 await loadChats();
                 await selectChat(data.id);
             } catch (e) {
@@ -294,7 +330,7 @@
             const newTitle = prompt('Yeni sohbet başlığı:');
             if (!newTitle || !newTitle.trim()) return;
             try {
-                await apiCall(`/chats/${id}`, 'PATCH', { method: 'PATCH', body: JSON.stringify({ title: newTitle.trim() }) });
+                await apiCall(`/chats/${id}`, 'PATCH', { title: newTitle.trim() });
                 loadChats();
             } catch (e) {
                 alert('Güncellenemedi: ' + e.message);
@@ -1241,6 +1277,21 @@
         function closeAgentModal() {
             agentModalOverlay.classList.remove('active');
         }
+
+        // Open agent modal (ajan seç veya oluştur)
+        async function openAgentModal() {
+            // Liste görünümüne dön
+            agentGridView.style.display = 'block';
+            agentEditor.classList.remove('active');
+            agentModalOverlay.classList.add('active');
+            // Ajanlar ve model/API paneli açılışta yüklenir
+            await loadAgents();
+            await loadAgentModalCatalog();
+        }
+        const agentSelectorBtn = document.getElementById('agent-selector-btn');
+        if (agentSelectorBtn) {
+            agentSelectorBtn.addEventListener('click', openAgentModal);
+        }
         
         // Load agents on startup
         loadAgents();
@@ -1266,7 +1317,7 @@
         // ============================================================
         // PROJECT MANAGEMENT (OpenCode-style)
         // ============================================================
-        const PROJECT_API = 'http://localhost:8000/api/v1/project';
+        // PROJECT_API ve FS_API initApp'in başındaki API sabitleriyle birlikte tanımlanır.
         const projectPanel = document.getElementById('project-panel');
         const fileTree = document.getElementById('file-tree');
         const editorOverlay = document.getElementById('editor-overlay');
@@ -1285,6 +1336,7 @@
         let originalContent = '';
         let isModified = false;
         let projectOpen = false; // No project open by default
+        let currentProjectPath = null; // Açık projenin mutlak yolu (Projeyi Sil için)
 
         // Toggle project panel
         document.getElementById('project-toggle').addEventListener('click', () => {
@@ -1304,6 +1356,7 @@
             }
             
             projectOpen = false;
+            currentProjectPath = null;
             
             // Close project panel
             projectPanel.classList.remove('active');
@@ -1316,6 +1369,7 @@
             
             // Close any open editor
             if (editorOverlay) editorOverlay.classList.remove('active');
+            currentFilePath = null;
             
             // Clear current project from localStorage
             localStorage.removeItem('current_project_path');
@@ -1351,9 +1405,137 @@
         }
 
         // ============================================================
+        // PROJECT FILE OPERATIONS (Yeni dosya/klasör, sil, yeniden adlandır)
+        // ============================================================
+        function promptRelativePath(message, def) {
+            const value = prompt(message, def || '');
+            if (value === null) return null;
+            const trimmed = value.trim().replace(/\\/g, '/').replace(/^\/+/, '');
+            return trimmed || null;
+        }
+
+        // Yeni dosya veya klasör oluştur (açık proje köküne göre göreli yol)
+        async function createProjectEntry(isDir) {
+            if (!projectOpen) { alert('Önce bir proje açın.'); return; }
+            const rel = promptRelativePath(
+                isDir ? 'Yeni klasör yolu (proje köküne göre):' : 'Yeni dosya yolu (proje köküne göre):',
+                isDir ? 'yeni-klasor' : 'yeni-dosya.txt'
+            );
+            if (!rel) return;
+            try {
+                const res = await fetch(PROJECT_API + '/create', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: rel, content: '', is_dir: !!isDir })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    await loadFileTree();
+                    showToast(isDir ? '📁 Klasör oluşturuldu' : '📄 Dosya oluşturuldu');
+                } else {
+                    alert('Oluşturulamadı: ' + (data.detail || data.error || 'Bilinmeyen hata'));
+                }
+            } catch (e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+        document.getElementById('btn-new-file').addEventListener('click', () => createProjectEntry(false));
+        document.getElementById('btn-new-folder').addEventListener('click', () => createProjectEntry(true));
+
+        // Bir dosya/klasörü yeniden adlandır veya taşı
+        async function renameProjectEntry(item) {
+            const rel = promptRelativePath('Yeni ad veya yol:', item.path);
+            if (!rel || rel === item.path) return;
+            try {
+                const res = await fetch(PROJECT_API + '/rename', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ old_path: item.path, new_path: rel })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    if (currentFilePath === item.path) {
+                        currentFilePath = rel;
+                        if (editorFilePath) editorFilePath.textContent = rel;
+                        if (editorFileName) editorFileName.textContent = rel.split('/').pop();
+                    }
+                    await loadFileTree();
+                    showToast('✏️ Yeniden adlandırıldı');
+                } else {
+                    alert('Yeniden adlandırılamadı: ' + (data.detail || 'Bilinmeyen hata'));
+                }
+            } catch (e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // Bir dosya/klasörü sil
+        async function deleteProjectEntry(item) {
+            if (!confirm('"' + item.name + '" silinsin mi?')) return;
+            try {
+                const res = await fetch(PROJECT_API + '/file?path=' + encodeURIComponent(item.path), { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    // Silinen dosya editörde açıksa editörü kapat
+                    if (currentFilePath && (currentFilePath === item.path || currentFilePath.startsWith(item.path + '/'))) {
+                        if (editorOverlay) editorOverlay.classList.remove('active');
+                        currentFilePath = null;
+                    }
+                    await loadFileTree();
+                    showToast('🗑️ Silindi');
+                } else {
+                    alert('Silinemedi: ' + (data.detail || 'Bilinmeyen hata'));
+                }
+            } catch (e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+
+        // Dosya ağacı öğeleri için hover aksiyonları (Yeniden adlandır / Sil)
+        function buildItemActions(item) {
+            const wrap = document.createElement('div');
+            wrap.className = 'file-item-actions';
+            wrap.innerHTML = `
+                <button class="file-action-btn rename-btn" title="Yeniden adlandır">✏️</button>
+                <button class="file-action-btn delete-btn" title="Sil">🗑️</button>
+            `;
+            wrap.querySelector('.rename-btn').addEventListener('click', (e) => { e.stopPropagation(); renameProjectEntry(item); });
+            wrap.querySelector('.delete-btn').addEventListener('click', (e) => { e.stopPropagation(); deleteProjectEntry(item); });
+            return wrap;
+        }
+
+        // Projeyi sil (iki kez onay)
+        async function deleteCurrentProject() {
+            if (!projectOpen || !currentProjectPath) { alert('Silinecek açık proje yok.'); return; }
+            if (!confirm('Bu projeyi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return;
+            const name = document.getElementById('project-name').textContent;
+            if (!confirm('SON ONAY: "' + name + '" klasörü diskten tamamen silinsin mi?')) return;
+            try {
+                const res = await fetch(FS_API + '/project?path=' + encodeURIComponent(currentProjectPath), { method: 'DELETE' });
+                const data = await res.json();
+                if (data.success) {
+                    projectOpen = false;
+                    currentProjectPath = null;
+                    projectPanel.classList.remove('active');
+                    document.getElementById('project-name').textContent = 'Proje';
+                    fileTree.innerHTML = '<div class="file-tree-empty">📁 Proje seçmek için 📂 butonuna tıklayın</div>';
+                    if (editorOverlay) editorOverlay.classList.remove('active');
+                    currentFilePath = null;
+                    localStorage.removeItem('current_project_path');
+                    await loadRecentProjects();
+                    showToast('🗑️ Proje silindi');
+                } else {
+                    alert('Proje silinemedi: ' + (data.detail || 'Bilinmeyen hata'));
+                }
+            } catch (e) {
+                alert('Hata: ' + e.message);
+            }
+        }
+        document.getElementById('btn-delete-project').addEventListener('click', deleteCurrentProject);
+
+        // ============================================================
         // PROJECT BROWSER (OpenCode-style)
         // ============================================================
-        const FS_API = 'http://localhost:8000/api/v1/fs';
         const browserOverlay = document.getElementById('project-browser-overlay');
         const browserBody = document.getElementById('browser-body');
         const pathInput = document.getElementById('path-input');
@@ -1422,6 +1604,32 @@
         document.getElementById('quick-documents').addEventListener('click', () => {
             const home = pathInput.value.split('\\').slice(0, 3).join('\\');
             browseTo(home + '\\Documents');
+        });
+
+        // Yeni klasör oluştur (gezilen dizinde) ve içine gir
+        document.getElementById('btn-new-folder-browse').addEventListener('click', async () => {
+            if (!currentBrowsePath) { alert('Önce bir klasör seçin.'); return; }
+            const name = prompt('Yeni klasör adı:');
+            if (!name || !name.trim()) return;
+            try {
+                const res = await fetch(FS_API + '/create-project', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ path: currentBrowsePath, name: name.trim() })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    const sep = currentBrowsePath.includes('/') && !currentBrowsePath.includes('\\') ? '/' : '\\';
+                    const newPath = data.path || (currentBrowsePath.replace(/[\\/]+$/, '') + sep + name.trim());
+                    await browseTo(newPath);
+                    await loadRecentProjects();
+                    showToast('📁 Klasör oluşturuldu');
+                } else {
+                    alert('Klasör oluşturulamadı: ' + (data.detail || 'Bilinmeyen hata'));
+                }
+            } catch (e) {
+                alert('Hata: ' + e.message);
+            }
         });
 
         // Browse to directory
@@ -1528,7 +1736,7 @@
                         
                         // Visual feedback
                         browserBody.querySelectorAll('.folder-item').forEach(i => i.classList.remove('selected'));
-                        item.style.background = 'rgba(99, 102, 241, 0.15)';
+                        item.style.background = 'var(--accent-soft)';
                         item.style.border = '1px solid var(--accent)';
                     } else {
                         // Parent or drive - just navigate
@@ -1557,6 +1765,7 @@
                 const data = await res.json();
                 if (data.success) {
                     projectOpen = true;
+                    currentProjectPath = data.path || selectedProjectPath;
                     // Update project name in panel
                     document.getElementById('project-name').textContent = data.name;
                     
@@ -1587,13 +1796,30 @@
                     recentDiv.style.display = 'block';
                     
                     recentList.innerHTML = data.projects.map(p => `
-                        <div class="recent-item" data-path="${p.path}">
+                        <div class="recent-item" data-path="${escapeHtml(p.path)}">
                             <svg class="recent-item-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                                 <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"></path>
                             </svg>
-                            ${escapeHtml(p.name)}
+                            <span class="recent-item-name">${escapeHtml(p.name)}</span>
+                            <button class="recent-item-remove" title="Listeden kaldır" aria-label="Listeden kaldır">×</button>
                         </div>
                     `).join('');
+
+                    // Listeden tek bir kaydı kaldır
+                    recentList.querySelectorAll('.recent-item-remove').forEach(btn => {
+                        btn.addEventListener('click', async (e) => {
+                            e.stopPropagation();
+                            const item = btn.closest('.recent-item');
+                            const path = item?.dataset.path;
+                            if (!path) return;
+                            try {
+                                await fetch(FS_API + '/recent-projects?path=' + encodeURIComponent(path), { method: 'DELETE' });
+                                await loadRecentProjects();
+                            } catch (err) {
+                                console.error('Recent remove error:', err);
+                            }
+                        });
+                    });
 
                     recentList.querySelectorAll('.recent-item').forEach(item => {
                         item.addEventListener('click', async () => {
@@ -1608,6 +1834,7 @@
                                 const data = await res.json();
                                 if (data.success) {
                                     projectOpen = true;
+                                    currentProjectPath = data.path || path;
                                     document.getElementById('project-name').textContent = data.name;
                                     await loadFileTree();
                                     closeBrowser();
@@ -1618,6 +1845,10 @@
                             }
                         });
                     });
+                } else {
+                    // Kayıt yoksa "Son Açılanlar" bölümünü gizle
+                    const recentDiv = document.getElementById('recent-projects');
+                    if (recentDiv) recentDiv.style.display = 'none';
                 }
             } catch (e) {
                 console.error('Recent projects error:', e);
@@ -1631,9 +1862,13 @@
                 const data = await res.json();
                 if (data.success && data.is_open) {
                     projectOpen = true;
+                    currentProjectPath = data.path || null;
                     document.getElementById('project-name').textContent = data.name;
+                    // Proje açıksa dosya ağacını hemen yükle
+                    await loadFileTree();
                 } else {
                     projectOpen = false;
+                    currentProjectPath = null;
                     document.getElementById('project-name').textContent = 'Proje';
                 }
             } catch (e) {
@@ -1693,6 +1928,9 @@
                     `;
                     el.addEventListener('click', () => openFile(item.path));
                 }
+
+                // Hover aksiyonları: Yeniden adlandır / Sil
+                el.appendChild(buildItemActions(item));
 
                 container.appendChild(el);
             });
@@ -1975,10 +2213,10 @@
             // Highlight auto card if selected
             if (currentAgentId === 'auto') {
                 autoAgentCard.style.borderColor = 'var(--accent)';
-                autoAgentCard.style.background = 'rgba(99, 102, 241, 0.2)';
+                autoAgentCard.style.background = 'var(--accent-soft-strong)';
             } else {
                 autoAgentCard.style.borderColor = 'var(--accent)';
-                autoAgentCard.style.background = 'rgba(99, 102, 241, 0.1)';
+                autoAgentCard.style.background = 'var(--accent-soft)';
             }
         }
 
