@@ -772,10 +772,53 @@ Kurallar:
         filtered = [t for t in TOOLS if t.get("function", {}).get("name") in wanted]
         return filtered or TOOLS
 
+    def _safe_window(self, messages: List[Dict], max_messages: int = 20) -> List[Dict]:
+        """Return a token-safe window of the conversation.
+
+        Keeps the system message plus the most recent messages, advancing the
+        cut point to a valid boundary (a user message or a plain assistant
+        message) so we never start on an orphaned tool result — providers reject
+        that. Also caps total characters so a few huge tool outputs cannot blow
+        past the provider's per-request token limit (Groq free TPM = 8000; the
+        tool specs alone already cost ~2.8k tokens).
+        """
+        if not messages:
+            return messages
+        system = messages[0]
+        rest = messages[1:]
+        if len(rest) <= max_messages:
+            window = list(rest)
+        else:
+            start = len(rest) - max_messages
+            while start < len(rest):
+                m = rest[start]
+                role = m.get("role")
+                if role == "user":
+                    break
+                if role == "assistant" and not m.get("tool_calls"):
+                    break
+                start += 1
+            window = list(rest[start:])
+
+        def _chars(msgs) -> int:
+            return sum(len(json.dumps(m, ensure_ascii=False)) for m in msgs)
+
+        # Defensive hard cap: drop oldest turns until under ~28k chars.
+        while len(window) > 2 and _chars(window) > 28000:
+            window.pop(0)
+            while window and window[0].get("role") != "user" and not (
+                window[0].get("role") == "assistant" and not window[0].get("tool_calls")
+            ):
+                window.pop(0)
+        return [system] + window
+
     async def _call_llm(self, messages: List[Dict]) -> Dict:
         """Call the LLM API with tools. Comprehensive multi-provider, multi-model fallback + response validation."""
         import httpx
         import json as json_mod
+
+        # Keep the request within provider token limits (see _safe_window).
+        messages = self._safe_window(messages)
         
         # JSON Schema for response validation
         RESPONSE_SCHEMA = {
