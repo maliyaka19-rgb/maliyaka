@@ -335,3 +335,38 @@ Eski sunucu logları (`sh_146a5ddd…out`):
   için kullanıcı geçerli anahtar sağlamalı. **Ancak artık 429 tek başına görevi çökertmez**
   (bekle-yeniden dene + aynı sağlayıcının diğer modelleri).
 - ⚠️ Aynı dakikada çok çağrı → yine bekleme olur (toplam süre artabilir). Bu doğru davranıştır.
+
+---
+
+## Oturum 9 — Sohbette görsel render düzeltmesi (2026-10-17)
+
+### Sorun
+- Kullanıcı "bana papatya resmi üret" dediğinde ajan `![Papatya resmi](https://image.pollinations.ai/...)`
+  markdown'ı döndürüyordu ama **arayüz görseli ekrana basmıyordu** (literal metin görünüyordu).
+
+### Kök neden (iki katmanlı)
+1. `md()` fonksiyonu markdown görsel sözdizimini (`![]()`) **hiç işlemiyordu** → düz metin.
+2. Eski yedek görsel bloğu `<img loading="lazy" crossorigin="anonymous">` kullanıyordu; görselin
+   yüksekliği 0 olduğundan tarayıcı **lazy isteği hiç başlatmıyordu** (`currentSrc:""`), ayrıca
+   `onerror` ile gizleniyordu.
+
+### Düzeltme (`multimodal-studio/js/app.js`, `css/style.css`, `sohbet.html`)
+1. `md()` yeniden yazıldı: kod blokları korunur; `![alt](url)` ve çıplak pollinations URL'leri
+   **gerçek `<img>`** olarak render edilir; tüm pollinations URL'leri `/api/v1/image/proxy` üzerinden.
+2. Yükleniyor iskeleti + `onload`/`onerror`; hata durumunda **3 denemeye kadar** yeniden dener,
+   sonra tıklanabilir bağlantı gösterir.
+3. `loading="lazy"` → **`loading="eager"`** (kök neden).
+4. Yeni CSS: `.chat-figure`, `.chat-image`, `.chat-figure-cap`, `loaded`/`failed` durumları.
+5. Eski (kırık) yedek görsel bloğu kaldırıldı; `sohbet.html` v63'e yükseltildi (önbellek kırma).
+
+### Doğrulama (gerçek tarayıcı, uçtan uca)
+- Gerçek `sohbet.html` yüklendi; gönderim akışı, backend yanıtı taklit edilerek (fetch intercept)
+  tetiklendi — böylece **gerçek `md()` + CSS + proxy + tarayıcı yüklemesi** test edildi.
+- Papatya görseli **2.5 sn'de 768×768 yüklendi**, `loaded` sınıfı eklendi, iskelet gizlendi,
+  `opacity: 1`; ekran görüntüsüyle doğrulandı.
+- Kenar durumları: kod bloğundaki URL görsele dönüşmüyor (`preHasFigure: 0`), çıplak URL ve
+  çoklu markdown görsel çalışıyor, literal `![` kalmıyor.
+- `node --check js/app.js` → OK.
+
+### Değişen dosyalar
+- `multimodal-studio/js/app.js`, `multimodal-studio/css/style.css`, `multimodal-studio/sohbet.html`

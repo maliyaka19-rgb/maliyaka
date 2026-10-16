@@ -471,9 +471,64 @@
             $$('.typing-msg').forEach(e => e.remove());
         }
 
+        // --- Görsel yardımcıları (markdown ![]() ve çıplak pollinations URL'leri) ---
+        function proxyImageUrl(url) {
+            return /^https:\/\/image\.pollinations\.ai\//.test(url)
+                ? IMAGE_PROXY_API + '?url=' + encodeURIComponent(url)
+                : url;
+        }
+
+        function renderImage(url, alt) {
+            const src = proxyImageUrl(url);
+            const label = (alt && alt.trim()) ? alt.trim() : 'Üretilen görsel';
+            const safeAlt = label.replace(/"/g, '&quot;');
+            const safeUrl = url.replace(/"/g, '&quot;');
+            return '<figure class="chat-figure">'
+                + '<div class="chat-figure-state">🖼️ Görsel üretiliyor… (Pollinations, birkaç saniye sürebilir)</div>'
+                + '<img class="chat-image" data-src="' + src + '" src="' + src + '" alt="' + safeAlt + '" loading="eager"'
+                + ' onload="chatImgLoaded(this)" onerror="chatImgError(this)">'
+                + '<figcaption class="chat-figure-cap">' + safeAlt
+                + ' · <a href="' + safeUrl + '" target="_blank" rel="noopener">yeni sekmede aç</a></figcaption>'
+                + '</figure>';
+        }
+
+        // Inline handler'lar IIFE dışından çağrıldığı için window'a bağlanır.
+        window.chatImgLoaded = function (img) {
+            const fig = img.closest('.chat-figure');
+            if (fig) fig.classList.add('loaded');
+        };
+        window.chatImgError = function (img) {
+            const fig = img.closest('.chat-figure');
+            if (!fig) return;
+            const n = parseInt(img.dataset.retry || '0', 10);
+            const state = fig.querySelector('.chat-figure-state');
+            if (n < 2) {
+                img.dataset.retry = String(n + 1);
+                if (state) state.textContent = '⏳ Görsel bekleniyor… (deneme ' + (n + 2) + '/3)';
+                setTimeout(function () {
+                    const sep = img.dataset.src.indexOf('?') > -1 ? '&' : '?';
+                    img.src = img.dataset.src + sep + '_r=' + (n + 1);
+                }, 4000 * (n + 1));
+            } else {
+                fig.classList.add('failed');
+                if (state) state.textContent = '⚠️ Görsel yüklenemedi (Pollinations ücretsiz limiti olabilir). Yukarıdaki bağlantıdan deneyin.';
+            }
+        };
+
         function md(text) {
             if (!text) return '';
-            text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, '<pre><code>$2</code></pre>');
+            // 1) Kod bloklarını geçici koru (içindeki URL'ler bozulmasın)
+            const codeBlocks = [];
+            text = text.replace(/```(\w*)\n?([\s\S]*?)```/g, (m, lang, code) => {
+                codeBlocks.push('<pre><code>' + code + '</code></pre>');
+                return '\u0000CB' + (codeBlocks.length - 1) + '\u0000';
+            });
+            // 2) Markdown görselleri: ![alt](url) -> gerçek <img>
+            text = text.replace(/!\[([^\]]*)\]\((https?:\/\/[^\s)]+)\)/g, (m, alt, url) => renderImage(url, alt));
+            // 3) Çıplak pollinations URL'leri (zaten dönüştürülmüş src/href'ler hariç)
+            text = text.replace(/(^|[^"'=(])(https:\/\/image\.pollinations\.ai\/[^\s)"'<>]+)/g,
+                (m, pre, url) => pre + renderImage(url, ''));
+            // 4) Diğer markdown
             text = text.replace(/`([^`]+)`/g, '<code>$1</code>');
             text = text.replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>');
             text = text.replace(/\*([^*]+)\*/g, '<em>$1</em>');
@@ -485,6 +540,8 @@
             text = text.replace(/(<li>.*<\/li>)/gs, '<ul>$1</ul>');
             text = text.replace(/\n\n/g, '</p><p>');
             text = text.replace(/\n/g, '<br>');
+            // 5) Kod bloklarını geri koy
+            text = text.replace(/\u0000CB(\d+)\u0000/g, (m, i) => codeBlocks[parseInt(i, 10)]);
             return '<p>' + text + '</p>';
         }
 
@@ -556,30 +613,8 @@
                     
                     html += md(data.response);
                     
-                    // Extract and display generated images from markdown response
-                    // Find all Pollinations.ai image URLs in the response (handles & and & encoding)
-                    const imageUrls = [...data.response.matchAll(/https:\/\/image\.pollinations\.ai\/prompt\/[^)"'\s]+/g)].map(m => ({
-                        url: m[0].replace(/&/g, '&').replace(/&/g, '&'),
-                        alt: 'Generated image'
-                    }));
-                    if (imageUrls.length > 0) {
-                        imageUrls.forEach((img, idx) => {
-                            // Extract a meaningful caption from the URL
-                            const urlParams = new URL(img.url);
-                            const prompt = urlParams.searchParams.get('prompt') || '';
-                            const caption = prompt ? prompt.substring(0, 80) + (prompt.length > 80 ? '...' : '') : `Görsel ${idx + 1}`;
-                            
-                            html += `<div class="generated-image" style="margin-top:12px;border-radius:8px;overflow:hidden;border:1px solid var(--border);">
-                                <img src="${IMAGE_PROXY_API}?url=${encodeURIComponent(img.url)}" alt="${caption}" style="max-width:100%;height:auto;display:block;" loading="lazy" crossorigin="anonymous" onerror="this.style.display='none'; this.nextElementSibling.style.display='block';">
-                                <div style="padding:8px;font-size:0.75rem;color:var(--fg-muted);background:var(--bg-surface);border-top:1px solid var(--border);display:none;color:var(--accent);">
-                                    Görsel yüklenemedi: ${caption}
-                                </div>
-                                <div style="padding:8px;font-size:0.7rem;color:var(--fg-muted);background:var(--bg-surface);border-top:1px solid var(--border);">
-                                    ${caption}
-                                </div>
-                            </div>`;
-                        });
-                    }
+                    // Görseller artık md() içinde gerçek <img> olarak render edilir
+                    // (markdown ![]() ve çıplak pollinations URL'leri; proxy + hata/retry ile).
                     
                     // Render generated videos (.mp4) as a playable <video> (Aşama 9/13)
                     const videoUrls = [...new Set([...data.response.matchAll(/https?:\/\/[^\s)"'<>]+\.mp4/g)].map(m => m[0]))];

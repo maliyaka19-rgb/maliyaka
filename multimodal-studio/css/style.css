@@ -1620,4 +1620,36 @@
         }
         .recent-item:hover { background: var(--bg-surface-elevated); color: var(--fg); }
         .recent-item-icon { width: 14px; height: 14px; color: var(--fg-dim); }
+
+        /* --- Sohbette üretilen görseller (markdown ![]() ve pollinations URL'leri) --- */
+        .chat-figure {
+            margin: 12px 0;
+            border: 1px solid var(--border);
+            border-radius: 10px;
+            overflow: hidden;
+            background: var(--bg-surface);
+            max-width: 520px;
+        }
+        .chat-figure-state {
+            padding: 12px 14px;
+            font-size: 0.78rem;
+            color: var(--fg-muted);
+        }
+        .chat-figure .chat-image {
+            display: block;
+            width: 100%;
+            height: auto;
+            opacity: 0;
+            transition: opacity 0.3s ease;
+        }
+        .chat-figure.loaded .chat-image { opacity: 1; }
+        .chat-figure.loaded .chat-figure-state { display: none; }
+        .chat-figure.failed .chat-image { display: none; }
+        .chat-figure-cap {
+            padding: 8px 14px;
+            font-size: 0.72rem;
+            color: var(--fg-muted);
+            border-top: 1px solid var(--border);
+        }
+        .chat-figure-cap a { color: var(--accent); text-decoration: underline; }
     

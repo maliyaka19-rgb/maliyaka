@@ -147,3 +147,34 @@ Ozet: **34/36 PASS**
 - **Birim 429-retry**: **PASS**
 - **Canlı çok adımlı görev (eski FAIL senaryosu)**: **PASS**
 - **Regresyon**: **PASS** (mevcut 82 + yeni 10)
+
+---
+
+## Oturum 9 — Sohbet görsel render (frontend)
+
+### Yöntem
+- Gerçek `http://localhost:8080/sohbet.html` (Chromium sekmesi) yüklendi.
+- `/api/v1/ai/chat` yanıtı, gönderim akışı bozulmadan fetch-intercept ile taklit edildi;
+  böylece gerçek `md()` + CSS + görsel proxy + tarayıcı yüklemesi uçtan uca test edildi.
+
+| Kontrol | Sonuç |
+|---------|-------|
+| Markdown görseli (`![]()`) gerçek `<img>` olarak render | ✅ |
+| Görsel proxy üzerinden yüklendi | ✅ 768×768, ~2.5 sn |
+| `loaded` sınıfı + iskelet gizleme + `opacity: 1` | ✅ |
+| Ekran görüntüsü (görsel görünür) | ✅ |
+| Çıplak pollinations URL → görsel | ✅ |
+| Kod bloğu içindeki URL görsele dönüşmez | ✅ (`preHasFigure: 0`) |
+| Çoklu görsel (2 markdown + 1 çıplak) | ✅ (3 figür) |
+| Literal `![` metni kalmıyor | ✅ |
+| `node --check js/app.js` | ✅ |
+
+### Önceki (kırık) davranış kanıtı
+- `img.complete=false`, `naturalWidth=0`, `currentSrc=""`, 75 sn boyunca **hiç ağ isteği yok**
+  (`loading="lazy"` + yükseklik 0). `loading="eager"` ile aynı URL **2.3 sn'de** yüklendi.
+
+### SINIFLANDIRMA
+- **Markdown görsel render**: **PASS**
+- **Proxy üzerinden yükleme**: **PASS**
+- **Kenar durumları**: **PASS**
+- **Regresyon (backend testleri etkilenmedi)**: **PASS**
