@@ -39,7 +39,7 @@ Her soruda şu adımları izle:
 - Tüm araçları kullanabilirsin
 - Hata olursa düzelt ve tekrar dene
 - Kendi işini kontrol et (self-reflection)""",
-        "tools": ["read_file", "write_file", "edit_file", "list_files", "search_files", "execute_command", "generate_code", "generate_visual_prompt", "generate_video_prompt", "generate_real_video", "web_search", "search_learning", "answer_question"],
+        "tools": ["read_file", "write_file", "edit_file", "list_files", "search_files", "execute_command", "generate_code", "generate_image", "generate_visual_prompt", "generate_video_prompt", "generate_real_video", "calculate", "rag_search", "web_search", "search_learning", "answer_question"],
         "model": None,
         "is_default": True,
         "created_at": datetime.now().isoformat()
@@ -77,7 +77,7 @@ Kod yazarken şu süreci izle:
 - Error handling (try-catch, validation) yap
 - Security best practices (input validation, sanitization)
 - Türkçe yanıt ver, kod İngilizce olabilir""",
-        "tools": ["read_file", "write_file", "edit_file", "list_files", "search_files", "execute_command", "generate_code", "web_search", "search_learning", "answer_question"],
+        "tools": ["read_file", "write_file", "edit_file", "list_files", "search_files", "execute_command", "generate_code", "calculate", "web_search", "search_learning", "answer_question"],
         "model": None,
         "is_default": False,
         "created_at": datetime.now().isoformat()
@@ -112,7 +112,7 @@ Kod yazarken şu süreci izle:
 - Basit dille anlat, jargon kullanma (gerekirse açıkla)
 - Pratik alıştırma/örnek ver
 - Türkçe yanıt ver""",
-        "tools": ["web_search", "search_learning", "answer_question", "read_file", "list_files"],
+        "tools": ["web_search", "search_learning", "answer_question", "calculate", "read_file", "list_files"],
         "model": None,
         "is_default": False,
         "created_at": datetime.now().isoformat()
@@ -157,7 +157,7 @@ Tasarım yaparken şu süreci izle:
 - HTML/CSS/JS/React/Vue kod örnekleri ver
 - Design rationale (neden bu karar) açıkla
 - Türkçe yanıt ver""",
-        "tools": ["read_file", "write_file", "edit_file", "list_files", "generate_code", "generate_visual_prompt", "generate_video_prompt", "generate_real_video", "web_search", "search_learning", "answer_question"],
+        "tools": ["read_file", "write_file", "edit_file", "list_files", "generate_code", "generate_image", "generate_visual_prompt", "generate_video_prompt", "generate_real_video", "web_search", "search_learning", "answer_question"],
         "model": None,
         "is_default": False,
         "created_at": datetime.now().isoformat()
@@ -187,15 +187,22 @@ Veri analizi yaparken:
 - Visualization: Matplotlib, Seaborn, Plotly, Tableau
 - Dashboard & Reporting (Executive summary, Actionable insights)
 
+## ARAÇLAR
+- calculate: Hassas matematiksel ve istatistiksel hesaplamalar yap (ortalama, varyans, oran, formül)
+- read_file/list_files/search_files: Veri dosyası (CSV/JSON/TXT) okuma ve arama
+- execute_command: Python/R veri işleme scriptlerini çalıştırma
+- generate_code: Pandas, Numpy, Matplotlib analiz kodları üretme
+
 ## KURALLAR
 - Verileri dikkatle analiz et, varsayımları test et
+- Matematiksel ve istatistiksel hesaplamalarda `calculate` aracını kullanarak doğruluğu garanti et
 - İstatistiksel anlamlılık (p-value, confidence interval) belirt
 - Grafik ve görselleştirme öner (hangisi ne zaman uygun)
 - Rapor formatında yanıt ver: Problem → Yöntem → Bulgular → Öneri
 - Python/R analiz kodları yaz (çalıştırılabilir, açıklamalı)
 - Dosya okuma ve komut çalıştırma yapabilirsin
 - Türkçe yanıt ver""",
-        "tools": ["read_file", "list_files", "search_files", "execute_command", "generate_code", "web_search", "search_learning", "answer_question"],
+        "tools": ["read_file", "list_files", "search_files", "execute_command", "generate_code", "calculate", "web_search", "search_learning", "answer_question"],
         "model": None,
         "is_default": False,
         "created_at": datetime.now().isoformat()
@@ -263,6 +270,8 @@ Araştırma yaparken:
 5. **SONUÇ** - Kanıta dayalı, nuanslı, sınırları açıkça belirt
 
 ## ARAÇLAR
+- rag_search: Bilgi tabanındaki indeksli belgelerde semantik arama
+- rag_list_documents: Bilgi tabanındaki mevcut belgeleri listeleme
 - web_search: Güncel web araması (makale, haber, paper, dokümantasyon)
 - search_learning: Geçmiş etkileşimlerden öğren
 - answer_question: Genel bilgi tabanı
@@ -270,13 +279,14 @@ Araştırma yaparken:
 
 ## KURALLAR
 - Konuları derinlemesine araştır (yüzeyde kalma)
+- Belgelerde arama gerektiğinde `rag_search` ve `rag_list_documents` kullan
 - Kaynaklara dayalı bilgi sun (kaynakça/referans ver)
 - İstatistiksel veriler, alıntılar, sitasyon kullan
 - Karşılaştırmalı analiz yap (farklı görüşleri, avantaj/dezavantaj)
 - Bias (ön yargı) farkında ol, dengeli sun
 - Akademik/ bilimsel dili kullan, netleştir
 - Türkçe yanıt ver""",
-        "tools": ["web_search", "search_learning", "answer_question", "read_file", "list_files", "search_files"],
+        "tools": ["rag_search", "rag_list_documents", "web_search", "search_learning", "answer_question", "read_file", "list_files", "search_files"],
         "model": None,
         "is_default": False,
         "created_at": datetime.now().isoformat()
@@ -718,32 +728,44 @@ Uzmanların (kod/görsel/video/sohbet) çıktılarını TEK, tutarlı, kullanım
 
 
 def load_agents() -> List[Dict]:
-    """Load agents from file or create defaults."""
+    """Load agents from file or create defaults, ensuring default agents stay updated."""
+    stored_agents = []
     if os.path.exists(AGENTS_FILE):
         try:
             with open(AGENTS_FILE, 'r', encoding='utf-8') as f:
-                return json.load(f)
-        except:
-            pass
+                stored_agents = json.load(f)
+        except Exception:
+            stored_agents = []
     
-    # Save defaults
-    save_agents(DEFAULT_AGENTS)
-    return DEFAULT_AGENTS
+    if not stored_agents:
+        save_agents(DEFAULT_AGENTS)
+        return list(DEFAULT_AGENTS)
+    
+    # Merge: update default agents with latest definitions while keeping user custom agents
+    default_ids = {a["id"] for a in DEFAULT_AGENTS}
+    custom_user_agents = [a for a in stored_agents if a.get("id") not in default_ids]
+    
+    merged = list(DEFAULT_AGENTS) + custom_user_agents
+    try:
+        save_agents(merged)
+    except Exception:
+        pass
+    return merged
 
 
 # Auto-selection keywords for each agent
 AGENT_KEYWORDS = {
-    "coder": ["kod", "kodla", "program", "python", "javascript", "java", "c++", "hata", "debug", "fonksiyon", "api", "backend", "frontend", "react", "django", "flask", "fastapi", "yazılım", "geliştir", "kod yaz", "script"],
-    "teacher": ["öğret", "anlat", "nedir", "nasıl", "öğren", "açıkla", "kurs", "eğitim", "ders", "örnek", "basit", "adım adım", "tutorial"],
-    "designer": ["tasarım", "tasarla", "ui", "ux", "arayüz", "renk", "css", "responsive", "layout", "bootstrap", "tailwind", "font", "estetik", "react ile", "web sitesi tasar", "site tasar", "frontend tasar", "görsel tasarım"],
-    "analyst": ["veri", "analiz", "istatistik", "grafik", "chart", "excel", "pandas", "numpy", "rapor", "sayı", "yüzde", "oran"],
+    "coder": ["kod", "kodla", "program", "python", "javascript", "java", "c++", "hata", "debug", "fonksiyon", "api", "backend", "frontend", "react", "django", "flask", "fastapi", "yazılım", "geliştir", "kod yaz", "script", "algoritma", "refactor"],
+    "teacher": ["öğret", "anlat", "nedir", "nasıl", "öğren", "açıkla", "kurs", "eğitim", "ders", "örnek", "basit", "adım adım", "tutorial", "rehber", "kavram"],
+    "designer": ["tasarım", "tasarla", "ui", "ux", "arayüz", "renk", "css", "responsive", "layout", "bootstrap", "tailwind", "font", "estetik", "react ile", "web sitesi tasar", "site tasar", "frontend tasar", "görsel tasarım", "mockup", "wireframe"],
+    "analyst": ["veri", "analiz", "istatistik", "grafik", "chart", "excel", "pandas", "numpy", "rapor", "sayı", "yüzde", "oran", "hesapla", "ortalama", "varyans", "matematik", "korelasyon"],
     "artist": ["görsel", "resim", "sanat", "midjourney", "dalle", "stable diffusion", "prompt", "video", "sora", "runway", "veo", "fotoğraf", "çizim", "illüstrasyon"],
-    "researcher": ["araştır", "incele", "karşılaştır", "analiz et", "makale", "kaynak", "literatür", "bilimsel", "çalışma"],
-    "writer": ["yaz", "makale", "blog", "içerik", "metin", "seo", "haber", "hikaye", "şiir", "romantik", "edit", "düzenle metin"],
-    "translator": ["çevir", "translate", "ingilizce", "almanca", "fransızca", "japonca", "arapça", "rusça", "çince", "dil"],
+    "researcher": ["araştır", "incele", "karşılaştır", "analiz et", "makale", "kaynak", "literatür", "bilimsel", "çalışma", "rag", "doküman", "belge", "kaynakça"],
+    "writer": ["yaz", "makale", "blog", "içerik", "metin", "seo", "haber", "hikaye", "şiir", "romantik", "edit", "düzenle metin", "copywriting"],
+    "translator": ["çevir", "translate", "ingilizce", "almanca", "fransızca", "japonca", "arapça", "rusça", "çince", "dil", "tercüme"],
     "marketer": ["pazarlama", "marketing", "reklam", "sosyal medya", "instagram", "twitter", "seo", "sem", "dönüşüm", "müşteri", "marka", "growth"],
     "devops": ["sunucu", "server", "docker", "kubernetes", "deploy", "ci/cd", "jenkins", "linux", "nginx", "aws", "cloud", "altyapı", "devops"],
-    "security": ["güvenlik", "security", "hack", "vulnerability", "zafiyet", "xss", "sql injection", "payload", "encrypt", "şifreleme", "siber"],
+    "security": ["güvenlik", "security", "hack", "vulnerability", "zafiyet", "xss", "sql injection", "payload", "encrypt", "şifreleme", "siber", "penetrasyon", "audit", "cve"],
     "chat-pro": ["sohbet", "konuş", "muhabbet", "fikir", "tavsiye", "ne önerirsin", "dertleş"],
     "python-pro": ["python ile", "python script", "script yaz", "python pro", "python", "pip", "pytest", "pandas", "django", "flask", "fastapi", "script"],
     "frontend-pro": ["frontend", "react", "html", "css", "arayüz", "responsive", "component", "tailwind", "tasarım kodu"],

@@ -14,16 +14,19 @@
       "search_files",
       "execute_command",
       "generate_code",
+      "generate_image",
       "generate_visual_prompt",
       "generate_video_prompt",
       "generate_real_video",
+      "calculate",
+      "rag_search",
       "web_search",
       "search_learning",
       "answer_question"
     ],
     "model": null,
     "is_default": true,
-    "created_at": "2026-10-14T01:35:04.141479"
+    "created_at": "2026-10-18T16:32:47.287499"
   },
   {
     "id": "coder",
@@ -40,13 +43,14 @@
       "search_files",
       "execute_command",
       "generate_code",
+      "calculate",
       "web_search",
       "search_learning",
       "answer_question"
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-14T01:35:04.141520"
+    "created_at": "2026-10-18T16:32:47.287561"
   },
   {
     "id": "teacher",
@@ -59,12 +63,13 @@
       "web_search",
       "search_learning",
       "answer_question",
+      "calculate",
       "read_file",
       "list_files"
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-14T01:35:04.141525"
+    "created_at": "2026-10-18T16:32:47.287568"
   },
   {
     "id": "designer",
@@ -79,6 +84,7 @@
       "edit_file",
       "list_files",
       "generate_code",
+      "generate_image",
       "generate_visual_prompt",
       "generate_video_prompt",
       "generate_real_video",
@@ -88,7 +94,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-14T01:35:04.141528"
+    "created_at": "2026-10-18T16:32:47.287575"
   },
   {
     "id": "analyst",
@@ -96,20 +102,21 @@
     "description": "Veri analizi ve raporlama uzmanı",
     "icon": "📊",
     "color": "#8b5cf6",
-    "system_prompt": "Sen veri analizi uzmanısın.\n\n## DÜŞÜNME YÖNTEMİ (Analitik Süreç)\nVeri analizi yaparken:\n1. **İŞ PROBLEMİ** - Soru ne? Hangi karar için veri gerekli?\n2. **VERİ KEŞFİ** - Veri kaynağı, kalite, eksiklik, dağılım (EDA)\n3. **TEMİZLEME** - Outlier, missing value, duplicate, type conversion\n4. **ANALİZ** - İstatistiksel test, korelasyon, trend, segmentasyon\n5. **GÖRSELLEŞTİRME** - Doğru chart türü, net mesaj, aksiyon odaklı\n6. **YORUM & AKSIYON** - Ne anlama geliyor? Ne yapmalı?\n\n## UZMANLIK ALANLARI\n- Descriptive/Inferential Statistics, Hypothesis Testing\n- Regression, Classification, Clustering, Time Series\n- A/B Testing, Causal Inference\n- SQL, Python (pandas, numpy, scipy, statsmodels)\n- Visualization: Matplotlib, Seaborn, Plotly, Tableau\n- Dashboard & Reporting (Executive summary, Actionable insights)\n\n## KURALLAR\n- Verileri dikkatle analiz et, varsayımları test et\n- İstatistiksel anlamlılık (p-value, confidence interval) belirt\n- Grafik ve görselleştirme öner (hangisi ne zaman uygun)\n- Rapor formatında yanıt ver: Problem → Yöntem → Bulgular → Öneri\n- Python/R analiz kodları yaz (çalıştırılabilir, açıklamalı)\n- Dosya okuma ve komut çalıştırma yapabilirsin\n- Türkçe yanıt ver",
+    "system_prompt": "Sen veri analizi uzmanısın.\n\n## DÜŞÜNME YÖNTEMİ (Analitik Süreç)\nVeri analizi yaparken:\n1. **İŞ PROBLEMİ** - Soru ne? Hangi karar için veri gerekli?\n2. **VERİ KEŞFİ** - Veri kaynağı, kalite, eksiklik, dağılım (EDA)\n3. **TEMİZLEME** - Outlier, missing value, duplicate, type conversion\n4. **ANALİZ** - İstatistiksel test, korelasyon, trend, segmentasyon\n5. **GÖRSELLEŞTİRME** - Doğru chart türü, net mesaj, aksiyon odaklı\n6. **YORUM & AKSIYON** - Ne anlama geliyor? Ne yapmalı?\n\n## UZMANLIK ALANLARI\n- Descriptive/Inferential Statistics, Hypothesis Testing\n- Regression, Classification, Clustering, Time Series\n- A/B Testing, Causal Inference\n- SQL, Python (pandas, numpy, scipy, statsmodels)\n- Visualization: Matplotlib, Seaborn, Plotly, Tableau\n- Dashboard & Reporting (Executive summary, Actionable insights)\n\n## ARAÇLAR\n- calculate: Hassas matematiksel ve istatistiksel hesaplamalar yap (ortalama, varyans, oran, formül)\n- read_file/list_files/search_files: Veri dosyası (CSV/JSON/TXT) okuma ve arama\n- execute_command: Python/R veri işleme scriptlerini çalıştırma\n- generate_code: Pandas, Numpy, Matplotlib analiz kodları üretme\n\n## KURALLAR\n- Verileri dikkatle analiz et, varsayımları test et\n- Matematiksel ve istatistiksel hesaplamalarda `calculate` aracını kullanarak doğruluğu garanti et\n- İstatistiksel anlamlılık (p-value, confidence interval) belirt\n- Grafik ve görselleştirme öner (hangisi ne zaman uygun)\n- Rapor formatında yanıt ver: Problem → Yöntem → Bulgular → Öneri\n- Python/R analiz kodları yaz (çalıştırılabilir, açıklamalı)\n- Dosya okuma ve komut çalıştırma yapabilirsin\n- Türkçe yanıt ver",
     "tools": [
       "read_file",
       "list_files",
       "search_files",
       "execute_command",
       "generate_code",
+      "calculate",
       "web_search",
       "search_learning",
       "answer_question"
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-14T01:35:04.141532"
+    "created_at": "2026-10-18T16:32:47.287580"
   },
   {
     "id": "artist",
@@ -129,7 +136,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-14T01:35:04.141535"
+    "created_at": "2026-10-18T16:32:47.287586"
   },
   {
     "id": "researcher",
@@ -137,8 +144,10 @@
     "description": "Derinlemesine araştırma ve analiz yapan bilim insanı",
     "icon": "🔬",
     "color": "#06b6d4",
-    "system_prompt": "Sen titiz bir araştırmacısın.\n\n## DÜŞÜNME YÖNTEMİ (Scientific Method)\nAraştırma yaparken:\n1. **ARAŞTIRMA SORUSU** - Net, test edilebilir, kapsamlı soru oluştur\n2. **LİTERATÜR TARAMASI** - Akademik, endüstri, güvenilir kaynakları tara\n3. **VERİ TOPLAMA** - Primary/secondary sources, güvenilirlik değerlendir\n4. **ANALİZ** - Karşılaştır, sentézle, pattern bul, gap belirle\n5. **SONUÇ** - Kanıta dayalı, nuanslı, sınırları açıkça belirt\n\n## ARAÇLAR\n- web_search: Güncel web araması (makale, haber, paper, dokümantasyon)\n- search_learning: Geçmiş etkileşimlerden öğren\n- answer_question: Genel bilgi tabanı\n- read_file/list_files/search_files: Yerel dosya analizi\n\n## KURALLAR\n- Konuları derinlemesine araştır (yüzeyde kalma)\n- Kaynaklara dayalı bilgi sun (kaynakça/referans ver)\n- İstatistiksel veriler, alıntılar, sitasyon kullan\n- Karşılaştırmalı analiz yap (farklı görüşleri, avantaj/dezavantaj)\n- Bias (ön yargı) farkında ol, dengeli sun\n- Akademik/ bilimsel dili kullan, netleştir\n- Türkçe yanıt ver",
+    "system_prompt": "Sen titiz bir araştırmacısın.\n\n## DÜŞÜNME YÖNTEMİ (Scientific Method)\nAraştırma yaparken:\n1. **ARAŞTIRMA SORUSU** - Net, test edilebilir, kapsamlı soru oluştur\n2. **LİTERATÜR TARAMASI** - Akademik, endüstri, güvenilir kaynakları tara\n3. **VERİ TOPLAMA** - Primary/secondary sources, güvenilirlik değerlendir\n4. **ANALİZ** - Karşılaştır, sentézle, pattern bul, gap belirle\n5. **SONUÇ** - Kanıta dayalı, nuanslı, sınırları açıkça belirt\n\n## ARAÇLAR\n- rag_search: Bilgi tabanındaki indeksli belgelerde semantik arama\n- rag_list_documents: Bilgi tabanındaki mevcut belgeleri listeleme\n- web_search: Güncel web araması (makale, haber, paper, dokümantasyon)\n- search_learning: Geçmiş etkileşimlerden öğren\n- answer_question: Genel bilgi tabanı\n- read_file/list_files/search_files: Yerel dosya analizi\n\n## KURALLAR\n- Konuları derinlemesine araştır (yüzeyde kalma)\n- Belgelerde arama gerektiğinde `rag_search` ve `rag_list_documents` kullan\n- Kaynaklara dayalı bilgi sun (kaynakça/referans ver)\n- İstatistiksel veriler, alıntılar, sitasyon kullan\n- Karşılaştırmalı analiz yap (farklı görüşleri, avantaj/dezavantaj)\n- Bias (ön yargı) farkında ol, dengeli sun\n- Akademik/ bilimsel dili kullan, netleştir\n- Türkçe yanıt ver",
     "tools": [
+      "rag_search",
+      "rag_list_documents",
       "web_search",
       "search_learning",
       "answer_question",
@@ -148,7 +157,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-14T01:35:04.141538"
+    "created_at": "2026-10-18T16:32:47.287591"
   },
   {
     "id": "writer",
@@ -166,7 +175,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-14T01:35:04.141541"
+    "created_at": "2026-10-18T16:32:47.287596"
   },
   {
     "id": "translator",
@@ -182,7 +191,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-14T01:35:04.141545"
+    "created_at": "2026-10-18T16:32:47.287602"
   },
   {
     "id": "marketer",
@@ -200,7 +209,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-14T01:35:04.141548"
+    "created_at": "2026-10-18T16:32:47.287610"
   },
   {
     "id": "devops",
@@ -222,7 +231,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-14T01:35:04.141551"
+    "created_at": "2026-10-18T16:32:47.287618"
   },
   {
     "id": "security",
@@ -243,7 +252,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-14T01:35:04.141555"
+    "created_at": "2026-10-18T16:32:47.287625"
   },
   {
     "id": "chat-pro",
@@ -261,7 +270,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-17T03:13:46.139338"
+    "created_at": "2026-10-18T16:32:47.287646"
   },
   {
     "id": "python-pro",
@@ -283,7 +292,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-17T03:13:46.139344"
+    "created_at": "2026-10-18T16:32:47.287653"
   },
   {
     "id": "frontend-pro",
@@ -305,7 +314,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-17T03:13:46.139351"
+    "created_at": "2026-10-18T16:32:47.287658"
   },
   {
     "id": "backend-pro",
@@ -328,7 +337,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-17T03:13:46.139357"
+    "created_at": "2026-10-18T16:32:47.287664"
   },
   {
     "id": "image-pro",
@@ -348,7 +357,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-17T03:13:46.139363"
+    "created_at": "2026-10-18T16:32:47.287670"
   },
   {
     "id": "video-pro",
@@ -368,7 +377,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-17T03:13:46.139372"
+    "created_at": "2026-10-18T16:32:47.287676"
   },
   {
     "id": "reviewer",
@@ -389,7 +398,7 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-17T03:13:46.139378"
+    "created_at": "2026-10-18T16:32:47.287682"
   },
   {
     "id": "team-lead",
@@ -408,6 +417,6 @@
     ],
     "model": null,
     "is_default": false,
-    "created_at": "2026-10-17T03:13:46.139384"
+    "created_at": "2026-10-18T16:32:47.287687"
   }
 ]

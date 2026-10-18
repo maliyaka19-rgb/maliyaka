@@ -340,9 +340,19 @@ When you need to use tools, call them. Work like a real coding assistant — rea
         import time
         start_time = time.time()
         
-        # Get custom agent system prompt if agent_id provided
+        # Resolve agent_id: auto selection or specific agent
         custom_system_prompt = None
         self._active_tools = None  # reset per chat; set below if a custom agent is used
+        self._active_model = None
+
+        if agent_id == "auto":
+            try:
+                from custom_agents import auto_select_agent
+                agent_id = auto_select_agent(user_message)
+            except Exception as e:
+                logger.debug(f"Auto-select agent error: {e}")
+                agent_id = None
+
         if agent_id:
             try:
                 from custom_agents import get_agent
@@ -350,6 +360,8 @@ When you need to use tools, call them. Work like a real coding assistant — rea
                 if custom_agent:
                     custom_system_prompt = custom_agent.get("system_prompt")
                     self._active_tools = custom_agent.get("tools") or None
+                    if custom_agent.get("model"):
+                        self._active_model = custom_agent["model"]
             except Exception as e:
                 logger.debug(f"Custom agent load error: {e}")
         
@@ -361,47 +373,50 @@ When you need to use tools, call them. Work like a real coding assistant — rea
         
         # Build message history for LLM with DYNAMIC brain context
         if custom_system_prompt:
-            # Use custom agent's system prompt with full capabilities
-            system_prompt = custom_system_prompt + """
+            # Build tool guidance strictly for active tools to prevent tool mismatch hallucinations
+            available_set = set(self._active_tools) if self._active_tools else {t["function"]["name"] for t in TOOLS}
+            tool_doc = {
+                "read_file": "- read_file: Dosya oku",
+                "write_file": "- write_file: Dosya yaz/oluştur",
+                "edit_file": "- edit_file: Dosyada düzenle",
+                "list_files": "- list_files: Klasör listele",
+                "search_files": "- search_files: Dosyalarda ara",
+                "execute_command": "- execute_command: Komut çalıştır",
+                "generate_code": "- generate_code: Üretim hazır kod oluştur",
+                "generate_image": "- generate_image: Gerçek görsel dosyası üret (URL döndürür)",
+                "generate_visual_prompt": "- generate_visual_prompt: Midjourney/DALL-E/SD için görsel prompt",
+                "generate_video_prompt": "- generate_video_prompt: Veo/Sora/Runway için video prompt",
+                "generate_real_video": "- generate_real_video: Gerçek MP4 video dosyası oluştur (ücretsiz, ~20sn sürer)",
+                "calculate": "- calculate: Güvenli matematiksel ve istatistiksel hesaplama yap",
+                "rag_search": "- rag_search: Bilgi tabanındaki belgelerde semantik arama yap",
+                "rag_add_document": "- rag_add_document: Bilgi tabanına belge ekle",
+                "rag_list_documents": "- rag_list_documents: Bilgi tabanındaki belgeleri listele",
+                "rag_delete_document": "- rag_delete_document: Bilgi tabanından belge sil",
+                "rag_get_stats": "- rag_get_stats: Bilgi tabanı istatistiklerini getir",
+                "web_search": "- web_search: Web'de güncel bilgi ara",
+                "search_learning": "- search_learning: Geçmiş deneyimlerde ara",
+                "answer_question": "- answer_question: Genel bilgi sorularını cevapla",
+            }
+            active_guides = [tool_doc[t] for t in available_set if t in tool_doc]
+            tools_block = "\n".join(active_guides) if active_guides else "Özel bir araç atanmadı; doğrudan yanıt ver."
 
-## YETENEKLERİN
+            system_prompt = custom_system_prompt + f"""
 
-Sen NEXUS-CORE yapay zeka ajanısın. Aşağıdaki araçları kullanabilirsin:
-
-### Dosya Araçları
-- read_file: Dosya oku
-- write_file: Dosya yaz/oluştur
-- edit_file: Dosyada düzenle
-- list_files: Klasör listele
-- search_files: Dosyalarda ara
-- execute_command: Komut çalıştır
-
-### Yapay Zeka Araçları
-- generate_code: Üretim hazır kod oluştur
-- generate_image: Gerçek görsel dosyası üret (URL döndürür)
-- generate_visual_prompt: Midjourney/DALL-E/SD için görsel prompt
-- generate_video_prompt: Veo/Sora/Runway için video prompt
-- generate_real_video: Gerçek MP4 video dosyası oluştur (ücretsiz, ~20sn sürer)
-
-### Zeka Araçları
-- web_search: Web'de güncel bilgi ara
-- search_learning: Geçmiş deneyimlerde ara
-- answer_question: Genel bilgi sorularını cevapla
+## KULLANILABİLİR ARAÇLARIN
+{tools_block}
 
 ## GÖREV TAMAMLAMA PROTOKOLÜ (ÇOK ÖNEMLİ)
 
-Kullanıcı çok adımlı bir görev verdiğinde (örn. "bir site hazırla", "3 dosya oluştur",
-"proje kur ve çalıştır"):
+Kullanıcı çok adımlı bir görev verdiğinde (örn. "bir site hazırla", "3 dosya oluştur", "proje kur ve çalıştır"):
 
 1. **PLANLA**: Görevi küçük, net adımlara böl. Kaç dosya/değişiklik gerektiğini belirle.
-2. **TAMAMEN YÜRÜT**: Görev bitene kadar araçları sırayla çağır. **Tek bir araç çağrısından
-   sonra DURMA.** İstenen TÜM dosyaları oluştur, TÜM düzenlemeleri yap. Yarım bırakma.
-3. **DOĞRULA**: Bitince sonucu kontrol et (dosyaları listele, komutu çalıştır, çıktıyı incele).
+2. **TAMAMEN YÜRÜT**: Görev bitene kadar araçları sırayla çağır. Yalnızca sana atanmış araçları kullan; bu liste dışındaki araçları ÇAĞIRMA. **Tek bir araç çağrısından sonra DURMA.** İstenen TÜM adımları tamamla. Yarım bırakma.
+3. **DOĞRULA**: Bitince sonucu kontrol et (dosyaları listele, çıktıyı incele).
 4. **HATA OLURSA**: Araç hata verirse pes etme; hatanın nedenini bul, düzelt ve görevi sürdür.
-5. **RAPORLA**: Ancak her şey bittikten sonra kullanıcıya ne yaptığını özetleyen net bir
-   metin yanıt ver.
+5. **RAPORLA**: Ancak her şey bittikten sonra kullanıcıya ne yaptığını özetleyen net bir metin yanıt ver.
 
 Kurallar:
+- Sana atanmamış araçları asla çağırma.
 - Görevi asla "yapılabilir" diye tarif edip bırakma — GERÇEKTEN YAP.
 - Dosya içeriğini tam yaz; "..." ile kısaltma.
 - Türkçe yanıt ver."""
@@ -918,7 +933,7 @@ Kurallar:
         
         api_key = self.llm_config.api_key
         base_url = self.llm_config.base_url or "https://api.openai.com/v1"
-        model = self.llm_config.model
+        model = getattr(self, '_active_model', None) or self.llm_config.model
         provider = getattr(self, 'provider', 'openai')
         
         # Check for placeholder or missing key

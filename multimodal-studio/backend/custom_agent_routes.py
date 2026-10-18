@@ -254,6 +254,13 @@ async def list_available_tools():
             "group": "Yapay Zeka"
         },
         {
+            "id": "generate_image",
+            "name": "Gerçek Görsel Üret",
+            "icon": "🖼️",
+            "description": "Metinden gerçek görsel dosyası üretir (Pollinations.ai)",
+            "group": "Yapay Zeka"
+        },
+        {
             "id": "generate_visual_prompt",
             "name": "Görsel Prompt",
             "icon": "🎨",
@@ -275,6 +282,34 @@ async def list_available_tools():
             "group": "Yapay Zeka"
         },
         # Intelligence Tools
+        {
+            "id": "calculate",
+            "name": "Hesap Makinesi",
+            "icon": "🧮",
+            "description": "Güvenli matematiksel ve istatistiksel hesaplama yapar",
+            "group": "Zeka"
+        },
+        {
+            "id": "rag_search",
+            "name": "Belge Arama (RAG)",
+            "icon": "📚",
+            "description": "Bilgi tabanındaki indeksli belgelerde semantik arama yapar",
+            "group": "Zeka"
+        },
+        {
+            "id": "rag_add_document",
+            "name": "Belge Ekle (RAG)",
+            "icon": "📄",
+            "description": "Bilgi tabanına yeni metin/belge ekler",
+            "group": "Zeka"
+        },
+        {
+            "id": "rag_list_documents",
+            "name": "Belgeleri Listele (RAG)",
+            "icon": "📋",
+            "description": "Bilgi tabanındaki belgeleri listeler",
+            "group": "Zeka"
+        },
         {
             "id": "web_search",
             "name": "Web Arama",

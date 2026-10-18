@@ -428,10 +428,12 @@ class TelegramBot:
             agents = []
         if not agents:
             return "⚠️ Kayıtlı ajan bulunamadı."
-        lines = ["🤖 Kullanılabilir ajanlar:"]
+        lines = ["🤖 Kullanılabilir Ajanlar:\n"]
         for agent in agents:
-            lines.append(f"• {agent.get('id', '?')} — {agent.get('name', '')}")
+            icon = agent.get("icon", "•")
+            lines.append(f"{icon} {agent.get('id', '?')} — {agent.get('name', '')}")
         lines.append("\nSeçmek için: /agent <id>")
+        lines.append("Otomatik seçim için: /agent auto")
         return "\n".join(lines)
 
     async def _set_agent(self, chat_id: int, args: str) -> None:
@@ -440,6 +442,11 @@ class TelegramBot:
             await self.send_message(
                 chat_id, "Kullanım: /agent <id>\nAjanları görmek için /agents yazın."
             )
+            return
+        if agent_id.lower() == "auto":
+            state = self._state(chat_id)
+            state["agent_id"] = "auto"
+            await self.send_message(chat_id, "✅ Ajan ayarlandı: Otomatik (istek bazlı uzman seçimi)")
             return
         try:
             from custom_agents import get_agent  # lazy import
@@ -474,8 +481,8 @@ class TelegramBot:
     async def _handle_text(self, chat_id: int, text: str) -> None:
         state = self._state(chat_id)
         agent_id = state.get("agent_id") or self.default_agent_id
-        if agent_id in (None, "", "auto"):
-            agent_id = None  # ajanın otomatik seçmesine izin ver
+        if agent_id in (None, ""):
+            agent_id = "auto"
 
         try:
             import ai_agent  # lazy import (ağır)
