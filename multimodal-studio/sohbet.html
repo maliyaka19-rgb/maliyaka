@@ -8,7 +8,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=64">
+    <link rel="stylesheet" href="css/style.css?v=68">
     <script>
         // Tema ilk boyamadan önce uygulanır (yanlış tema titremesini engeller).
         try { document.documentElement.setAttribute('data-theme', localStorage.getItem('nexus_theme') || 'light'); } catch (e) {}
@@ -362,7 +362,17 @@
                         <span class="model-item-recommended" style="margin-left: auto;">⭐ Önerilen</span>
                     </div>
                     
-                    <div style="font-size: 0.85rem; color: var(--fg-muted); margin: 12px 0 8px; font-weight: 600;">AI Ajanları (12)</div>
+                    <!-- Ekip Modu: uzman -> denetçi -> lider -->
+                    <div class="provider-card" id="team-agent-card" style="margin-bottom: 16px;">
+                        <div class="provider-icon" style="font-size: 2rem;">🧭</div>
+                        <div class="provider-info">
+                            <div class="provider-name">Ekip Modu (Denetimli)</div>
+                            <div class="provider-desc">Uzman üretir → denetçi doğrular → lider birleştirir</div>
+                        </div>
+                        <span class="model-item-recommended" style="margin-left: auto;">🛡️</span>
+                    </div>
+
+                    <div style="font-size: 0.85rem; color: var(--fg-muted); margin: 12px 0 8px; font-weight: 600;">AI Ajanları (<span id="agent-count-label">…</span>)</div>
                     <div class="provider-grid" id="agent-grid-modal"></div>
                     
                     <div style="font-size: 0.85rem; color: var(--fg-muted); margin: 16px 0 8px; font-weight: 600;">AI Modelleri</div>
@@ -437,6 +447,7 @@
         </div>
     </div>
 
-    <script src="js/app.js?v=65"></script>
+    <script src="config.js?v=1"></script>
+    <script src="js/app.js?v=68"></script>
 </body>
 </html>

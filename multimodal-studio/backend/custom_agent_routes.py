@@ -8,6 +8,7 @@ from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from typing import Optional, List
 import logging
+import uuid
 
 from custom_agents import (
     load_agents, get_agent, create_agent, 
@@ -148,14 +149,15 @@ async def run_team_task(data: TeamRunRequest):
     import ai_agent as _ai
 
     message = data.message.strip()
-    conv = data.conversation_id
+    # Her aşama AYRI bir konuşma kimliğinde çalışır; böylece denetim/sentez
+    # talimatları birbirinin bağlamına sızıp nihai çıktıya karışmaz.
+    base_conv = data.conversation_id or str(uuid.uuid4())[:12]
     specialist_id = auto_select_agent(message)
     if specialist_id in ("reviewer", "team-lead"):
         specialist_id = "assistant"
     specialist = get_agent(specialist_id) or {}
 
-    draft = await _ai.chat(message, conv, agent_id=specialist_id)
-    conv = draft.get("conversation_id", conv)
+    draft = await _ai.chat(message, f"{base_conv}-d", agent_id=specialist_id)
     draft_text = (draft.get("response") or "")[:4000]
     draft_tools = draft.get("tools_used", [])
 
@@ -163,9 +165,10 @@ async def run_team_task(data: TeamRunRequest):
         f"Orijinal görev: {message}\n\n"
         f"Uzman ({specialist_id}) taslağı:\n{draft_text}\n\n"
         f"Kullanılan araçlar: {', '.join(draft_tools) if draft_tools else 'yok'}\n\n"
-        "Denetim yap: eksik/hata/yarım iş var mı? Varsa düzeltmeyi de yaz, yoksa ONAYLANDI de."
+        "Denetim yap: eksik/hata/yarım iş var mı? Sadece denetim raporunu yaz; "
+        "taslağı veya bu talimatı TEKRAR ETME. Sonuç: ONAYLANDI ya da REDDEDİLDİ (düzeltme talimatıyla)."
     )
-    review = await _ai.chat(review_prompt, conv, agent_id="reviewer")
+    review = await _ai.chat(review_prompt, f"{base_conv}-r", agent_id="reviewer")
     review_text = (review.get("response") or "")[:4000]
 
     if data.refine:
@@ -173,16 +176,18 @@ async def run_team_task(data: TeamRunRequest):
             f"Orijinal görev: {message}\n\n"
             f"Uzman çıktısı:\n{draft_text}\n\n"
             f"Denetçi raporu:\n{review_text}\n\n"
-            "Bunları TEK final sonuca birleştir: dosya/görsel/video + net açıklama. Eksik varsa belirt."
+            "Bu malzemeyi TEK, kullanıma hazır nihai sonuca dönüştür: istenen dosya/kod/görsel/video "
+            "ve net açıklama. SADECE nihai teslimatı yaz; bu talimatı, görev metnini veya denetçi "
+            "raporunu OLDUĞU GİBİ KOPYALAMA/tekrar etme. Eksik kaldıysa kısaca belirt."
         )
-        final = await _ai.chat(merge_prompt, conv, agent_id="team-lead")
+        final = await _ai.chat(merge_prompt, f"{base_conv}-f", agent_id="team-lead")
     else:
         final = review if review.get("success") else draft
 
     return {
         "success": bool(final.get("success")),
         "response": final.get("response", ""),
-        "conversation_id": final.get("conversation_id", conv),
+        "conversation_id": base_conv,
         "specialist": {"id": specialist_id, "name": specialist.get("name", specialist_id)},
         "stages": {
             "draft": {"agent_id": specialist_id, "success": draft.get("success"), "tools_used": draft_tools},

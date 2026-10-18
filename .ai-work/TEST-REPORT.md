@@ -262,3 +262,44 @@ Komut: `python -m pytest tests/ -q --ignore=tests/test_api_live.py` → `125 pas
 - Telegram (kod+arayüz): **PASS**; gerçek bot bağlantısı: **BLOCKED** (token)
 - Light UI: **PASS**
 - Regresyon: **PASS** (125 birim)
+
+---
+
+# V5 Test Raporu — 2026-10-18 (Oturum 12)
+
+## 1) Backend birim/entegrasyon
+- Komut: `python -m pytest tests/ -q --ignore=tests/test_api_live.py`
+- Sonuc: **133 passed** (yeni: `test_tool_mismatch.py` 3 test)
+- `py_compile`: `app.py, ai_agent.py, custom_agent_routes.py, ai_agent_routes.py, model_routes.py, telegram_bot.py, telegram_routes.py, run_server.py` -> OK
+
+## 2) Canli API (backend :8000)
+- 37 guvenli uc nokta -> hepsi 2xx (PASS). Ornek: `/health`, `/api/v1/agents`, `/api/v1/models/catalog|active|providers`,
+  `/api/v1/fs/*`, `/api/v1/project/*`, `/api/v1/brain/*`, `/api/v1/agent/*`, `/api/v1/ai/*`, `/api/v1/telegram/status`.
+- Canli sohbet `POST /api/v1/ai/chat` -> gercek LLM yaniti.
+- Canli ekip `POST /api/v1/agents/team/run` -> uzman/denetci/lider asamalari.
+
+## 3) Tarayici (gercek Chrome) — 24 etkilesim
+- Tema, mobil menu, yeni sohbet, ajan modali, model modali (+6 saglayici), model listesi/geri,
+  yukle menusu (dosya/goruntu/video), proje paneli, proje tarayici, hizli yollar (Masaustu/Ev/Belgeler),
+  yeni dosya/klasor/refresh, telegram linki, cikis butonu, oneri cipleri.
+- **0 konsol hatasi** (sohbet.html ve chat.html).
+
+## 4) Uctan uca akislar
+| Akis | Sonuc |
+|------|-------|
+| Mesaj gonder -> LLM yaniti | PASS (`4`, `TEST_OK` dogrulandi) |
+| Ekip modu (uzman->denetci->lider) | PASS (arayuzde asamalar goruntulendi) |
+| Misafir girisi -> JWT -> sohbet | PASS (kullanici "Misafir", 0 hata) |
+| Giris ekrani (light) | PASS (`--bg #F8FAFC`, `--accent #3B82F6`, 2 form, 3 input) |
+| `PORT=8011` ile backend | PASS (`/health` 200) |
+
+## 5) Masaustu (Electron)
+- `node test-server.js` -> **6/6 PASS** (root, MIME, 404, path traversal, css, app.js icerigi)
+- Gercek calistirma: pencere basligi "NEXUS-CORE", gomulu sunucu `http://127.0.0.1:8090`,
+  `/sohbet.html` 200 (29.335 bayt), backend tespiti dogru.
+
+## NOT RUN / BLOCKED
+- Gercek Telegram botu: BLOCKED (token).
+- Gercek bulut dagitimi: BLOCKED (hesap).
+- `web_search_*` canli testi: NOT RUN.
+- Video: gercek model hesabi yok (Pollinations kareleri + prosedurel yedek).

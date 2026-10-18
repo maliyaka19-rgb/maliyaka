@@ -986,6 +986,38 @@ Kurallar:
                     
                     return {"success": True, "data": data}
                 
+                # Some models (e.g. gpt-oss on Groq) occasionally emit a tool call
+                # for a tool that was NOT advertised in request.tools (e.g.
+                # `write_file`), and the provider rejects the whole turn with a 400
+                # "Tool call validation failed". Retrying the SAME model once with
+                # tools disabled turns this into a normal text answer instead of
+                # burning the entire 20+ provider fallback chain.
+                if (
+                    response is not None
+                    and response.status_code == 400
+                    and provider != "gemini"
+                    and "tool" in response.text.lower()
+                    and ("validation failed" in response.text.lower()
+                         or "not in request.tools" in response.text.lower())
+                ):
+                    logger.info(
+                        f"Tool-call mismatch on {provider}/{model}; retrying same "
+                        f"model with tools disabled"
+                    )
+                    retry_payload = {k: v for k, v in payload.items() if k not in ("tools", "tool_choice")}
+                    try:
+                        retry_resp = await client.post(url, headers=headers, json=retry_payload)
+                        if retry_resp.status_code == 200:
+                            retry_data = retry_resp.json()
+                            if _validate_response(retry_data):
+                                logger.info("Tool-disabled retry succeeded")
+                                return {"success": True, "data": retry_data, "tools_disabled": True}
+                        logger.warning(
+                            f"Tool-disabled retry failed {retry_resp.status_code}: {retry_resp.text[:150]}"
+                        )
+                    except Exception as e:
+                        logger.warning(f"Tool-disabled retry error: {e}")
+
                 # Any error -> trigger fallback chain. If the failure was a pure
                 # rate limit we keep this provider (its other models have separate
                 # quota buckets) instead of dropping the only working provider.

@@ -1060,11 +1060,16 @@
     <!-- ===== TOAST CONTAINER ===== -->
     <div id="toast-container" class="toast-container"></div>
 
+    <script src="config.js?v=1"></script>
     <script>
         (function(){
         'use strict';
 
-        const AUTH_API = 'http://localhost:8000/api/v1/auth';
+        const API_BASE = (
+            (typeof window !== 'undefined' && window.NEXUS_API_BASE)
+            || `${location.protocol}//${location.hostname || 'localhost'}:8000`
+        ).replace(/\/+$/, '');
+        const AUTH_API = `${API_BASE}/api/v1/auth`;
 
         // ===== THEME (light varsayılan, sohbet ile aynı) =====
         (function initTheme(){

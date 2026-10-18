@@ -1,0 +1,86 @@
+{
+  "name": "nexus-core-desktop",
+  "version": "1.0.0",
+  "description": "NEXUS-CORE (Multimodal Creative Studio) masaüstü uygulaması — Electron kabuğu.",
+  "main": "main.js",
+  "author": "NEXUS-CORE",
+  "license": "MIT",
+  "private": true,
+  "scripts": {
+    "start": "electron .",
+    "test": "node test-server.js",
+    "dist": "electron-builder --win",
+    "dist:portable": "electron-builder --win portable"
+  },
+  "devDependencies": {
+    "electron": "^31.7.7",
+    "electron-builder": "^24.13.3"
+  },
+  "build": {
+    "appId": "com.nexuscore.desktop",
+    "productName": "NEXUS-CORE",
+    "directories": {
+      "output": "dist",
+      "buildResources": "build"
+    },
+    "files": [
+      "main.js",
+      "preload.js",
+      "static-server.js",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "..",
+        "to": "studio",
+        "filter": [
+          "sohbet.html",
+          "chat.html",
+          "telegram.html",
+          "arayuz.html",
+          "ui.html",
+          "config.js",
+          "js/**",
+          "css/**",
+          "backend/**/*.py",
+          "backend/requirements.txt",
+          "backend/Procfile",
+          "backend/Dockerfile",
+          "!**/__pycache__/**",
+          "!**/*.pyc",
+          "!**/.pytest_cache/**",
+          "!**/.ruff_cache/**",
+          "!**/tests/**",
+          "!**/node_modules/**",
+          "!**/.next/**",
+          "!**/dist/**",
+          "!**/.env",
+          "!**/.env.*",
+          "!**/.encryption_key",
+          "!**/model_config.json",
+          "!**/telegram_config.json",
+          "!**/auth_data/**",
+          "!**/brain_data/**",
+          "!**/learning_registry/**",
+          "!**/recent_projects.json",
+          "!**/chroma_db/**",
+          "!**/generated_videos/**",
+          "!**/uploads/**",
+          "!**/videos/**"
+        ]
+      }
+    ],
+    "win": {
+      "target": [
+        { "target": "nsis", "arch": ["x64"] },
+        { "target": "portable", "arch": ["x64"] }
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "shortcutName": "NEXUS-CORE"
+    }
+  }
+}

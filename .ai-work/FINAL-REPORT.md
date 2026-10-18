@@ -343,3 +343,21 @@ Kullanıcının gece verdiği 4 madde, onay istenmeden tamamlandı ve **canlı**
 - **Test**: 125 birim PASS (39 yeni: 19 telegram + 8 proje/fs + 6 ajan + 6 window).
 - **Commit**: `e5fe107`, `aae631e`, `6685825` (çalışma ağacı temiz).
 - **Açık**: gerçek Telegram token'ı; çoklu-sağlayıcı anahtarı (yalnızca groq geçerli); web araması canlı testi NOT RUN.
+
+---
+
+## Guncelleme — 2026-10-18 (Oturum 12 / MASTER PROMPT V5)
+
+Bu oturumun tam raporu: **`.ai-work/V5-REPORT.md`**.
+
+Ozet: 6 hata duzeltildi (ekip baglam sizintisi, 400 tool-call fallback firtinasi,
+sabit ajan sayisi etiketi, "Belgeler" 404'u, tasinabilir olmayan run_server.py,
+eksik Dockerfile COPY). Ekip Modu arayuze eklendi. Tasarim modernlestirildi.
+Masaustu (Electron) uygulamasi olusturuldu ve gercekten calistirildi. Ucretsiz
+hosting yapilandirmalari (render.yaml, Dockerfile, Procfile, DEPLOY.md) hazirlandi.
+
+Durum: 133 backend testi PASS, 24 arayuz etkilesimi PASS, 0 konsol hatasi,
+misafir girisi uctan uca PASS, masaustu statik sunucu 6/6 PASS.
+
+Kalan gercek engeller: Telegram token (kullanici), hosting hesabi (kullanici),
+yalnizca Groq anahtari gecerli.

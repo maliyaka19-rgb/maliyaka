@@ -118,3 +118,37 @@
 - **Gerekçe**: §3.9 — geri alınabilir, düşük riskli; çalışan 103KB JS'i atmamak.
 - **Etki**: Tarayıcıda 0 konsol hatası; tema geçişi, proje akışı ve ajan modali doğrulandı.
 
+
+## D-015 - Ajan ekip akisi: asama basina AYRI konusma kimligi
+- **Baglam**: `/agents/team/run` uc asamayi (uzman/denetci/lider) tek `conversation_id` ile
+  cagiriyordu; sonuc `response` icine ara talimatlar ve onceki baglam sizip nihai cikti kirlendi.
+- **Karar**: Her asama ayri kimlikte calisir (`<taban>-d`, `-r`, `-f`) ve promptlar
+  "talimati/raporu TEKRAR ETME, sadece nihai teslimati yaz" der. Donen `conversation_id` taban kalir.
+- **Gerekce**: 2.1 - kalite; 9.4 - sizinti yok.
+- **Etki**: Canli ekip yaniti temiz; test_team_agents 5/5 PASS.
+
+## D-016 - 400 "tool call validation failed" icin araclari kapatan tekrar deneme
+- **Baglam**: groq/gpt-oss bazi turlarda ilan edilmeyen bir araci (`write_file`) cagiriyor; saglayici
+  400 donuyor; eski davranis 20+ saglayicilik fallback zincirini tetikleyip isi yavaxlatiyor ve
+  sik sik kural tabanli yanita dusuruyordu.
+- **Karar**: Bu ozel 400'de AYNI modeli `tools`/`tool_choice` olmadan BIR kez daha dene; basarisizsa
+  normal fallback'e devam et. Ilgisiz 400'ler etkilenmez.
+- **Gerekce**: 4.1 - minimum mudahale; 6 - hiz; 1.1 - gercek duzeltme.
+- **Etki**: `tests/test_tool_mismatch.py` 3 PASS (basari, basarisizsa fallback, ilgisiz 400).
+
+## D-017 - API tabani yapilandirilabilir (config.js)
+- **Baglam**: Arayuzde `http://localhost:8000` sabit kodluydu; hosting'de calismaz.
+- **Karar**: `API_BASE = window.NEXUS_API_BASE || <ayni-host>:8000`; `config.js` ile override.
+  Yerelde hicbir ayar gerekmez. Ayni yaklasim `chat.html` ve `telegram.html` icin de uygulandi.
+- **Gerekce**: 7 - dagitilabilirlik; 8 - en az degisiklikle.
+- **Etki**: Tarayicida 0 hata; localhost varsayilani korundu.
+
+## D-018 - Masaustu uygulama: Electron + bagimliliksiz statik sunucu
+- **Baglam**: Kullanici masaustu uygulamasi istedi (Electron/Tauri).
+- **Karar**: Electron secildi (Node zaten var). Arayuz `file://` yerine kucuk bir yerel HTTP
+  sunucusundan servis edilir (localStorage/CORS/goreli yol sorunlari olmasin). Python backend
+  port 8000 doluysa dokunulmaz, degilse baslatilir. Statik sunucu ayri dosyaya cikarilip
+  Electron'suz test edilir.
+- **Gerekce**: 10 - sifirdan dev yeniden yazim yok; test edilebilirlik.
+- **Etki**: Statik sunucu 6/6 PASS; Electron gercekten acildi (pencere "NEXUS-CORE", :8090).
+  Paketlemede Windows sembolik link kisiti asildi (winCodeSign arsivi darwin haric cikarildi).

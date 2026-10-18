@@ -451,3 +451,34 @@ Kullanıcının 4 maddesi tek oturumda, onay istenmeden tamamlandı.
 - Çoklu-sağlayıcı yedekliliği: yalnızca **groq** geçerli (openrouter `401`, openai `429/404`).
 - Web araması canlı testi NOT RUN.
 
+---
+
+## Oturum 12 — 2026-10-18 · MASTER PROMPT V5 (10 aşama)
+
+Tam rapor: **`.ai-work/V5-REPORT.md`**. Özet:
+
+- **Aşama 1** ✅ Diagnoz + geri dönüş noktası (`.backup/v5-pre-20261018-1307.zip`, 99 dosya, Git `e3d3f42`).
+- **Aşama 2** ✅ 37 güvenli uç nokta canlı → 2xx; canlı sohbet + ekip akışı çalıştı.
+- **Aşama 3** ✅ **6 hata** düzeltildi (sabit "12" etiketi, ekip bağlam sızıntısı,
+  400 tool-call fallback fırtınası, "Belgeler" 404'ü, taşınabilir olmayan `run_server.py`,
+  eksik `Dockerfile COPY`). Yeni regresyon testleri: `tests/test_tool_mismatch.py` (3 PASS).
+- **Aşama 4** ✅ 24 etkileşim otomatik test → PASS, **0 konsol hatası**.
+- **Aşama 5** ✅ Tasarım modernleştirme (odak halkası, seçim rengi, ekip kartı/rozetleri,
+  `prefers-reduced-motion`, yapılandırılabilir API adresi `config.js`) + **Ekip Modu** arayüze eklendi.
+- **Aşama 6** ⚠️ Telegram kodu + 19 test PASS; gerçek bot BLOCKED (token).
+- **Aşama 7** ⚠️ Hosting hazırlığı PASS (`render.yaml`, düzeltilmiş Dockerfile, `Procfile`,
+  `.dockerignore`, `DEPLOY.md`); gerçek dağıtım BLOCKED (hesap).
+- **Aşama 8** ✅ Masaüstü (Electron) uygulaması oluşturuldu ve **gerçekten çalıştırıldı**
+  (pencere "NEXUS-CORE", gömülü sunucu :8090); statik sunucu testi 6/6.
+- **Aşama 9** ✅ **133 backend testi PASS**, `py_compile` OK, canlı tarayıcı E2E PASS.
+- **Aşama 10** ✅ Nihai rapor yazıldı.
+
+### Değişen/eklenen dosyalar (Oturum 12)
+`js/app.js`, `css/style.css`, `sohbet.html`, `chat.html`, `telegram.html`, `config.js` (yeni),
+`backend/ai_agent.py`, `backend/custom_agent_routes.py`, `backend/run_server.py`,
+`backend/Dockerfile`, `backend/.dockerignore` (yeni), `backend/Procfile` (yeni),
+`backend/tests/test_tool_mismatch.py` (yeni),
+`desktop/` (yeni: main.js, preload.js, static-server.js, test-server.js, package.json, README.md),
+`render.yaml` (yeni), `multimodal-studio/DEPLOY.md` (yeni), `.ai-work/V5-REPORT.md` (yeni).
+
+

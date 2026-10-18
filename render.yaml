@@ -1,0 +1,53 @@
+# render.yaml — NEXUS-CORE için Render.com ÜCRETSİZ plan Blueprint'i
+#
+# Kullanım: render.com panosunda  New + >  Blueprint  >  bu repoyu seç.
+# Sırları (API anahtarları) repoya YAZMAYIN; Render panelinde girin
+# (`sync: false` olan değişkenler panelde sorulur).
+#
+# NOT (ücretsiz plan): Web servisi 15 dakika hareketsizlikte uyur; uyanma
+# ~30-60 sn sürer. Kalıcı disk yoktur → öğrenme kaydı/üretilen dosyalar
+# yeniden başlatmada sıfırlanır.
+
+services:
+  # ---------- Backend (FastAPI) ----------
+  - type: web
+    name: nexus-core-backend
+    runtime: python
+    plan: free
+    rootDir: multimodal-studio/backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeploy: true
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.9
+      - key: ENVIRONMENT
+        value: production
+      # Arayüzün CORS ile erişebilmesi için statik sitenin adresi:
+      - key: CORS_ALLOW_ORIGINS
+        sync: false
+      # --- Sırlar: panelde girilir ---
+      - key: GROQ_API_KEY
+        sync: false
+      - key: NEXUS_ENCRYPTION_PASSPHRASE
+        sync: false
+
+  # ---------- Arayüz (statik site) ----------
+  - type: web
+    name: nexus-core-ui
+    runtime: static
+    rootDir: multimodal-studio
+    staticPublishPath: .
+    buildCommand: ""
+    routes:
+      - type: rewrite
+        source: /
+        destination: /sohbet.html
+    headers:
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Referrer-Policy
+        value: strict-origin-when-cross-origin

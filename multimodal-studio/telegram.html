@@ -148,9 +148,14 @@
 
 <div class="toast" id="toast"></div>
 
+<script src="config.js?v=1"></script>
 <script>
-const API = "http://localhost:8000/api/v1/telegram";
-const AGENTS_API = "http://localhost:8000/api/v1/agents";
+const API_BASE = (
+  (typeof window !== 'undefined' && window.NEXUS_API_BASE)
+  || `${location.protocol}//${location.hostname || 'localhost'}:8000`
+).replace(/\/+$/, '');
+const API = `${API_BASE}/api/v1/telegram`;
+const AGENTS_API = `${API_BASE}/api/v1/agents`;
 const $ = (id) => document.getElementById(id);
 
 function toast(msg, isErr) {

@@ -1,0 +1,17 @@
+# Docker build bağlamından hariç tutulacaklar (imaj küçük kalsın, sırlar sızmasın)
+__pycache__/
+*.pyc
+.pytest_cache/
+.ruff_cache/
+.venv/
+venv/
+.env
+.encryption_key
+*.enc
+brain_data/
+learning_registry/
+generated_videos/
+chroma_db/
+auth_data/
+tests/
+.DS_Store

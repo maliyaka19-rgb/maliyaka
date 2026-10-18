@@ -10,15 +10,23 @@
         function initApp() {
         'use strict';
 
-        const CHAT_API = 'http://localhost:8000/api/v1/ai/chat';
-        const AUTH_API = 'http://localhost:8000/api/v1/auth';
-        const MODELS_API = 'http://localhost:8000/api/v1/models';
-        // Backend kökenli MUTLAK URL: sayfa 8080'de servis edildiğinden görece
-        // `/api/v1/image/proxy` isteği 8080'e giderdi ve görseller yüklenmezdi.
-        const IMAGE_PROXY_API = 'http://localhost:8000/api/v1/image/proxy';
+        // Backend kök adresi. Yerelde 8000 portu; dağıtımda (hosting) ya
+        // `window.NEXUS_API_BASE` ya da `config.js` ile değiştirilebilir.
+        const API_BASE = (
+            (typeof window !== 'undefined' && window.NEXUS_API_BASE)
+            || `${location.protocol}//${location.hostname || 'localhost'}:8000`
+        ).replace(/\/+$/, '');
+
+        const CHAT_API = `${API_BASE}/api/v1/ai/chat`;
+        // Ekip modu: uzman üretir -> denetçi doğrular -> ekip lideri birleştirir.
+        const TEAM_API = `${API_BASE}/api/v1/agents/team/run`;
+        const AUTH_API = `${API_BASE}/api/v1/auth`;
+        const MODELS_API = `${API_BASE}/api/v1/models`;
+        // Görseller backend proxy'sinden (mutlak URL) yüklenir.
+        const IMAGE_PROXY_API = `${API_BASE}/api/v1/image/proxy`;
         // Proje/dosya ve dosya sistemi uç noktaları (dosya ağacı, editör, proje tarayıcı).
-        const PROJECT_API = 'http://localhost:8000/api/v1/project';
-        const FS_API = 'http://localhost:8000/api/v1/fs';
+        const PROJECT_API = `${API_BASE}/api/v1/project`;
+        const FS_API = `${API_BASE}/api/v1/fs`;
 
         // ===== STATE =====
         let token = null;
@@ -618,17 +626,19 @@
             addLiveStatus(txt);  // Show live progress indicator
 
             try {
-                const res = await fetch(CHAT_API, {
+                const useTeam = currentAgentId === 'team';
+                const res = await fetch(useTeam ? TEAM_API : CHAT_API, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': token ? `Bearer ${token}` : ''
                     },
-                    body: JSON.stringify({ 
-                        message: txt, 
-                        conversation_id: convId,
-                        agent_id: currentAgentId === 'auto' ? 'auto' : currentAgentId 
-                    })
+                    body: JSON.stringify(
+                        useTeam
+                            ? { message: txt, conversation_id: convId, refine: true }
+                            : { message: txt, conversation_id: convId,
+                                agent_id: currentAgentId === 'auto' ? 'auto' : currentAgentId }
+                    )
                 });
                 const data = await res.json();
                 removeLiveStatus();
@@ -638,6 +648,20 @@
                     if (!currentChatId) currentChatId = convId;
                     
                     let html = '';
+
+                    // Ekip modu: uzman + denetçi + lider aşamalarını göster
+                    if (useTeam && data.stages) {
+                        const sp = data.specialist || {};
+                        const st = data.stages;
+                        const okm = (b) => b ? '✅' : '⚠️';
+                        const badge = (t) => `<span class="team-stage-badge">${t}</span>`;
+                        html += `<div class="team-stages">`
+                            + badge(`🧑‍🔬 Uzman: ${escapeHtml(sp.name || sp.id || '-')}`)
+                            + badge(`${okm(st.draft && st.draft.success)} Üretim`)
+                            + badge(`${okm(st.review && st.review.success)} Denetim`)
+                            + badge('✅ Sentez')
+                            + `</div>`;
+                    }
                     
                     // Show selected agent info if auto mode was used
                     if (data.selected_agent) {
@@ -753,7 +777,7 @@
         // ============================================================
         // AGENT BUILDER (Custom AI Agents)
         // ============================================================
-        const AGENT_API = 'http://localhost:8000/api/v1/agents';
+        const AGENT_API = `${API_BASE}/api/v1/agents`;
         const agentModalOverlay = document.getElementById('agent-modal-overlay');
         const agentGridView = document.getElementById('agent-list-view');
         const agentEditor = document.getElementById('agent-editor');
@@ -1301,6 +1325,10 @@
             document.getElementById('current-agent-icon').textContent = '🤖';
             const modelBtnText = document.getElementById('model-btn-text');
             if (modelBtnText) modelBtnText.textContent = '🤖 Otomatik';
+        } else if (currentAgentId === 'team') {
+            document.getElementById('current-agent-icon').textContent = '🧭';
+            const modelBtnText = document.getElementById('model-btn-text');
+            if (modelBtnText) modelBtnText.textContent = '🧭 Ekip';
         } else if (currentAgentId && currentAgentId !== 'assistant') {
             // If a specific agent was previously selected, show it in header
             const savedAgent = agents.find(a => a.id === currentAgentId);
@@ -1601,9 +1629,12 @@
             if (data.success) browseTo(data.path);
         });
 
-        document.getElementById('quick-documents').addEventListener('click', () => {
-            const home = pathInput.value.split('\\').slice(0, 3).join('\\');
-            browseTo(home + '\\Documents');
+        document.getElementById('quick-documents').addEventListener('click', async () => {
+            // path-input boş olabilir (tarayıcı yeni açıldığında); sabit bir
+            // varsayım yerine backend'den ev dizinini alıp Belgeler'e gideriz.
+            const res = await fetch(FS_API + '/home');
+            const data = await res.json();
+            if (data.success && data.path) browseTo(data.path + '\\Documents');
         });
 
         // Yeni klasör oluştur (gezilen dizinde) ve içine gir
@@ -2133,9 +2164,11 @@
         // ============================================================
         // AGENTS IN MODEL MODAL
         // ============================================================
-        const AGENT_API_URL = 'http://localhost:8000/api/v1/agents';
+        const AGENT_API_URL = `${API_BASE}/api/v1/agents`;
         const agentGridModal = document.getElementById('agent-grid-modal');
         const autoAgentCard = document.getElementById('auto-agent-card');
+        const teamAgentCard = document.getElementById('team-agent-card');
+        const agentCountLabel = document.getElementById('agent-count-label');
 
         // Load agents for modal display
         async function loadAgentsForModal() {
@@ -2144,6 +2177,7 @@
                 const data = await res.json();
                 if (data.success) {
                     allAgents = data.agents;
+                    if (agentCountLabel) agentCountLabel.textContent = allAgents.length;
                     renderAgentGridModal();
                 }
             } catch (e) {
@@ -2209,6 +2243,23 @@
                 if (modelBtnText) modelBtnText.textContent = '🤖 Otomatik';
                 showToast('🤖 Otomatik ajan seçimi aktif - sorunuza göre en uygun ajanı seçecek');
             };
+
+            // Ekip modu kartı: uzman -> denetçi -> lider pipeline'ını tetikler
+            if (teamAgentCard) {
+                teamAgentCard.onclick = () => {
+                    currentAgentId = 'team';
+                    localStorage.setItem('current_agent_id', 'team');
+                    document.getElementById('current-agent-icon').textContent = '🧭';
+                    renderAgentGridModal();
+                    modelOverlay.classList.remove('active');
+                    if (modelBtnText) modelBtnText.textContent = '🧭 Ekip';
+                    showToast('🧭 Ekip modu aktif — uzman üretir, denetçi doğrular, lider birleştirir');
+                };
+                if (currentAgentId === 'team') {
+                    teamAgentCard.style.borderColor = 'var(--accent)';
+                    teamAgentCard.style.background = 'var(--accent-soft-strong)';
+                }
+            }
 
             // Highlight auto card if selected
             if (currentAgentId === 'auto') {
@@ -2391,6 +2442,11 @@
         // Update model button on load
         async function updateModelButton() {
             try {
+                if (currentAgentId === 'team') {
+                    modelBtnText.textContent = '🧭 Ekip';
+                    modelStatusDot.classList.remove('disconnected');
+                    return;
+                }
                 // Check if a specific agent is selected (not default assistant, not auto)
                 if (currentAgentId && currentAgentId !== 'assistant' && currentAgentId !== 'auto') {
                     let agent = allAgents.find(a => a.id === currentAgentId) || agents.find(a => a.id === currentAgentId);
