@@ -95,15 +95,22 @@ _DEV_ORIGINS = [
     "http://localhost:8080", "http://127.0.0.1:8080",
     "http://localhost:8000", "http://127.0.0.1:8000",
     "http://localhost:3000", "http://127.0.0.1:3000",
+    # Masaüstü (Electron) uygulaması arayüzü kendi yerel sunucusundan servis eder.
+    "http://localhost:8090", "http://127.0.0.1:8090",
 ]
 _env_origins = [
     o.strip() for o in os.getenv("CORS_ORIGINS", "").split(",")
     if o.strip() and o.strip() != "*"
 ]
 allowed_origins = sorted(set(_env_origins) | set(_DEV_ORIGINS))
+# Masaüstü uygulaması 8090 doluysa boş bir port seçer; bu yüzden geri döngü
+# (loopback) adreslerinde PORT'tan bağımsız izin veriyoruz. Bu güvenlidir:
+# yalnızca kullanıcının kendi makinesindeki origin'ler eşleşir, dışarısı değil.
+_LOOPBACK_ORIGIN_REGEX = r"^http://(localhost|127\.0\.0\.1)(:\d+)?$"
 app.add_middleware(
     CORSMiddleware,
     allow_origins=allowed_origins,
+    allow_origin_regex=_LOOPBACK_ORIGIN_REGEX,
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

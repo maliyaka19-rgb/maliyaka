@@ -303,3 +303,21 @@ Komut: `python -m pytest tests/ -q --ignore=tests/test_api_live.py` → `125 pas
 - Gercek bulut dagitimi: BLOCKED (hesap).
 - `web_search_*` canli testi: NOT RUN.
 - Video: gercek model hesabi yok (Pollinations kareleri + prosedurel yedek).
+
+## 6) CORS (yeni — hata #7 duzeltmesi)
+| Test | Sonuc |
+|------|-------|
+| Masaustu origin 127.0.0.1:8090 | PASS (ACAO dogru) |
+| Rastgele loopback portu 8099 | PASS |
+| Arayuz 8080 (regresyon) | PASS |
+| Dis origin (evil.example.com) | PASS (reddedildi) |
+| `127.0.0.1.evil.com` taklidi | PASS (reddedildi) |
+
+## 7) Paketli masaustu uygulamasi (en guclu kanit)
+- `desktop/dist/NEXUS-CORE 1.0.0.exe` (68,1 MB) gercekten calistirildi.
+- Pencere "NEXUS-CORE"; gomulu sunucu 127.0.0.1:8090.
+- Uctan uca: misafir girisi -> JWT -> 20 ajan + 6 saglayici -> mesaj ->
+  gercek LLM yaniti "DESKTOP_OK" (dusunce adimlariyla) -> 0 konsol hatasi.
+- Paket iceriginde sir YOK (model_config.json / .encryption_key / .env / telegram_config.json).
+
+Toplam backend testi: **138 passed**.

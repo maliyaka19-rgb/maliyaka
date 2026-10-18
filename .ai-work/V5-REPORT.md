@@ -42,6 +42,7 @@ Gizli bilgiler log'a **yazdırılmadı**; yalnızca dosya adları/durumları rap
 | 4 | Orta | "Belgeler" hızlı yolu boş yolda `\Documents` (404) | `path-input` boşken sabit varsayım | `/fs/home`'dan türet | Tarayıcı: `C:\Users\HP\Documents`, 0 hata |
 | 5 | **Yüksek** | `run_server.py` mutlak Windows yolu içeriyordu | `os.chdir(r"C:\Users\HP\...")` | Kendi dizini + `PORT`/`HOST` ortam değişkeni | `PORT=8011` → `/health` 200 |
 | 6 | **Yüksek** | Dockerfile yalnızca `app.py` kopyalıyordu | Eksik `COPY` | Tüm kaynak + `$PORT` + yazılabilir klasörler + `.dockerignore` | Dosya incelendi |
+| 7 | **Kritik** | Masaüstü uygulaması API'ye **hiç** ulaşamıyordu (`Failed to fetch`) | `8090` origin'i CORS izin listesinde yoktu | Geri döngü origin'leri porttan bağımsız izinli (`allow_origin_regex`) + masaüstü portları | Paketli uygulamadan **gerçek LLM yanıtı** alındı; 5 yeni CORS testi PASS |
 
 > Hata başına en fazla 3 tur kuralına uyuldu; hiçbir test **silinmedi** ve hiçbir hata
 > "gizlenerek" PASS gösterilmedi.
@@ -119,10 +120,25 @@ Gerçek buluta dağıtım: ⛔ **BLOCKED** — platform hesabı + API anahtarı 
   gömülü sunucu `http://127.0.0.1:8090/sohbet.html` (200, 29.335 bayt),
   `app.js`/`style.css`/`config.js` doğru MIME ile servis edildi.
 - Backend tespiti: "backend zaten calisiyor (8000)" — çalışan motora dokunmadı.
-- Paketleme (`electron-builder`): NSIS/portable hedefi, pencere imzası olmadan;
-  ⚠️ Windows'ta 7-Zip imzalama araçlarındaki macOS sembolik linklerini
-  oluşturamadı (Developer Mode/admin gerektirir). Bu **kısıt aşıldı**: arşiv
-  `darwin` hariç çıkarıldı ve paketleme yeniden denendi.
+- `main.js` paketli modda `process.resourcesPath/studio` yolunu kullanır (dev'de `..`).
+- Paketleme (`electron-builder`, portable hedef):
+  - ⚠️ Windows'ta 7-Zip imzalama araçlarındaki macOS sembolik linklerini
+    oluşturamadı (Developer Mode/admin gerektirir). Bu **kısıt aşıldı**:
+    `winCodeSign` arşivi `darwin` hariç çıkarıldı; paketleme tamamlandı.
+  - ⚠️ `extraResources` filtresi düzeltildi (önce yalnızca üst düzey
+    `node_modules` hariç tutuluyordu → `frontend/node_modules` (187 MB) kopyalanıyordu).
+- **Paketli uygulama gerçekten çalıştırıldı** (`dist/win-unpacked/NEXUS-CORE.exe`):
+  pencere başlığı "NEXUS-CORE", gömülü sunucu `127.0.0.1:8090`,
+  `/sohbet.html` 200 (29.335 bayt), `/js/app.js` 200 (118.724 bayt).
+- **Sır sızıntısı kontrolü (paket içeriği):** `model_config.json`, `.encryption_key`,
+  `telegram_config.json`, `.env` → **pakette YOK**. `node_modules` ve `backend/tests`
+  da pakette yok. `resources/studio/backend` → 28 dosya.
+- **Portable `.exe` derlendi:** `desktop/dist/NEXUS-CORE 1.0.0.exe` (**68,1 MB**).
+- **Portable `.exe` gerçekten çalıştırıldı:** pencere "NEXUS-CORE", `127.0.0.1:8090`.
+- **Paketli uygulamadan uçtan uca gerçek LLM sohbeti:** misafir girişi → JWT →
+  20 ajan + 6 sağlayıcı yüklendi → mesaj gönderildi → yanıt **"DESKTOP_OK"**
+  (düşünce adımlarıyla), **0 konsol hatası**. Bu, CORS düzeltmesinin (hata #7)
+  ve paketin tamamen çalıştığının kanıtıdır.
 
 ---
 
@@ -130,10 +146,12 @@ Gerçek buluta dağıtım: ⛔ **BLOCKED** — platform hesabı + API anahtarı 
 
 | Test | Sonuç |
 |------|-------|
-| Backend birim/entegrasyon | **133 passed** (`test_api_live` hariç) |
+| Backend birim/entegrasyon | **138 passed** (`test_api_live` hariç) |
 | `py_compile` (tüm ana modüller) | OK |
 | Statik sunucu (masaüstü) | 6/6 |
+| CORS (yeni `test_cors.py`) | 5/5 |
 | Canlı tarayıcı uçtan uca | PASS, 0 konsol hatası |
+| Paketli masaüstü uygulaması (gerçek LLM sohbeti) | PASS, 0 konsol hatası |
 | Giriş ekranı | PASS (light, 2 form, 3 input) |
 | JS sözdizimi (`node --check`) | OK (`app.js`, `config.js`, `main.js`, `preload.js`, `static-server.js`) |
 
@@ -145,7 +163,7 @@ Gerçek buluta dağıtım: ⛔ **BLOCKED** — platform hesabı + API anahtarı 
 |---|-------|-------|
 | 1 | Proje tanısı + geri dönüş noktası | ✅ PASS |
 | 2 | Gerçek çalışma testi | ✅ PASS |
-| 3 | Hata düzeltme (6 hata) | ✅ PASS |
+| 3 | Hata düzeltme (7 hata) | ✅ PASS |
 | 4 | Buton/etkileşim testi (24) | ✅ PASS |
 | 5 | Tasarım modernleştirme | ✅ PASS |
 | 6 | Telegram botu | ⚠️ Kod PASS / gerçek bağlantı BLOCKED (token) |
@@ -164,3 +182,14 @@ Gerçek buluta dağıtım: ⛔ **BLOCKED** — platform hesabı + API anahtarı 
 ### NOT RUN
 - `web_search_*` araçlarının canlı doğrulaması (dış servis bağımlılığı).
 - Gerçek bulut dağıtımı (engel: hesap).
+
+### Ek canlı kanıtlar (bu oturumda alındı)
+- **Misafir girişi uçtan uca:** "Misafir Girişi" → `/auth/guest` → JWT (`eyJhbG…`) yazıldı →
+  `sohbet.html` açıldı, kullanıcı adı "Misafir", **0 konsol hatası**.
+- **Telegram kontrol sayfası:** `telegram.html` yüklendi; butonlar (Yenile / Kaydet / Başlat /
+  Durdur / Gönder), durum dürüstçe "Durdu · TOKEN: Yok", **0 konsol hatası**.
+- **Masaüstü (dev + paket):** Electron penceresi başlığı "NEXUS-CORE"; gömülü sunucu
+  `127.0.0.1:8090` → `/sohbet.html` 200 (29.335 bayt); `main.js` paketli modda
+  `process.resourcesPath/studio` yolunu kullanır.
+- **`PORT` ortam değişkeni:** `PORT=8011` ile başlatılan motor `/health` → 200.
+

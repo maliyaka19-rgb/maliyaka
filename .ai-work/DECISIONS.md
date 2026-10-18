@@ -152,3 +152,16 @@
 - **Gerekce**: 10 - sifirdan dev yeniden yazim yok; test edilebilirlik.
 - **Etki**: Statik sunucu 6/6 PASS; Electron gercekten acildi (pencere "NEXUS-CORE", :8090).
   Paketlemede Windows sembolik link kisiti asildi (winCodeSign arsivi darwin haric cikarildi).
+
+## D-019 - CORS: geri dongu (loopback) origin'leri porttan bagimsiz izinli
+- **Baglam**: Masaustu (Electron) uygulamasi arayuzu 127.0.0.1:8090'dan servis eder;
+  bu origin izin listesinde olmadigi icin tarayici TUM API cagrilarini blokladi
+  ("Failed to fetch"). Uygulama hicbir veri yukleyemiyordu.
+- **Karar**: `allow_origin_regex` ile yalnizca geri dongu adreslerine
+  (`http://(localhost|127.0.0.1)(:\d+)?`) porttan bagimsiz izin ver; ayrica 8090
+  acikca eklendi. Dis origin'ler reddedilmeye devam eder; joker "*" KULLANILMADI.
+- **Gerekce**: 1.1 - gercek duzeltme; 9.4 - guvenlik (yalnizca kullanici makinesi);
+  masaustu uygulamasi 8090 doluysa rastgele port secebildigi icin regex sart.
+- **Etki**: Paketli uygulamadan gercek LLM yaniti alindi (DESKTOP_OK, 0 konsol hatasi);
+  yeni `tests/test_cors.py` 5/5 PASS. `render.yaml` icindeki yanlis ortam degiskeni
+  adi (`CORS_ALLOW_ORIGINS` -> `CORS_ORIGINS`) da duzeltildi.
