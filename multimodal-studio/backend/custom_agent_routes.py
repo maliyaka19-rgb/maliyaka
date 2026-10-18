@@ -45,6 +45,13 @@ class AgentUpdate(BaseModel):
     model: Optional[str] = None
 
 
+class TeamRunRequest(BaseModel):
+    """Team task request: uzman üretir, denetçi doğrular, lider birleştirir."""
+    message: str = Field(..., min_length=1, max_length=4000)
+    conversation_id: Optional[str] = None
+    refine: bool = Field(default=True)
+
+
 # ============================================================
 # ENDPOINTS
 # ============================================================
@@ -131,6 +138,58 @@ async def duplicate_agent_endpoint(agent_id: str):
         "success": True,
         "agent": agent,
         "message": f"'{agent['name']}' oluşturuldu"
+    }
+
+
+@router.post("/team/run", summary="Run agent team (uzman + denetçi + lider)")
+async def run_team_task(data: TeamRunRequest):
+    """Ekip çalıştır: uzman üretir → denetçi doğrular → lider birleştirip teslim eder."""
+    from custom_agents import auto_select_agent, get_agent
+    import ai_agent as _ai
+
+    message = data.message.strip()
+    conv = data.conversation_id
+    specialist_id = auto_select_agent(message)
+    if specialist_id in ("reviewer", "team-lead"):
+        specialist_id = "assistant"
+    specialist = get_agent(specialist_id) or {}
+
+    draft = await _ai.chat(message, conv, agent_id=specialist_id)
+    conv = draft.get("conversation_id", conv)
+    draft_text = (draft.get("response") or "")[:4000]
+    draft_tools = draft.get("tools_used", [])
+
+    review_prompt = (
+        f"Orijinal görev: {message}\n\n"
+        f"Uzman ({specialist_id}) taslağı:\n{draft_text}\n\n"
+        f"Kullanılan araçlar: {', '.join(draft_tools) if draft_tools else 'yok'}\n\n"
+        "Denetim yap: eksik/hata/yarım iş var mı? Varsa düzeltmeyi de yaz, yoksa ONAYLANDI de."
+    )
+    review = await _ai.chat(review_prompt, conv, agent_id="reviewer")
+    review_text = (review.get("response") or "")[:4000]
+
+    if data.refine:
+        merge_prompt = (
+            f"Orijinal görev: {message}\n\n"
+            f"Uzman çıktısı:\n{draft_text}\n\n"
+            f"Denetçi raporu:\n{review_text}\n\n"
+            "Bunları TEK final sonuca birleştir: dosya/görsel/video + net açıklama. Eksik varsa belirt."
+        )
+        final = await _ai.chat(merge_prompt, conv, agent_id="team-lead")
+    else:
+        final = review if review.get("success") else draft
+
+    return {
+        "success": bool(final.get("success")),
+        "response": final.get("response", ""),
+        "conversation_id": final.get("conversation_id", conv),
+        "specialist": {"id": specialist_id, "name": specialist.get("name", specialist_id)},
+        "stages": {
+            "draft": {"agent_id": specialist_id, "success": draft.get("success"), "tools_used": draft_tools},
+            "review": {"agent_id": "reviewer", "success": review.get("success")},
+            "final": {"agent_id": "team-lead" if data.refine else review.get("agent_id", "reviewer")},
+        },
+        "tools_used": list(dict.fromkeys((draft_tools or []) + (final.get("tools_used", []) or []))),
     }
 
 

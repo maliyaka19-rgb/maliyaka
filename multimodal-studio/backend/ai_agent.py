@@ -440,14 +440,15 @@ Kurallar:
             })
             
             max_iterations = 25
+            iteration = -1
             for iteration in range(max_iterations):
                 llm_response = await self._call_llm(messages)
-                
-                if not llm_response.get("success"):
-                    # Fallback will be handled in _call_llm
-                    pass
-                
-                response_data = llm_response["data"]
+
+                if not llm_response.get("success") or "data" not in llm_response:
+                    logger.warning(f"LLM call failed in iteration {iteration}: {llm_response.get('error', 'unknown')}")
+                    continue
+
+                response_data = llm_response["data"] or {}
                 choices = response_data.get("choices", [])
                 
                 if not choices:
@@ -472,11 +473,20 @@ Kurallar:
                 messages.append(message)
                 
                 for tool_call in tool_calls:
-                    func_name = tool_call["function"]["name"]
+                    if not isinstance(tool_call, dict):
+                        logger.warning("Skipping malformed tool_call (not a dict)")
+                        continue
+                    fn = tool_call.get("function") or {}
+                    func_name = fn.get("name")
+                    call_id = tool_call.get("id")
+                    if not func_name or not call_id:
+                        logger.warning(f"Skipping malformed tool_call (name={func_name!r}, id={call_id!r})")
+                        continue
                     try:
-                        func_args = json.loads(tool_call["function"]["arguments"])
+                        raw_args = fn.get("arguments", "{}") or "{}"
+                        func_args = json.loads(raw_args) if isinstance(raw_args, str) else (raw_args if isinstance(raw_args, dict) else {})
                     except json.JSONDecodeError:
-                        logger.warning(f"Invalid JSON in tool args: {tool_call['function']['arguments'][:100]}")
+                        logger.warning(f"Invalid JSON in tool args: {str(fn.get('arguments', ''))[:100]}")
                         func_args = {}
                     
                     # Add tool thinking step
@@ -502,7 +512,7 @@ Kurallar:
                     
                     messages.append({
                         "role": "tool",
-                        "tool_call_id": tool_call["id"],
+                        "tool_call_id": call_id,
                         "content": json.dumps(tool_result, ensure_ascii=False)
                     })
 
@@ -524,7 +534,7 @@ Kurallar:
                         role="assistant", content=message.get("content", ""), tool_calls=[tool_call]
                     ))
                     self.memory.add_message(conversation_id, Message(
-                        role="tool", content=json.dumps(tool_result, ensure_ascii=False), tool_call_id=tool_call["id"]
+                        role="tool", content=json.dumps(tool_result, ensure_ascii=False), tool_call_id=call_id
                     ))
             
             # If loop ended without a text response, make one final call WITHOUT tools
@@ -538,9 +548,8 @@ Kurallar:
                     provider = getattr(self, 'provider', 'openrouter')
                     
                     if api_key and api_key not in ("sk-placeholder", ""):
-                        # Trim messages to avoid token limits - keep system + last 30 messages
-                        final_messages = [messages[0]] if messages else []
-                        final_messages.extend(messages[-30:])
+                        # Trim messages to avoid token limits (same safe window as _call_llm).
+                        final_messages = self._safe_window(messages, max_messages=20)
                         final_messages.append({
                             "role": "user",
                             "content": f"Kullanıcının sorusu: {user_message}\n\nYukarıdaki tüm araç sonuçlarını analiz et ve kullanıcının sorusuna kapsamlı bir yanıt ver. Sadece metin yanıt ver, tool kullanma."
@@ -767,10 +776,17 @@ Kurallar:
         """
         allowed = getattr(self, "_active_tools", None)
         if not allowed:
-            return TOOLS
+            return list(TOOLS)
+        if not isinstance(allowed, (list, tuple, set)):
+            logger.warning(f"Invalid _active_tools type {type(allowed).__name__}; using full TOOLS")
+            return list(TOOLS)
         wanted = set(allowed)
         filtered = [t for t in TOOLS if t.get("function", {}).get("name") in wanted]
-        return filtered or TOOLS
+        if not filtered:
+            unknown = sorted(wanted - {t.get("function", {}).get("name") for t in TOOLS})
+            logger.warning(f"Agent tool allow-list matched nothing (unknown={unknown}); using full TOOLS")
+            return list(TOOLS)
+        return filtered
 
     def _safe_window(self, messages: List[Dict], max_messages: int = 20) -> List[Dict]:
         """Return a token-safe window of the conversation.
@@ -784,15 +800,20 @@ Kurallar:
         """
         if not messages:
             return messages
-        system = messages[0]
-        rest = messages[1:]
+        # messages[0] is system in our chat() flow; tolerate missing system.
+        if isinstance(messages[0], dict) and messages[0].get("role") == "system":
+            system = messages[0]
+            rest = messages[1:]
+        else:
+            system = None
+            rest = list(messages)
         if len(rest) <= max_messages:
             window = list(rest)
         else:
             start = len(rest) - max_messages
             while start < len(rest):
                 m = rest[start]
-                role = m.get("role")
+                role = m.get("role") if isinstance(m, dict) else None
                 if role == "user":
                     break
                 if role == "assistant" and not m.get("tool_calls"):
@@ -800,17 +821,43 @@ Kurallar:
                 start += 1
             window = list(rest[start:])
 
-        def _chars(msgs) -> int:
-            return sum(len(json.dumps(m, ensure_ascii=False)) for m in msgs)
+        def _msg_len(m) -> int:
+            try:
+                return len(json.dumps(m, ensure_ascii=False))
+            except Exception:
+                return len(str(m))
 
-        # Defensive hard cap: drop oldest turns until under ~28k chars.
-        while len(window) > 2 and _chars(window) > 28000:
+        # Truncate any single oversized turn (huge tool output) to ~8k chars.
+        trimmed = []
+        for m in window:
+            if isinstance(m, dict) and isinstance(m.get("content"), str) and len(m["content"]) > 8000:
+                m = dict(m)
+                m["content"] = m["content"][:8000] + "\n…[kırpıldı: çok uzun çıktı]"
+            trimmed.append(m)
+        window = trimmed
+
+        total = sum(_msg_len(m) for m in window)
+        while len(window) > 2 and total > 28000:
             window.pop(0)
-            while window and window[0].get("role") != "user" and not (
-                window[0].get("role") == "assistant" and not window[0].get("tool_calls")
-            ):
+            while window:
+                r0 = window[0].get("role") if isinstance(window[0], dict) else None
+                if r0 == "user":
+                    break
+                if r0 == "assistant" and not window[0].get("tool_calls"):
+                    break
                 window.pop(0)
-        return [system] + window
+            total = sum(_msg_len(m) for m in window)
+        # Never end on assistant(tool_calls) without its tool answers.
+        while window:
+            last = window[-1]
+            if isinstance(last, dict) and last.get("role") == "assistant" and last.get("tool_calls"):
+                window.pop()
+            else:
+                break
+        # Never start on a tool message whose assistant call was cut off.
+        while window and isinstance(window[0], dict) and window[0].get("role") == "tool":
+            window.pop(0)
+        return ([system] if system is not None else []) + window
 
     async def _call_llm(self, messages: List[Dict]) -> Dict:
         """Call the LLM API with tools. Comprehensive multi-provider, multi-model fallback + response validation."""
@@ -973,7 +1020,10 @@ Kurallar:
         per-model quota buckets and usually succeed immediately.
         """
         from model_routes import MODEL_CATALOG, _is_valid_key, _load_config
-        
+
+        # Same token guard as the primary call: a 413 in fallback ends the task.
+        messages = self._safe_window(messages)
+
         config = _load_config()
         api_keys = config.get("api_keys", {})
         
@@ -1440,10 +1490,10 @@ def reset_agent_v6():
     return get_agent_v6()
 
 
-async def chat(user_message: str, conversation_id: str = None, agent_id: str = None) -> Dict:
+async def chat(user_message: str, conversation_id: str = None, history=None, agent_id: str = None) -> Dict:
     """Quick chat function."""
     agent = get_agent_v6()
-    return await agent.chat(user_message, conversation_id, agent_id=agent_id)
+    return await agent.chat(user_message, conversation_id, history=history, agent_id=agent_id)
 
 
 def get_agent_info() -> Dict:

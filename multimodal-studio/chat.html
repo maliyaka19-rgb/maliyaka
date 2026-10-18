@@ -1,56 +1,81 @@
 <!DOCTYPE html>
-<html lang="tr">
+<html lang="tr" data-theme="light">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>NEXUS-CORE — Multimodal Creative Studio</title>
+    <script>(function(){try{var t=localStorage.getItem('nexus_theme')||'light';document.documentElement.setAttribute('data-theme',t);}catch(e){document.documentElement.setAttribute('data-theme','light');}})();</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
     <style>
-        /* ===== CSS VARIABLES ===== */
+        /* ===== CSS VARIABLES — LIGHT DEFAULT (sohbet ile aynı) ===== */
         :root {
-            /* Background */
-            --bg: #06060c;
-            --bg-gradient: linear-gradient(160deg, #06060c 0%, #12121e 40%, #0d0a1a 70%, #06060c 100%);
-            --bg-surface: rgba(18, 18, 30, 0.6);
-            --bg-surface-elevated: rgba(25, 25, 42, 0.8);
+            color-scheme: light;
+            --bg: #F8FAFC;
+            --bg-gradient: linear-gradient(160deg, #F8FAFC 0%, #FFFFFF 50%, #EFF6FF 100%);
+            --bg-surface: #FFFFFF;
+            --bg-surface-elevated: #FFFFFF;
 
-            /* Text */
-            --fg: #f4f4f6;
-            --fg-muted: #9898a6;
-            --fg-dim: #5e5e6e;
+            --fg: #1E293B;
+            --fg-muted: #64748B;
+            --fg-dim: #94A3B8;
 
-            /* Accents */
-            --accent: #6d5cf6;
-            --accent-hover: #5b4ae8;
-            --accent-glow: rgba(109, 92, 246, 0.4);
-            --accent-gradient: linear-gradient(135deg, #6d5cf6 0%, #9d5cf6 50%, #c45cf6 100%);
-            --accent-soft: rgba(109, 92, 246, 0.12);
+            --accent: #3B82F6;
+            --accent-hover: #2563EB;
+            --accent-glow: rgba(59, 130, 246, 0.25);
+            --accent-gradient: linear-gradient(135deg, #3B82F6 0%, #10B981 100%);
+            --accent-soft: rgba(59, 130, 246, 0.10);
 
-            /* Semantic */
             --success: #10b981;
-            --success-glow: rgba(16, 185, 129, 0.35);
+            --success-glow: rgba(16, 185, 129, 0.25);
             --danger: #ef4444;
-            --danger-glow: rgba(239, 68, 68, 0.35);
+            --danger-glow: rgba(239, 68, 68, 0.25);
             --warning: #f59e0b;
 
-            /* Borders */
-            --border: rgba(48, 48, 72, 0.6);
-            --border-strong: rgba(70, 70, 100, 0.8);
-            --input-bg: rgba(12, 12, 22, 0.6);
-            --input-border: rgba(55, 55, 82, 0.8);
+            --border: #E2E8F0;
+            --border-strong: #CBD5E1;
+            --input-bg: #FFFFFF;
+            --input-border: #CBD5E1;
 
             /* Effects */
             --shadow-sm: 0 2px 8px rgba(0, 0, 0, 0.4);
             --shadow-md: 0 8px 24px rgba(0, 0, 0, 0.5);
             --shadow-lg: 0 20px 40px rgba(0, 0, 0, 0.6);
-            --shadow-glow: 0 0 60px rgba(109, 92, 246, 0.15);
+            --shadow-glow: 0 0 60px rgba(59, 130, 246, 0.12);
             --radius-sm: 8px;
             --radius-md: 12px;
             --radius-lg: 16px;
             --radius-xl: 20px;
             --radius-full: 9999px;
+        }
+
+        /* Dark tema (opsiyonel geri dönüş) */
+        [data-theme="dark"] {
+            color-scheme: dark;
+            --bg: #06060c;
+            --bg-gradient: linear-gradient(160deg, #06060c 0%, #12121e 40%, #0d0a1a 70%, #06060c 100%);
+            --bg-surface: rgba(18, 18, 30, 0.6);
+            --bg-surface-elevated: rgba(25, 25, 42, 0.8);
+            --fg: #f4f4f6;
+            --fg-muted: #9898a6;
+            --fg-dim: #5e5e6e;
+            --accent: #6d5cf6;
+            --accent-hover: #5b4ae8;
+            --accent-glow: rgba(109, 92, 246, 0.4);
+            --accent-gradient: linear-gradient(135deg, #6d5cf6 0%, #9d5cf6 50%, #c45cf6 100%);
+            --accent-soft: rgba(109, 92, 246, 0.12);
+            --border: rgba(48, 48, 72, 0.6);
+            --border-strong: rgba(70, 70, 100, 0.8);
+            --input-bg: rgba(12, 12, 22, 0.6);
+            --input-border: rgba(55, 55, 82, 0.8);
+            --shadow-glow: 0 0 60px rgba(109, 92, 246, 0.15);
+        }
+        .theme-toggle {
+            position: fixed; top: 14px; right: 14px; z-index: 50;
+            width: 38px; height: 38px; border-radius: 10px;
+            border: 1px solid var(--border); background: var(--bg-surface);
+            color: var(--fg); cursor: pointer; font-size: 17px;
         }
 
         /* ===== RESET ===== */
@@ -187,11 +212,10 @@
             width: 100%;
             max-width: 400px;
             padding: 28px;
-            background: rgba(12, 12, 22, 0.75);
-            backdrop-filter: blur(16px);
+            background: var(--bg-surface);
             border: 1px solid var(--border);
             border-radius: var(--radius-xl);
-            box-shadow: var(--shadow-lg), var(--shadow-glow);
+            box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
             animation: scaleIn 0.5s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
@@ -243,13 +267,12 @@
 
         .auth-header h1 {
             font-size: 1.3rem;
-            font-weight: 600;
+            font-weight: 700;
             letter-spacing: -0.01em;
             margin-bottom: 4px;
-            background: linear-gradient(135deg, #fff 0%, #c4c4d0 100%);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            background-clip: text;
+            color: var(--fg);
+            background: none;
+            -webkit-text-fill-color: currentcolor;
         }
 
         .auth-subtitle {
@@ -306,8 +329,8 @@
 
         .form-field input:focus {
             border-color: var(--accent);
-            box-shadow: 0 0 0 3px var(--accent-soft), 0 0 20px rgba(109, 92, 246, 0.1);
-            background: rgba(12, 12, 22, 0.9);
+            box-shadow: 0 0 0 3px var(--accent-soft);
+            background: #fff;
         }
 
         .form-field input:hover:not(:focus) {
@@ -959,6 +982,7 @@
     </style>
 </head>
 <body>
+    <button class="theme-toggle" id="theme-toggle" title="Tema değiştir">🌙</button>
     <!-- Floating background orbs -->
     <div class="bg-orbs">
         <div class="bg-orb bg-orb-1"></div>
@@ -1041,6 +1065,23 @@
         'use strict';
 
         const AUTH_API = 'http://localhost:8000/api/v1/auth';
+
+        // ===== THEME (light varsayılan, sohbet ile aynı) =====
+        (function initTheme(){
+            const btn = document.getElementById('theme-toggle');
+            function paint(){
+                const t = document.documentElement.getAttribute('data-theme') || 'light';
+                if (btn) btn.textContent = (t === 'light') ? '🌙' : '☀️';
+            }
+            if (btn) btn.addEventListener('click', () => {
+                const cur = document.documentElement.getAttribute('data-theme') || 'light';
+                const nxt = (cur === 'light') ? 'dark' : 'light';
+                document.documentElement.setAttribute('data-theme', nxt);
+                try { localStorage.setItem('nexus_theme', nxt); } catch(e){}
+                paint();
+            });
+            paint();
+        })();
 
         // ===== STATE =====
         let isLoginMode = true;

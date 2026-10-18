@@ -119,7 +119,7 @@ async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optiona
                     "icon": selected_agent["icon"]
                 }
         
-        result = await chat(request.message, conversation_id, agent_id=agent_id)
+        result = await chat(request.message, conversation_id, history=request.history, agent_id=agent_id)
         
         # Add selected agent info to result
         if selected_agent_info:
@@ -138,6 +138,13 @@ async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optiona
                 new_title = request.message[:10] + ("..." if len(request.message) > 10 else "")
                 auth_service.update_chat_title(chat_id_for_persistence, current_user.id, new_title)
         
+        if not isinstance(result, dict):
+            result = {"success": False, "response": "", "conversation_id": conversation_id or "", "error": "Boş ajan yanıtı"}
+        result.setdefault("success", False)
+        result.setdefault("response", result.get("error") or "")
+        result.setdefault("conversation_id", conversation_id or "")
+        result.setdefault("tools_used", [])
+        result.setdefault("thinking_steps", [])
         return ChatResponse(**result)
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
