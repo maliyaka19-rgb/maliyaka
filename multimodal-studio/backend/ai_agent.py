@@ -130,7 +130,9 @@ def _validate_response(data: Dict) -> bool:
 
 # How many times to retry the SAME provider/model after a 429 (rate limit)
 # before falling back to other models/providers.
-_RATE_LIMIT_MAX_RETRIES = 3
+# Dusuk tut: uzun bekleme yerine fallback zinciri (diger modeller/saglayicilar) calsin.
+_RATE_LIMIT_MAX_RETRIES = 1
+_MAX_RATE_LIMIT_WAIT = 5.0  # saniye - Retry-After uzun donse bile kisitla
 
 
 def _parse_retry_after(response, default: float = 20.0) -> float:
@@ -590,7 +592,7 @@ Kurallar:
                                 resp = await client.post(f"{base_url}/chat/completions", headers=headers, json=payload)
                                 if resp.status_code != 429 or attempt >= _RATE_LIMIT_MAX_RETRIES:
                                     break
-                                wait = _parse_retry_after(resp)
+                                wait = min(_parse_retry_after(resp), _MAX_RATE_LIMIT_WAIT)
                                 logger.warning(
                                     f"Final call rate limited (429); waiting {wait:.1f}s "
                                     f"before retry {attempt + 1}/{_RATE_LIMIT_MAX_RETRIES}"
@@ -973,16 +975,15 @@ Kurallar:
                         headers["HTTP-Referer"] = "http://localhost:8080"
                         headers["X-Title"] = "NEXUS-CORE"
                 
-                # Rate-limit aware retry: a 429 (e.g. Groq TPM limit) is TEMPORARY,
-                # so wait for the quota window to refill and retry the SAME provider
-                # /model before cascading. This is exactly what lets multi-step tool
-                # tasks (write 3-4 files) survive the per-minute token cap.
+                # Rate-limit aware retry: a 429 (e.g. Groq TPM limit) is TEMPORARY.
+                # Bekleme sureini kisitla (_MAX_RATE_LIMIT_WAIT) ve cok deneme yapma;
+                # fallback zinciri (diger modeller/saglayicilar) calsin.
                 response = None
                 for attempt in range(_RATE_LIMIT_MAX_RETRIES + 1):
                     response = await client.post(url, headers=headers, json=payload)
                     if response.status_code != 429 or attempt >= _RATE_LIMIT_MAX_RETRIES:
                         break
-                    wait = _parse_retry_after(response)
+                    wait = min(_parse_retry_after(response), _MAX_RATE_LIMIT_WAIT)
                     logger.warning(
                         f"Rate limited (429) on {provider}/{model}; waiting "
                         f"{wait:.1f}s before retry {attempt + 1}/{_RATE_LIMIT_MAX_RETRIES}"
@@ -1305,7 +1306,23 @@ Kurallar:
         
         if is_video:
             return await self._run_video_tool(user_msg, q)
-        
+
+        # Weather queries: use web search even in fallback
+        if any(kw in q for kw in ["hava durumu", "hava nasıl", "hava nasil", "weather", "derece", "sıcaklık", "sicaklik", "yağmur", "yagmur", "kar", "rüzgâr", "ruzgar", "nem"]):
+            try:
+                results = await web_search_unified(user_msg, 3)
+                if results:
+                    snippets = []
+                    for r in results:
+                        snippet = r.get("snippet", "").strip()
+                        if snippet:
+                            snippets.append(snippet[:200])
+                    if snippets:
+                        combined = " | ".join(snippets[:3])
+                        return self._llm_style(f"🌤️ **Hava durumu bilgisi (web araması):**\n\n{combined}\n\n*Kaynak: DuckDuckGo web araması*")
+            except Exception:
+                pass  # Fall through to generic answer
+
         # Question answering (rule-based knowledge)
         return self._llm_style(self._answer_question(user_msg))
     
