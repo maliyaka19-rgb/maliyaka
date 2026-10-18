@@ -165,3 +165,17 @@
 - **Etki**: Paketli uygulamadan gercek LLM yaniti alindi (DESKTOP_OK, 0 konsol hatasi);
   yeni `tests/test_cors.py` 5/5 PASS. `render.yaml` icindeki yanlis ortam degiskeni
   adi (`CORS_ALLOW_ORIGINS` -> `CORS_ORIGINS`) da duzeltildi.
+
+## D-020 - Tek servis mimarisi + `API_BASE` otomatik algilama duzeltmesi
+- **Baglam**: Ucretsiz genel yayin (tunel/hosting) icin tek adres gerekiyordu. Eski
+  `API_BASE` kurali her zaman `<ayni-host>:8000` uretiyordu; `https://xxx.trycloudflare.com`
+  adresinde bu `https://xxx.trycloudflare.com:8000` gibi GECERSIZ bir adrese donusuyor ve
+  istek sessizce basarisiz oluyordu (misafir girisi calismiyordu).
+- **Karar**: (a) Backend arayuzu de servis eder: `app.py` sonunda
+  `app.mount("/", StaticFiles(directory=UI_DIR, html=True))` (mount EN SONDA; API rotalari
+  onceligini korur). (b) `API_BASE` sirasi: `window.NEXUS_API_BASE` -> sayfa 8080/8090
+  portundan geliyorsa `<ayni-host>:8000` -> **aksi halde `location.origin` (ayni origin)**.
+- **Gerekce**: 7 - dagitilabilirlik; 1.1 - gercek duzeltme; 6.3 - CORS/config gerektirmez.
+- **Etki**: Yerel `localhost:8000/sohbet.html` calisiyor; genel tunel adresinde misafir
+  girisi + gercek LLM sohbeti 0 konsol hatasiyla dogrulandi; 138 backend testi PASS;
+  yerel 8080 ve masaustu 8090 davranisi bozulmadi. `tunnel.ps1` ile hesapsiz yayin.

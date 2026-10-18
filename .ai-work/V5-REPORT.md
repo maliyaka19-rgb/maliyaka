@@ -193,3 +193,41 @@ Gerçek buluta dağıtım: ⛔ **BLOCKED** — platform hesabı + API anahtarı 
   `process.resourcesPath/studio` yolunu kullanır.
 - **`PORT` ortam değişkeni:** `PORT=8011` ile başlatılan motor `/health` → 200.
 
+---
+
+## EK — Oturum 13: Ücretsiz genel yayın (gerçekten yapıldı) ✅
+
+Soru: *"ücretsiz bir sunucuya kurdun mu?"* → **Evet, artık kurdum.** Hesap, kart veya token
+gerektirmeyen yöntem: **Cloudflare Quick Tunnel**.
+
+### Ne değişti (gerçek kod)
+1. `backend/app.py` — **arayüzü de servis eder**: en sona
+   `app.mount("/", StaticFiles(directory=UI_DIR, html=True))` eklendi.
+   Böylece tek adreste hem arayüz hem API (aynı origin).
+2. `multimodal-studio/index.html` (yeni) — kök adres açılış/yönlendirme sayfası.
+3. **D-020 düzeltmesi** — `API_BASE` tünel adresinde bozuk üretiliyordu
+   (`...trycloudflare.com:8000`). Yeni: config → 8080/8090 ise `<aynı-host>:8000` → aksi halde **aynı origin**.
+   Dosyalar: `js/app.js`, `chat.html`, `telegram.html`, `config.js`.
+4. `multimodal-studio/tunnel.ps1` (yeni) — cloudflared'i indirir + tüneli açar + adresi yazar.
+5. `DEPLOY.md` — bölüm 3b (ücretsiz anlık yayın); Render artık **tek servis**.
+
+### Kanıt
+| Test | Sonuç |
+|------|-------|
+| Yerel backend arayüzü servis ediyor (`/sohbet.html`, `/js/app.js`, `/css/style.css`, `/config.js`) | ✅ 200 |
+| Yerel `/` API bilgisi korundu | ✅ 200 JSON |
+| `pytest tests/` (canlı hariç) | ✅ **138 PASS** |
+| Yerel 8080 regresyon (20 ajan, 6 sağlayıcı, light tema, 0 hata) | ✅ PASS |
+| Genel URL dış fetch: `/health`, `/sohbet.html`, `/api/v1/agents`, `/api/v1/models/catalog` | ✅ 200 (20 ajan) |
+| Genel URL: misafir girişi → JWT → `/auth/me` 200 ("Misafir") | ✅ PASS |
+| Genel URL: gerçek LLM sohbeti ("Sadece BULUT_OK yaz." → `BULUT_OK`) | ✅ PASS, **0 konsol hatası** |
+| Tünel kararlılığı | ✅ 12/12 istek, ~85 ms |
+
+**Genel adres (bu oturumda):** `https://dimensions-dogs-loc-newest.trycloudflare.com`
+
+### Dürüst sınırlar
+- Adres **geçicidir**; her başlatmada değişir ve `tunnel.ps1` penceresi kapanınca yayın durur.
+- İlk dakikada bir kez kısa süreli `ERR_TUNNEL_CONNECTION_FAILED` görüldü; birkaç saniyede düzeldi.
+- **Kalıcı** ücretsiz bulut dağıtımı (Render) hâlâ **BLOCKED**: platform hesabı + API anahtarı gerekir.
+- Telegram botu hâlâ **BLOCKED**: @BotFather token'ı gerekir.
+

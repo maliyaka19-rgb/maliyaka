@@ -481,4 +481,42 @@ Tam rapor: **`.ai-work/V5-REPORT.md`**. Özet:
 `desktop/` (yeni: main.js, preload.js, static-server.js, test-server.js, package.json, README.md),
 `render.yaml` (yeni), `multimodal-studio/DEPLOY.md` (yeni), `.ai-work/V5-REPORT.md` (yeni).
 
+---
+
+## Oturum 13 — 2026-10-18 · Ücretsiz genel yayın (Cloudflare Quick Tunnel, hesapsız) ✅
+
+Kullanıcı sorusu: **"ücretsiz bir sunucuya kurdun mu?"** Dürüst başlangıç durumu:
+yalnızca dağıtım dosyaları hazırdı; gerçek dağıtım hesap gerektirdiği için yapılmamıştı.
+
+### Yapılan iş (hesap/token/kart GEREKMEYEN gerçek yayın)
+1. **Tek servis mimarisi**: `backend/app.py` sonuna `app.mount("/", StaticFiles(...))` eklendi.
+   Backend artık arayüzü de servis eder → arayüz + API **aynı origin**.
+   `/health`, `/docs`, tüm `/api/v1/*` rotaları önceliğini korur (mount en sonda).
+2. **`index.html`** (yeni): kök adres için yönlendirme/açılış sayfası (statik host'lar için giriş noktası).
+3. **GERÇEK HATA (D-020) — `API_BASE` otomatik algılama**:
+   eski mantık `\`${protocol}//${hostname}:8000\`` üretiyordu → tünel/hosting adresinde
+   `https://xxx.trycloudflare.com:8000` gibi **geçersiz** adres → istek sessizce başarısız.
+   Yeni kural: config → geliştirme portları (8080/8090) `<aynı-host>:8000` → **aksi halde aynı origin**.
+   Düzeltildi: `js/app.js`, `chat.html`, `telegram.html`, `config.js` (açıklama).
+4. **`tunnel.ps1`** (yeni): cloudflared'i (yoksa indirir) backend'e bağlar, genel HTTPS adresi verir.
+5. **`DEPLOY.md`**: yeni bölüm 3b (ücretsiz anlık yayın) + Render artık **tek servis**.
+
+### Kanıt (gerçekten test edildi)
+| Test | Sonuç |
+|------|-------|
+| Yerel arayüz backend'den (`/sohbet.html`, `/js/app.js`, `/css/style.css`, `/config.js`) | ✅ 200 |
+| Yerel `/` (API bilgisi) korundu | ✅ 200 JSON |
+| Backend testleri | ✅ **138 PASS** |
+| Genel URL dış fetch (`/health`, `/sohbet.html`, `/api/v1/agents`, `/api/v1/models/catalog`) | ✅ 200 (20 ajan) |
+| Genel URL'de **misafir girişi** (JWT, `/auth/me` 200 "Misafir") | ✅ PASS |
+| Genel URL'de **gerçek LLM sohbeti** ("BULUT_OK") | ✅ PASS, **0 konsol hatası** |
+| Tünel kararlılığı (12 art arda istek) | ✅ 12/12, ~85 ms |
+| Yerel 8080 regresyon (20 ajan, 6 sağlayıcı, 0 hata) | ✅ PASS |
+| Genel adres | `https://dimensions-dogs-loc-newest.trycloudflare.com` (geçici) |
+
+### Dürüst sınırlar (BLOCKED / NOT RUN)
+- Adres **geçici**: her başlatmada değişir, pencere kapanınca yayın durur.
+- Tünel ilk dakikada bir kez kısa süreli `ERR_TUNNEL_CONNECTION_FAILED` verdi (kendi kendine düzeldi).
+- **Kalıcı** ücretsiz dağıtım (Render vb.) hâlâ **BLOCKED** — platform hesabı + API anahtarı gerekir.
+
 

@@ -10,10 +10,21 @@
         function initApp() {
         'use strict';
 
-        // Backend kök adresi. Yerelde 8000 portu; dağıtımda (hosting) ya
-        // `window.NEXUS_API_BASE` ya da `config.js` ile değiştirilebilir.
+        // Backend kök adresi. Öncelik: `window.NEXUS_API_BASE` (config.js) >
+        // otomatik algılama.
+        //
+        // Otomatik kural:
+        //  - Sayfa kendi statik geliştirme sunucumuzdan geliyorsa (8080 arayüz,
+        //    8090 masaüstü) backend aynı makinede 8000 portundadır.
+        //  - Aksi halde (backend arayüzü de servis ediyor: yerel 8000, tünel,
+        //    ücretsiz hosting) AYNI ORIGIN kullanılır. Bu sayede tünel/hosting
+        //    adresinde `:8000` gibi geçersiz bir adres üretilmez.
+        const _STATIC_DEV_PORTS = ['8080', '8090'];
         const API_BASE = (
             (typeof window !== 'undefined' && window.NEXUS_API_BASE)
+            || (_STATIC_DEV_PORTS.indexOf(location.port) !== -1
+                ? `${location.protocol}//${location.hostname}:8000`
+                : location.origin)
             || `${location.protocol}//${location.hostname || 'localhost'}:8000`
         ).replace(/\/+$/, '');
 

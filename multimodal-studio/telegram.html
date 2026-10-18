@@ -150,9 +150,12 @@
 
 <script src="config.js?v=1"></script>
 <script>
+const _STATIC_DEV_PORTS = ['8080', '8090'];
 const API_BASE = (
   (typeof window !== 'undefined' && window.NEXUS_API_BASE)
-  || `${location.protocol}//${location.hostname || 'localhost'}:8000`
+  || (_STATIC_DEV_PORTS.indexOf(location.port) !== -1
+      ? `${location.protocol}//${location.hostname}:8000`
+      : location.origin)
 ).replace(/\/+$/, '');
 const API = `${API_BASE}/api/v1/telegram`;
 const AGENTS_API = `${API_BASE}/api/v1/agents`;

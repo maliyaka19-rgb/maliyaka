@@ -1330,3 +1330,24 @@ window.onload = function() {
 </script>
 </body>
 </html>""")
+
+
+# ============================================================
+# ARAYÜZ (STATİK) — TEK SERVİS DAĞITIMI
+# ============================================================
+# Backend, arayüzü (sohbet.html, js/, css/ ...) de servis eder.
+# Böylece hem yerelde hem de hosting'de TEK adres yeterlidir:
+# arayüz ve API aynı origin'de olduğu için CORS ve config gerekmez.
+#
+# Bu mount EN SON eklenir; böylece /health, /docs ve tüm /api/v1/* rotaları
+# önceliğini korur (Starlette rotaları kayıt sırasına göre eşleştirir).
+from fastapi.staticfiles import StaticFiles  # noqa: E402
+
+_UI_DIR = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
+if os.path.isdir(_UI_DIR) and os.path.exists(os.path.join(_UI_DIR, "sohbet.html")):
+    app.mount("/", StaticFiles(directory=_UI_DIR, html=True), name="ui")
+    logger.info("Arayüz statik olarak servis ediliyor: %s", _UI_DIR)
+else:
+    logger.warning(
+        "Arayüz klasörü bulunamadı; yalnızca API servis edilecek: %s", _UI_DIR
+    )

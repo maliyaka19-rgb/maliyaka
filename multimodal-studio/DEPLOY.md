@@ -13,8 +13,16 @@ sınırlarını anlatır. Kod tarafındaki tüm hazırlıklar yapıldı ve test 
 | Arayüz | Statik (HTML/CSS/JS) | `sohbet.html`, `chat.html`, `telegram.html` |
 | Motor | FastAPI (Python 3.11) | `backend/app.py` |
 
-Arayüz, backend adresini `config.js` içindeki `window.NEXUS_API_BASE` üzerinden
-okur. **Yerelde hiçbir ayar gerekmez** (otomatik `http://localhost:8000`).
+**Backend, arayüzü de servis eder.** `backend/app.py` en sonunda statik dosyalar
+`/` altına bağlanır (`StaticFiles`). Böylece arayüz ve API **aynı origin**'de
+çalışır: CORS ayarı ve `config.js` düzenlemesi **gerekmez**.
+
+Arayüz, backend adresini şu sırayla belirler:
+1. `window.NEXUS_API_BASE` (config.js) — doluysa onu kullanır.
+2. Sayfa `8080` (arayüz) veya `8090` (masaüstü) portundan geliyorsa → `<aynı-host>:8000`.
+3. Aksi halde (backend arayüzü de servis ediyor: yerel 8000, tünel, hosting) → **aynı origin**.
+
+Tek servis dağıtımı sayesinde ücretsiz platformda **tek** uygulama yeterlidir.
 
 ---
 
@@ -45,20 +53,39 @@ okur. **Yerelde hiçbir ayar gerekmez** (otomatik `http://localhost:8000`).
 
 ---
 
-## 4. Render ile dağıtım (adım adım)
+## 3b. Ücretsiz ANLIK genel yayın (Cloudflare Quick Tunnel) — hesap GEREKMEZ
+
+Kayıt, kart veya token olmadan uygulamayı **genel bir HTTPS adresine** açar:
+
+```powershell
+cd multimodal-studio
+powershell -ExecutionPolicy Bypass -File .\tunnel.ps1
+```
+
+Çıktıdaki `https://<rastgele>.trycloudflare.com` adresini tarayıcıda açın.
+
+Bu yol **gerçekten test edildi** (bkz. `.ai-work/V5-REPORT.md`): genel adres
+üzerinden misafir girişi + gerçek LLM sohbeti 0 konsol hatasıyla çalıştı.
+
+> ⚠️ Dürüst sınırlar: adres **geçicidir** ve her başlatmada değişir; pencere
+> kapanınca yayın durur; tünel ara sıra kısa süreli kopabilir (birkaç saniye
+> içinde kendini toparlar). Kalıcı adres için aşağıdaki Render yolu gerekir.
+
+---
+
+## 4. Render ile kalıcı dağıtım (adım adım)
+
+Arayüz de backend'den servis edildiği için **tek servis** yeterlidir.
 
 1. Kodu bir GitHub deposuna gönderin (`multimodal-studio/` ve `render.yaml` dahil).
 2. [render.com](https://render.com) → **New +** → **Blueprint** → depoyu seçin.
-3. Render `render.yaml`'ı okur ve iki servis oluşturur.
+3. Render `render.yaml`'ı okur ve servisi oluşturur (Docker).
 4. Panelde şu gizli değerleri girin:
    - `GROQ_API_KEY` → Groq konsolundan aldığınız anahtar
    - `NEXUS_ENCRYPTION_PASSPHRASE` → rastgele uzun bir parola
-   - `CORS_ALLOW_ORIGINS` → örn. `https://nexus-core-ui.onrender.com`
-5. Statik sitenin `config.js` dosyasında backend adresini yazın:
-   ```js
-   window.NEXUS_API_BASE = "https://nexus-core-backend.onrender.com";
-   ```
-6. Backend sağlığını doğrulayın: `https://nexus-core-backend.onrender.com/health`
+5. Uygulamayı açın: `https://<servis-adiniz>.onrender.com/`
+   (arayüz aynı adresten gelir; `config.js` düzenlemeye gerek yok)
+6. Sağlığı doğrulayın: `https://<servis-adiniz>.onrender.com/health`
 
 ---
 
@@ -90,4 +117,5 @@ curl http://localhost:8000/health
 |-----|-------|
 | Kod hazırlığı (Dockerfile, Procfile, render.yaml, taşınabilir başlatıcı) | ✅ PASS (test edildi) |
 | Arayüz API adresi yapılandırılabilir | ✅ PASS |
-| Gerçek buluta dağıtım | ⛔ BLOCKED — platform hesabı/kimlik doğrulama ve API anahtarı gerekir |
+| **Ücretsiz genel yayın (Cloudflare Quick Tunnel, hesapsız)** | ✅ **PASS** — genel HTTPS adresinde uçtan uca çalıştı |
+| Kalıcı ücretsiz bulut dağıtımı (Render vb.) | ⛔ BLOCKED — platform hesabı + API anahtarı gerekir |
