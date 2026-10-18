@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field, validator
 import os
 import logging
+import re
 import time
 from datetime import datetime
 from typing import Dict, Any, List, Optional
@@ -49,6 +50,48 @@ logging.basicConfig(
     format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
 )
 logger = logging.getLogger("multimodal-studio")
+
+
+# ============================================================
+# SIR TEMİZLEME (SECRET REDACTION)
+# ============================================================
+# httpx, istek URL'lerini INFO seviyesinde loglar. Telegram Bot API'nin URL'i
+# token'ı içerir (https://api.telegram.org/bot<TOKEN>/getMe). Bu, token'ın
+# log dosyalarına/ekrana sızmasına yol açıyordu (gerçek hata: D-021).
+# Aşağıdaki filtre, TÜM log kayıtlarından gizli desenleri temizler.
+class SecretRedactingFilter(logging.Filter):
+    """Log mesajlarından bot token'ı / API anahtarı desenlerini siler."""
+
+    _PATTERNS = (
+        # Telegram Bot API token'ı: bot<id>:<gizli>
+        (re.compile(r"bot\d{6,}:[A-Za-z0-9_-]{20,}"), "bot[GIZLI]"),
+        # Sağlayıcı anahtarları: sk-... / gsk_... / xai-... / hf_...
+        (re.compile(r"\b(?:gsk|sk|xai|hf)[-_][A-Za-z0-9_-]{16,}"), "[GIZLI_ANAHTAR]"),
+    )
+
+    def filter(self, record: logging.LogRecord) -> bool:  # noqa: A003
+        try:
+            message = record.getMessage()
+        except Exception:  # pragma: no cover - savunma amaçlı
+            return True
+        cleaned = message
+        for pattern, replacement in self._PATTERNS:
+            cleaned = pattern.sub(replacement, cleaned)
+        if cleaned != message:
+            record.msg = cleaned
+            record.args = ()
+        return True
+
+
+_secret_filter = SecretRedactingFilter()
+
+# Kök logger'ın mevcut ve ileride eklenecek tüm handler'ları filtrelemeli.
+for _handler in logging.getLogger().handlers:
+    _handler.addFilter(_secret_filter)
+logging.getLogger().root.addFilter(_secret_filter)
+logger.addFilter(_secret_filter)
+for _name in ("httpx", "httpcore", "uvicorn", "uvicorn.access", "telegram_bot"):
+    logging.getLogger(_name).addFilter(_secret_filter)
 
 # Initialize FastAPI app
 app = FastAPI(

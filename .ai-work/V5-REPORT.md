@@ -231,3 +231,45 @@ gerektirmeyen yöntem: **Cloudflare Quick Tunnel**.
 - **Kalıcı** ücretsiz bulut dağıtımı (Render) hâlâ **BLOCKED**: platform hesabı + API anahtarı gerekir.
 - Telegram botu hâlâ **BLOCKED**: @BotFather token'ı gerekir.
 
+---
+
+## EK — Oturum 14: Telegram botu bağlandı ✅ + log sır sızıntısı düzeltildi
+
+Kullanıcı @BotFather token'ını verdi → bot **güvenli yola** bağlandı.
+
+### Yapılan iş
+1. **Token doğrulandı** (resmî Bot API `getMe`): `@maliyakbot`, id `8788787262`, ad "Haydar".
+2. **Webhook kontrolü**: webhook yok → long polling uygun.
+3. **Güvenli kayıt**: `POST /api/v1/telegram/config` → token Fernet ile **şifrelendi**
+   (`telegram_config.json` içinde yalnızca `token_enc`; düz `token` alanı YOK).
+4. **Bot başlatıldı** ve **backend açılışında otomatik başlıyor** (`enabled=true`).
+
+### GERÇEK HATA (D-021) — token loglara sızıyordu
+`httpx` istemcisi istek URL'lerini INFO seviyesinde loglar; Telegram URL'i token'ı içerir:
+`.../bot<id>:<gizli>/getMe`. Yani **token düz metin olarak log dosyasına yazıldı**.
+- **Düzeltme**: `SecretRedactingFilter` (logging.Filter) → kök handler'lara + `httpx`,
+  `httpcore`, `uvicorn`, `uvicorn.access`, `telegram_bot` logger'larına bağlandı.
+  `bot<id>:<gizli>` → `bot[GIZLI]`; `gsk_/sk-/xai-/hf_` → `[GIZLI_ANAHTAR]`.
+- Eski log dosyasındaki token da temizlendi.
+
+### Kanıt
+| Test | Sonuç |
+|------|-------|
+| `getMe` (resmî API) | ✅ OK — @maliyakbot |
+| `POST /api/v1/telegram/config` | ✅ 200 — `running:true`, `token_set:true`, `bot_username:maliyakbot` |
+| Kayıt dosyası: `token_enc` var / düz `token` yok | ✅ şifreli |
+| `telegram_config.json` git takibi | ✅ `.gitignore` (takip dışı) |
+| Repoda sır taraması (git takipli dosyalar) | ✅ **temiz**, token deseni yok |
+| Log sır taraması (yeniden başlatma sonrası) | ✅ **temiz** — `bot[GIZLI]` |
+| Loglarda sır temizleme testleri (`test_log_redaction.py`) | ✅ **6 PASS** |
+| Toplam backend testi | ✅ **144 PASS** |
+| Bot açılışta otomatik başladı mı? | ✅ `Telegram bot started (running=True)` |
+| Uzun yoklama (long polling) aktif mi? | ✅ `getUpdates?timeout=30` → 200 |
+
+### NOT RUN / bekleyen
+- **Uçtan uca sohbet testi**: kullanıcının bota **/start** yazması gerekir (Telegram,
+  kullanıcı başlatmadan bota mesaj gönderme izni vermez). Kullanıcı yazınca logda
+  `sendMessage` görülecek ve doğrulanacak.
+- ⚠️ Token bu sohbette **düz metin paylaşıldı**; güvenlik için @BotFather → `/revoke`
+  ile yenilenmesi önerilir (yenilenirse yeni token aynı yolla girilir).
+

@@ -519,4 +519,21 @@ yalnızca dağıtım dosyaları hazırdı; gerçek dağıtım hesap gerektirdiğ
 - Tünel ilk dakikada bir kez kısa süreli `ERR_TUNNEL_CONNECTION_FAILED` verdi (kendi kendine düzeldi).
 - **Kalıcı** ücretsiz dağıtım (Render vb.) hâlâ **BLOCKED** — platform hesabı + API anahtarı gerekir.
 
+---
+
+## Oturum 14 — 2026-10-18 · Telegram botu bağlandı ✅ + log sır sızıntısı (D-021)
+
+- **Token doğrulandı**: `getMe` → `@maliyakbot` (resmî Bot API, id 8788787262).
+- **Güvenli kayıt**: `POST /api/v1/telegram/config` → Fernet şifreli `token_enc`;
+  düz `token` alanı YOK; `telegram_config.json` `.gitignore`'da.
+- **Bot çalışıyor**: `running:true`, `bot_username:maliyakbot`, long polling aktif
+  (`getUpdates?timeout=30`); backend açılışında **otomatik** başlıyor.
+- **GERÇEK HATA (D-021)**: `httpx` INFO logu Telegram URL'ini yazdığı için **bot token'ı
+  log dosyasına düz metin sızıyordu**. Düzeltme: `SecretRedactingFilter` (`app.py`) →
+  kök handler + `httpx`/`httpcore`/`uvicorn`/`uvicorn.access`/`telegram_bot` logger'ları.
+  Eski log temizlendi; yeniden başlatma sonrası loglarda `bot[GIZLI]`, ham token YOK.
+- **Test**: yeni `tests/test_log_redaction.py` **6 PASS** → toplam **144 PASS**.
+- **NOT RUN**: uçtan uca sohbet testi (kullanıcının bota **/start** yazması gerekir).
+- **Öneri**: token düz metin paylaşıldığı için @BotFather → `/revoke` ile yenileme.
+
 

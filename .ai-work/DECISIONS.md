@@ -179,3 +179,22 @@
 - **Etki**: Yerel `localhost:8000/sohbet.html` calisiyor; genel tunel adresinde misafir
   girisi + gercek LLM sohbeti 0 konsol hatasiyla dogrulandi; 138 backend testi PASS;
   yerel 8080 ve masaustu 8090 davranisi bozulmadi. `tunnel.ps1` ile hesapsiz yayin.
+
+## D-021 - Log gizliligi: bot token'i loglara siziyordu (SecretRedactingFilter)
+- **Baglam**: Telegram botu baglanip uzun yoklamaya (long polling) basladiginda uygulama
+  logunda su satir goruldu:
+  `httpx - INFO - HTTP Request: GET https://api.telegram.org/bot<ID>:<TOKEN>/getMe`.
+  `httpx` istemcisi istek URL'lerini INFO seviyesinde logluyor; Telegram Bot API URL
+  bicimi token'i icerdigi icin **bot token'i duz metin olarak log dosyasina sizdi**.
+  (Ayni risk Groq/OpenAI anahtarlari icin hata mesajlarinda da vardir.)
+- **Karar**: `app.py` icinde `SecretRedactingFilter` (logging.Filter) tanimlandi; kok
+  logger'in TUM handler'larina + `httpx`/`httpcore`/`uvicorn`/`uvicorn.access`/`telegram_bot`
+  logger'larina baglandi. Temizlenen desenler:
+  `bot\d{6,}:[A-Za-z0-9_-]{20,}` -> `bot[GIZLI]`,
+  `(gsk|sk|xai|hf)[-_][A-Za-z0-9_-]{16,}` -> `[GIZLI_ANAHTAR]`.
+  URL'in kalan kismi korunur (log hala teshis icin kullanilabilir).
+- **Gerekce**: 9.4 - guvenlik (sir loglara/ekrana yazilmaz); 1.1 - gercek duzeltme.
+- **Etki**: Eski log dosyasindaki token da temizlendi. Yeniden baslatma sonrasi loglarda
+  `bot[GIZLI]` goruluyor, ham token YOK; yeni `tests/test_log_redaction.py` **6 PASS**
+  (toplam **144 test PASS**). Telegram botu acilista otomatik basliyor:
+  `Telegram bot started (running=True)`, `bot_username=maliyakbot`.
