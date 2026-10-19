@@ -57,10 +57,23 @@ class ToolExecutor:
             raise ValueError("Path traversal detected")
         return full_path
     
-    async def execute(self, tool_name: str, arguments: Dict) -> Dict:
-        """Execute a tool and return result."""
+    async def execute(self, tool_name: str, arguments: Dict, allowed: Optional[set] = None) -> Dict:
+        """Execute a tool and return result.
+
+        allowed: adım-bazlı araç allow-list'i (function adları kümesi). Verilirse
+        ve tool_name bu kümede yoksa araç ÇALIŞTIRILMAZ (derinlemesine savunma;
+        yalnızca reklam düzeyinde kalmayan gerçek zorlama). None = kısıt yok.
+        """
         import httpx
-        
+
+        if allowed is not None and tool_name not in allowed:
+            logger.warning("Araç izni yok: %s (allow-list dışı) — engellendi", tool_name)
+            return {
+                "success": False,
+                "denied": True,
+                "error": f"Bu ajan için izin verilmeyen araç: {tool_name}",
+            }
+
         try:
             # ===== FILE SYSTEM TOOLS =====
             if tool_name == "read_file":

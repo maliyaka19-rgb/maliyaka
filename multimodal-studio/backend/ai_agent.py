@@ -505,6 +505,8 @@ Kurallar:
                 
                 messages.append(message)
                 
+                # Derinlemesine savunma: executor'a etkin araç allow-list'ini ver.
+                _allowed_tools = self._allowed_tool_names()
                 for tool_call in tool_calls:
                     if not isinstance(tool_call, dict):
                         logger.warning("Skipping malformed tool_call (not a dict)")
@@ -531,7 +533,7 @@ Kurallar:
                         "tool": func_name
                     })
                     
-                    tool_result = await self.tools.execute(func_name, func_args)
+                    tool_result = await self.tools.execute(func_name, func_args, allowed=_allowed_tools)
                     tools_used.append(func_name)
                     
                     # Add tool result summary
@@ -824,6 +826,22 @@ Kurallar:
             logger.warning(f"Agent tool allow-list matched nothing (unknown={unknown}); using full TOOLS")
             return list(TOOLS)
         return filtered
+
+    def _allowed_tool_names(self) -> set:
+        """executor'ın zorlayacağı etkin araç adları kümesi.
+
+        _tools_payload() ile BİREBİR tutarlıdır: reklam edilen araç = izinli araç.
+        None (kısıt yok) -> tüm araç adları; [] -> boş küme (hiç araç).
+        """
+        try:
+            return {
+                t.get("function", {}).get("name")
+                for t in self._tools_payload()
+                if t.get("function", {}).get("name")
+            }
+        except Exception as e:
+            logger.warning(f"_allowed_tool_names hatası, kısıt uygulanmıyor: {e}")
+            return set()
 
     def _safe_window(self, messages: List[Dict], max_messages: int = 20) -> List[Dict]:
         """Return a token-safe window of the conversation.
