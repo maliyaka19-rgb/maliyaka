@@ -89,6 +89,12 @@ def test_parse_retry_after_header_is_capped():
 # ------------------------ _call_llm retry ------------------------
 
 def test_call_llm_retries_429_then_succeeds(monkeypatch):
+    # Bu test 2 kez 429 alip 3. denemede basari bekler. Uretim varsayilani
+    # (_RATE_LIMIT_MAX_RETRIES=1) yalnizca 2 denemeye izin verdigi icin butceyi
+    # acikca 2'ye sabitliyoruz. Onceden sabit varsayima guveniliyordu: butce
+    # 1 iken fallback zinciri devreye giriyor ve ortamda gecerli bir API
+    # anahtari varsa test "kazara" geciyordu (CI'da anahtar yok -> FAIL).
+    monkeypatch.setattr(ai_agent, "_RATE_LIMIT_MAX_RETRIES", 2)
     state = {"n": 0}
 
     def post():
@@ -98,6 +104,13 @@ def test_call_llm_retries_429_then_succeeds(monkeypatch):
         return _Resp(200, {"choices": [{"message": {"role": "assistant", "content": "Selam"}}]})
 
     agent = _make_agent(monkeypatch, post)
+
+    async def _no_fallback(*args, **kwargs):
+        raise AssertionError("fallback chain should not run when retries succeed")
+
+    # Fallback'in testi maskelemesini engelle: ortam anahtarina bagimli olma.
+    agent._fallback_chain = _no_fallback
+
     result = asyncio.run(agent._call_llm([{"role": "user", "content": "merhaba"}]))
     assert result["success"] is True
     assert result["data"]["choices"][0]["message"]["content"] == "Selam"
