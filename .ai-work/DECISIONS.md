@@ -340,3 +340,14 @@
   sunucuya karsi uctan uca dogrulandi). Gercek model agirliklari **BLOCKED**: bu makinede
   yerel calisma zamani yok ve donanim zayif (i5-5200U, 7.9 GB RAM, 940M 2 GB).
 - **Etki**: `GET /api/v1/models/local/status`; `.env.example` guncellendi.
+
+## D-035 - Tek servis dağıtımı: kök adres arayüze yönlendirir
+- **Bağlam**: `/` rotası yalnızca JSON API bilgisi döndürüyordu. Render/yerel tek servis
+  dağıtımında (D-020) kullanıcı adresi açtığında arayüz yerine JSON görüyordu.
+- **Karar**: `root()` arayüz dosyası (`../sohbet.html`) varsa **302** ile `/sohbet.html`'e
+  yönlendirir; yoksa eski JSON döner. API bilgisi `/api/info` rotasında **her zaman** erişilebilir.
+- **Gerekçe**: 5 - tek adres yeterli; 10 - "tanımlı ≠ çalışıyor": dağıtım yolu gerçekten test
+  edildi. Geriye dönük uyumlu: arayüzü kopyalanmayan Docker imajında davranış değişmez.
+- **Güvenlik**: `.dockerignore` sır dosyalarını dışlar; `render.yaml` `AUTH_SECRET_KEY` ister
+  (varsayılan geliştirme sırrı üretimde kullanılmasın).
+- **Etki**: `test_root_ui.py` (5 test); toplam **200 PASS**.

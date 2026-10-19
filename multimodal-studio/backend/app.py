@@ -1281,19 +1281,42 @@ async def get_lessons(category: str):
 
 @app.get("/", tags=["ana sayfa"], summary="Ana Sayfa")
 async def root():
-    """API ana sayfası ve bilgileri."""
-    return {
-        "mesaj": "Çoklu Ortam Yaratıcı Stüdyo API'ye Hoş Geldiniz",
-        "versiyon": "1.0.0",
-        "aciklama": "NEXUS-CORE v5.0 - Tam yığın çok modlu yapay zeka üretim platformu",
-        "endpointler": {
-            "belgeler": "/docs",
-            "saglik": "/health",
-            "kod_uret": "/api/v1/generate/code",
-            "gorsel_uret": "/api/v1/generate/visual",
-            "video_uret": "/api/v1/generate/video"
-        }
-    }
+    """Arayüz varsa ona yönlendirir; yoksa API bilgisini döndürür.
+
+    Tek servis dağıtımında (yerel/Render) arayüz de aynı origin'de servis
+    edildiği için kök adres doğrudan sohbet arayüzünü açar. Yalnızca backend
+    çalışan ortamlarda (örneğin arayüzü kopyalanmayan Docker imajı) eski JSON
+    bilgisi korunur. API bilgisine her zaman `/api/info` üzerinden erişilir.
+    """
+    _ui_entry = os.path.abspath(
+        os.path.join(os.path.dirname(__file__), "..", "sohbet.html")
+    )
+    if os.path.exists(_ui_entry):
+        from fastapi.responses import RedirectResponse  # noqa: E402
+
+        return RedirectResponse(url="/sohbet.html", status_code=302)
+    return _API_INFO
+
+
+_API_INFO = {
+    "mesaj": "Çoklu Ortam Yaratıcı Stüdyo API'ye Hoş Geldiniz",
+    "versiyon": "1.0.0",
+    "aciklama": "NEXUS-CORE v5.0 - Tam yığın çok modlu yapay zeka üretim platformu",
+    "endpointler": {
+        "belgeler": "/docs",
+        "saglik": "/health",
+        "kod_uret": "/api/v1/generate/code",
+        "gorsel_uret": "/api/v1/generate/visual",
+        "video_uret": "/api/v1/generate/video",
+        "arayuz": "/sohbet.html",
+    },
+}
+
+
+@app.get("/api/info", tags=["ana sayfa"], summary="API Bilgisi")
+async def api_info():
+    """Kök adres arayüze yönlendirse de API bilgisine her zaman erişilebilir."""
+    return _API_INFO
 
 # ============================================================
 # TÜRKÇE SWAGGER UI DOCS

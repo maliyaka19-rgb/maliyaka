@@ -707,3 +707,43 @@ Tam rapor: **`.ai-work/CODING-AGENTS.md`**. Özet:
 - Regresyon: ana sohbet `success=true`, "3 + 5 = **8**".
 
 **Varsayilan KAPALI**: `NEXUS_LOCAL_LLM_URL` tanimli degilse hicbir ag cagrisi yapilmaz.
+
+### Ek 6 (ayni oturum) - #7 Bulut dağıtımı (Render) hazırlığı
+
+**Durum sınıflandırması:**
+| Kalem | Durum |
+|---|---|
+| Dağıtım yapılandırması (render.yaml / Dockerfile / Procfile) | **PASS** |
+| Temiz klon + üretim modunda gerçek başlatma (PORT/HOST) | **PASS** |
+| Gerçek Render dağıtımı (hesap + `GROQ_API_KEY`) | **BLOCKED** |
+
+**Tespit edilen ve düzeltilen gerçek açıklar:**
+1. `.dockerignore` sırları dışlamıyordu → `model_config.json`, `telegram_config.json`,
+   `.encryption_key`, `*.log`, `coding_tasks.json`, `coding_insights.json`, `cron_state.json`
+   artık imaja **girmiyor**.
+2. `render.yaml` güvenli `AUTH_SECRET_KEY` istemiyordu → varsayılan geliştirme sırrı
+   üretimde kullanılabilirdi. `sync: false` olarak eklendi.
+3. `render.yaml` `startCommand` doğrudan `uvicorn` çağırıyordu → `python run_server.py`
+   (PORT/HOST okur, dizini ayarlar) ile tutarlı hale getirildi.
+4. **Kök adres** (`/`) JSON API bilgisi döndürüyordu → tek servis dağıtımında kullanıcı
+   arayüz yerine JSON görüyordu. Artık arayüz varsa `/sohbet.html`'e **302** yönlendiriyor;
+   arayüz yoksa (Docker) JSON korunuyor. API bilgisi `/api/info`'da her zaman erişilebilir.
+
+**Kanıt (temiz klon, sır dosyası YOK = Render koşulu):**
+- Klonda sır dosyası sayısı: **0**; `sohbet.html` mevcut.
+- `PORT=10005 HOST=0.0.0.0 ENVIRONMENT=production` + **yalnızca** `GROQ_API_KEY` ortam değişkeni:
+  - `/health` → `durum=çalışıyor`
+  - `/` → **HTTP 200**, HTML, 29.335 bayt, son adres `/sohbet.html`
+  - `/docs` → 200; `/api/v1/models/providers` → **groq `has_api_key=True`** (env ile geldi)
+  - `/api/v1/models/local/status` → `available=False, enabled=False`
+  - `/api/v1/coding/health` → `roles_ready=true`
+  - Log: `Telegram bot not configured/enabled; skipping start` (çökme yok)
+- Yerel canlı: `/` → **302 → 200 HTML**; `/api/info` → JSON; sohbet `success=true`, "4 + 6 = 10."
+- Test: **200 PASS** (5 yeni kök-adres testi).
+
+**Kullanıcının yapması gerekenler (BLOCKED kısmı):**
+1. render.com → **New + → Blueprint** → `maliyaka19-rgb/maliyaka` reposunu seç.
+2. Panelde sorulacak sırlar: `GROQ_API_KEY`, `AUTH_SECRET_KEY` (rastgele uzun dize),
+   `NEXUS_ENCRYPTION_PASSPHRASE`; `CORS_ORIGINS` boş bırakılabilir (tek servis).
+3. Deploy sonrası `https://<servis>.onrender.com/` doğrudan arayüzü açar.
+4. Ücretsiz plan: 15 dk hareketsizlikte uyur; kalıcı disk yok (görev/içgörü kaydı sıfırlanır).
