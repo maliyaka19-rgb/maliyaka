@@ -170,7 +170,7 @@ Yeni `tests/test_coding_manager.py` (15 test):
 1. `tool_executor.execute` içine allow-list zorlaması ekle (derinlemesine savunma) → **TAMAMLANDI** (commit `757af1e`).
 2. İkinci model sağlayıcı/yerel model (LM Studio/Ollama) yedekliliği ekle → **TAMAMLANDI (yerel kısım)**; bulut ikinci sağlayıcı geçerli anahtar gerektirir (BLOCKED).
 3. `_active_tools`/`_active_model`'i istek-yerel (contextvar) yap → **TAMAMLANDI** (commit `6bfacd7`).
-4. Öğrenme Ajanı için geçmiş görev kayıtlarından otomatik içgörü üretimi (denetimli).
+4. Öğrenme Ajanı için geçmiş görev kayıtlarından otomatik içgörü üretimi (denetimli) → **TAMAMLANDI** (görev sonunda otomatik; `applied` daima `False`).
 5. CI'da `test_coding_manager.py` + regresyonu zorunlu kapı yap.
 
 ---

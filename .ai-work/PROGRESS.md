@@ -775,3 +775,25 @@ deniyordu: openrouter (17) + openai (5) = **22 gereksiz HTTP istegi**. Gercek ol
   `health_reset=true`; ana sohbet `success=true` "7 + 8 = 15."; `/` 200 HTML.
 - **Not (durust):** bu bir **dayaniklilik** iyilestirmesidir; gercek ikinci bulut
   saglayicisi hala **BLOCKED** (gecerli anahtar gerekir).
+
+### Ek 8 (ayni oturum) - Ogrenme dongusu: gorev sonunda OTOMATIK icgoru
+
+**Bosluk:** "gecmis gorev kayitlarindan **otomatik** icgoru uretimi" maddesi yalnizca
+`POST /insights/analyze` ile **elle** tetikleniyordu; gorev bitince hicbir sey uretilmiyordu.
+
+**Yapilan:** `coding_manager.run()` gorevi kaydettikten sonra `_refresh_insights()`
+cagrilir ve sonuc `insights` alaninda doner.
+- **LLM kullanmaz**, deterministik; yalnizca `coding_insights.json` yazar.
+- `applied` **daima False**; hicbir kodu/modeli/guvenlik kuralini degistirmez.
+- Hata olursa **gorev dusmez** (`ok=False`, `error` alani) - kanitli.
+- `NEXUS_AUTO_INSIGHTS=0/false/no/off` ile kapatilabilir (varsayilan **ACIK**).
+- Test izolasyonu: `tests/conftest.py` testlerde kapatir; gercek veri dosyasi kirlenmez.
+
+**Kanit:**
+| Kalem | Sonuc |
+|---|---|
+| Test | **219 PASS** (4 yeni: otomatik uretim, determinizm, hata yalitimi, `run()` entegrasyonu) |
+| ruff (CI kural seti) | temiz |
+| Canli gorev (plan) | 38.5 sn, `task_id=5b4eb209-0bb`, `status=tamamlandi` |
+| Otomatik icgoru | `ok=True`, `analyzed=2`, `open=1`, **`applied=False`**, dosya yazildi |
+| Tekrar kayit | `created=0` (imza dedup calisti; karar korunur) |

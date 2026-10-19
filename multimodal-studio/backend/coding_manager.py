@@ -577,6 +577,13 @@ class CodingTaskManager:
             record["status"] = TaskStatus.COMPLETED.value
 
         self._save_task(record)
+
+        # ---- ÖĞRENME (otomatik, denetimli) --------------------------------
+        # Görev geçmişinden deterministik içgörü üretir. LLM kullanmaz, kod/model/
+        # güvenlik kuralı DEĞİŞTİRMEZ; yalnızca coding_insights.json yazar.
+        # Hata olursa görev raporu yine döner (asla görevi düşürmez).
+        insight_summary = self._refresh_insights()
+
         return {
             "success": record["status"] in (TaskStatus.COMPLETED.value, TaskStatus.TEST_FAILED.value),
             "task_id": task_id,
@@ -586,7 +593,44 @@ class CodingTaskManager:
             "final_answer": record["final_answer"],
             "report": report,
             "review": record["review"],
+            "insights": insight_summary,
         }
+
+    # -- öğrenme döngüsü (otomatik, denetimli) -------------------------------
+    @staticmethod
+    def _auto_insights_enabled() -> bool:
+        """NEXUS_AUTO_INSIGHTS=0/false/no/off ile kapatılabilir (varsayılan AÇIK)."""
+        raw = (os.getenv("NEXUS_AUTO_INSIGHTS", "1") or "").strip().lower()
+        return raw not in ("0", "false", "no", "off")
+
+    @classmethod
+    def _refresh_insights(cls) -> Dict[str, Any]:
+        """
+        Görev kaydından içgörü üretir (Öğrenme Ajanı'nın denetimli katmanı).
+
+        * LLM KULLANMAZ; sonuç deterministik.
+        * Yalnızca ``coding_insights.json`` yazar; ``applied`` daima ``False``.
+        * Hiçbir kodu/modeli/güvenlik kuralını değiştirmez.
+        """
+        if not cls._auto_insights_enabled():
+            return {"ok": True, "skipped": "NEXUS_AUTO_INSIGHTS kapalı", "applied": False}
+        try:
+            import coding_insights as cins
+
+            result = cins.generate_insights()
+            items = result.get("insights") or []
+            proposal = getattr(cins, "STATUS_PROPOSAL", "oneri")
+            return {
+                "ok": True,
+                "created": int(result.get("created", 0)),
+                "total": int(result.get("total", len(items))),
+                "tasks_analyzed": int(result.get("tasks_analyzed", 0)),
+                "open": sum(1 for i in items if i.get("status") == proposal),
+                "applied": False,
+            }
+        except Exception as exc:  # öğrenme katmanı görevi asla düşürmez
+            logger.warning("Otomatik içgörü üretilemedi: %s", exc)
+            return {"ok": False, "error": type(exc).__name__, "applied": False}
 
     # -- yapılandırılmış rapor (11 alan) -----------------------------------
     @staticmethod

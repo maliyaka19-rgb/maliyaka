@@ -368,3 +368,16 @@
 - **Etki**: `/providers` + `status/cooldown_seconds/last_error/health`;
   `test_provider_health.py` (15 test) + `tests/conftest.py` (otomatik izolasyon);
   toplam **215 PASS**. Gerçek ikinci bulut sağlayıcı hâlâ BLOCKED (anahtar yok).
+
+## D-037 - Öğrenme döngüsü görev sonunda otomatik (denetimli)
+- **Bağlam**: İçgörü üretimi yalnızca elle (`POST /insights/analyze`) çalışıyordu;
+  "geçmiş görev kayıtlarından **otomatik** içgörü" maddesi eksik kalıyordu.
+- **Karar**: `coding_manager.run()` görevi kaydettikten sonra `_refresh_insights()`
+  çağırır; sonuç `insights` alanında döner. LLM kullanılmaz, sonuç deterministiktir.
+- **Sınır (değişmez)**: yalnızca `coding_insights.json` yazılır; `applied` daima `False`;
+  kod/model/güvenlik kuralı **değiştirilmez**. Hata görevi **düşürmez**.
+- **Kapatma**: `NEXUS_AUTO_INSIGHTS=0`. Testlerde varsayılan kapalı (`tests/conftest.py`)
+  → gerçek çalışma verisi kirlenmez (hermetik test kuralı, D-030).
+- **Gerekçe**: 4 - döngü gerçekten kapanır; 17 - denetimsiz öğrenme yok.
+- **Etki**: `test_auto_insights.py` (4 test); toplam **219 PASS**.
+  Canlı: 38.5 sn'lik gerçek görev → `insights.ok=True, analyzed=2, applied=False`.

@@ -11,6 +11,13 @@ import pytest
 
 from provider_health import health
 
+# Testler GERÇEK çalışma verisini yazmamalı (hermetik test kuralı).
+# Otomatik içgörü üretimi varsayılan AÇIK; testlerde kapatılır.
+# Bunu özellikle test eden dosya `monkeypatch.setenv` ile açar.
+import os as _os
+
+_os.environ.setdefault("NEXUS_AUTO_INSIGHTS", "0")
+
 
 @pytest.fixture(autouse=True)
 def reset_provider_health():
