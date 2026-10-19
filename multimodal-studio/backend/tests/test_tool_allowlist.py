@@ -74,3 +74,38 @@ def test_readonly_override_blocks_write_end_to_end(tmp_path):
                                     allowed=allowed))
     assert denied.get("denied") is True
     assert not (tmp_path / "x.txt").exists()
+
+
+# ---------------------------------------------------------------- eşzamanlılık
+
+def test_active_tools_are_request_local():
+    """Eşzamanlı iki görev birbirinin araç iznini EZMEMELİ (contextvar)."""
+    obj = NexusAIAgent.__new__(NexusAIAgent)
+
+    async def worker(tools):
+        obj._active_tools = tools
+        await asyncio.sleep(0.01)          # diğer görevin çalışmasına izin ver
+        return list(obj._active_tools), obj._allowed_tool_names()
+
+    async def main():
+        return await asyncio.gather(worker(["read_file"]), worker(["write_file"]))
+
+    (tools_a, allowed_a), (tools_b, allowed_b) = asyncio.run(main())
+    assert tools_a == ["read_file"]
+    assert tools_b == ["write_file"]
+    assert "write_file" not in allowed_a
+    assert "write_file" in allowed_b
+
+
+def test_active_model_is_request_local():
+    obj = NexusAIAgent.__new__(NexusAIAgent)
+
+    async def worker(model_name):
+        obj._active_model = model_name
+        await asyncio.sleep(0.01)
+        return obj._active_model
+
+    async def main():
+        return await asyncio.gather(worker("model-A"), worker("model-B"))
+
+    assert asyncio.run(main()) == ["model-A", "model-B"]

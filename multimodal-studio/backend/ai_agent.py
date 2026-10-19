@@ -24,6 +24,7 @@ from collections import deque
 import logging
 import asyncio
 import httpx
+from contextvars import ContextVar
 
 # Load .env file
 try:
@@ -40,6 +41,12 @@ except ImportError:
     OPENAI_AVAILABLE = False
 
 logger = logging.getLogger("nexus-agent-v6")
+
+# İstek-yerel (request-local) ajan durumu. Ajan tekil (singleton) olsa da her
+# asyncio görevi kendi context kopyasını taşır; eşzamanlı iki sohbet birbirinin
+# araç iznini/modelini EZMEZ. (Önceden instance attribute idi -> yarış vardı.)
+_ACTIVE_TOOLS: ContextVar[Optional[list]] = ContextVar("nexus_active_tools", default=None)
+_ACTIVE_MODEL: ContextVar[Optional[str]] = ContextVar("nexus_active_model", default=None)
 
 # Import Brain
 from brain import get_brain, NexusBrain
@@ -213,9 +220,27 @@ class NexusAIAgent:
         self.tools = ToolExecutor(working_dir=working_dir)
         self.system_prompt = self._build_system_prompt()
         # Per-chat tool allow-list (set from the active custom agent in chat()).
-        # None/empty => advertise every tool.
+        # None => kısıt yok (tüm araçlar); [] => hiç araç (fail-closed).
         self._active_tools = None
-    
+
+    # --- İstek-yerel durum (contextvar) ---------------------------------
+    # Instance attribute yerine contextvar: eşzamanlı sohbetler izolasyonlu.
+    @property
+    def _active_tools(self):
+        return _ACTIVE_TOOLS.get()
+
+    @_active_tools.setter
+    def _active_tools(self, value):
+        _ACTIVE_TOOLS.set(value)
+
+    @property
+    def _active_model(self):
+        return _ACTIVE_MODEL.get()
+
+    @_active_model.setter
+    def _active_model(self, value):
+        _ACTIVE_MODEL.set(value)
+
     def _refresh_llm_config(self):
         """Refresh LLM config from model_config.json (latest active provider/model)."""
         try:
