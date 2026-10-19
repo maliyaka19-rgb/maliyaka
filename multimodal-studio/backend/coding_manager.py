@@ -352,7 +352,11 @@ class CodingTaskManager:
         declared = list((role_agent or {}).get("tools") or [])
         can_write = bool(step.get("write")) and mode == "execute"
         if can_write:
-            return declared or list(READ_ONLY_TOOLS)
+            allowed = declared or list(READ_ONLY_TOOLS)
+            # generate_code yalnızca METİN üretir, dosyaya yazmaz. Yazma adımında
+            # modele verilirse kodu sohbete döküp dosyayı hiç oluşturmuyor
+            # (canlı kanıt: 2 başarısız koşu). Yazma adımında bu araç verilmez.
+            return [t for t in allowed if t != "generate_code"]
         read_tools = [t for t in declared if t in READ_ONLY_SET]
         if not read_tools:
             read_tools = list(MINIMAL_READ_TOOLS)
@@ -374,7 +378,10 @@ class CodingTaskManager:
             "analiz, plan veya önerilen değişikliği metin olarak sun."
             if mode != "execute" else
             "ŞU AN 'UYGULA' MODU: gerekli dosya değişikliklerini yapabilir ve "
-            "komut çalıştırabilirsin."
+            "komut çalıştırabilirsin. Dosya oluşturmak için write_file, mevcut "
+            "dosyayı değiştirmek için edit_file aracını ÇAĞIR. generate_code "
+            "dosyaya YAZMAZ (yalnızca kod önerisi üretir); kodu yanıt metnine "
+            "dökme, gerçekten dosyayı yaz."
         )
         prefix = (
             f"[KODLAMA YÖNETİCİSİ GÖREVİ] Rol: {role}\n"
@@ -625,6 +632,7 @@ class CodingTaskManager:
         # ---- KANITSIZ YAZMA ADIMI -----------------------------------------
         # Adım "başarılı" dönebilir ama tek dosya bile değiştirmemiş olabilir
         # (canlı E2E'de görüldü). Bu, sessizce yutulmaz; rapora risk olarak girer.
+        # Nihai yanıt, doğrulama yoksa/başarısızsa kanıttan üretilir (aşağıda).
         if mode == "execute":
             for m in write_steps:
                 if m.success and not m.changes:
@@ -652,10 +660,15 @@ class CodingTaskManager:
         else:
             record["final_answer"] = step_results[-1].response if step_results else ""
 
-        # LLM metni üretemediyse nihai yanıtı KANITTAN üret (uydurma yok).
+        # LLM metni üretemediyse VEYA doğrulama başarısızsa VEYA hiç dosya
+        # değişmediyse nihai yanıtı KANITTAN üret (uydurma yok).
+        # Doğrulama exit!=0 iken LLM'in "tamam" metni geçersizdir.
         _v = record.get("verification") or {}
         _low = (record["final_answer"] or "").lower()
-        if (not record["final_answer"].strip()) or any(m in _low for m in _LLM_FAIL_MARKERS):
+        _verify_failed = bool(_v.get("ran")) and _v.get("passed") is not True
+        _no_changes = mode == "execute" and not record.get("files_changed")
+        if ((not record["final_answer"].strip()) or _verify_failed or _no_changes
+                or any(m in _low for m in _LLM_FAIL_MARKERS)):
             if _v.get("passed") is True:
                 _files = ", ".join(record.get("files_changed") or []) or "yok"
                 record["final_answer"] = (
@@ -668,12 +681,17 @@ class CodingTaskManager:
                     "Görev tamamlanmadı: doğrulama "
                     f"`{_v.get('command')}` → exit={_v.get('exit_code')}."
                 )
+            elif _no_changes:
+                record["final_answer"] = (
+                    "Görev tamamlanmadı: hiçbir dosya oluşturulmadı/değiştirilmedi; "
+                    "doğrulama komutu da yok."
+                )
             else:
                 record["final_answer"] = (
                     "Görev yürütüldü ancak LLM nihai metin üretemedi ve doğrulama komutu "
                     "yok; sonuç kanıtsız."
                 )
-            record["final_answer_note"] = "LLM metni yok; özet yalnızca gerçek kanıttan üretildi."
+            record["final_answer_note"] = "Nihai özet yalnızca gerçek kanıttan üretildi (LLM metni kullanılmadı)."
 
         if record["status"] == TaskStatus.RUNNING.value:
             record["status"] = TaskStatus.COMPLETED.value

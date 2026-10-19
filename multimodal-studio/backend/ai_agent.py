@@ -429,7 +429,7 @@ When you need to use tools, call them. Work like a real coding assistant — rea
                 "list_files": "- list_files: Klasör listele",
                 "search_files": "- search_files: Dosyalarda ara",
                 "execute_command": "- execute_command: Komut çalıştır",
-                "generate_code": "- generate_code: Üretim hazır kod oluştur",
+                "generate_code": "- generate_code: Üretim hazır kod önerisi oluştur (DOSYAYA YAZMAZ; dosya için write_file kullan)",
                 "generate_image": "- generate_image: Gerçek görsel dosyası üret (URL döndürür)",
                 "generate_visual_prompt": "- generate_visual_prompt: Midjourney/DALL-E/SD için görsel prompt",
                 "generate_video_prompt": "- generate_video_prompt: Veo/Sora/Runway için video prompt",

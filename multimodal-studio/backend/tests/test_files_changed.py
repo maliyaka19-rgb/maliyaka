@@ -117,6 +117,42 @@ def test_plan_mode_does_not_flag_readonly_steps(tmp_files, monkeypatch):
         assert "kanıtsız yazma" not in risk
 
 
+def test_failed_verification_overrides_optimistic_llm_text(tmp_files, monkeypatch):
+    """Canlı kanıt: kota bitince ajan kodu metne döküp 'başarılı' göründü.
+
+    Doğrulama exit=1 iken bu metin nihai yanıt OLAMAZ; yanıt kanıttan üretilir.
+    """
+    async def fake_chat(message, conversation_id=None, history=None, agent_id=None,
+                        tools_override=None, system_prefix=None):
+        return {
+            "success": True,
+            "response": "İşte istediğiniz kod:\n```python\nprint('sahte')\n```",
+            "conversation_id": conversation_id or "c",
+            "tools_used": [],
+            "files_changed": [],
+            "thinking_steps": [],
+        }
+
+    monkeypatch.setattr(ai_agent, "chat", fake_chat)
+    monkeypatch.setattr(
+        cm.CodingTaskManager, "run_verification",
+        lambda self, cmd, timeout=240: {
+            "command": cmd, "ran": True, "passed": False, "exit_code": 1,
+            "stdout_tail": "FAIL", "stderr_tail": "",
+        },
+    )
+
+    res = asyncio.run(cm.CodingTaskManager().run(
+        "arayüz bileşeni ekle", mode="execute", confirm=True,
+        via_main_manager=False, verify_command="python -c \"raise SystemExit(1)\"",
+    ))
+
+    assert "tamamlanmadı" in res["final_answer"] or "Tamamlanmadı" in res["final_answer"]
+    assert "İşte istediğiniz kod" not in res["final_answer"]
+    assert res["final_answer_note"]
+    assert any("kanıtsız yazma" in r for r in res["report"]["9_kalan_riskler"])
+
+
 def test_final_answer_uses_evidence_when_llm_text_missing(tmp_files, monkeypatch):
     """Canlı E2E'de görüldü: doğrulama geçti ama 429 yüzünden 'yanıt üretemiyorum'."""
     fail_text = ("Üzgünüm, şu anda tam yanıt üretemiyorum. "

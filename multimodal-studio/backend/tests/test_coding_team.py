@@ -234,3 +234,28 @@ def test_main_manager_is_default_and_reviews_report(monkeypatch, tmp_path):
     assert res["report"]["3_kullanilan_uzmanlar"][-1] in ("reviewer", "regression-tester")
     assert "reviewer" in res["report"]["3_kullanilan_uzmanlar"]
     assert res["final_answer"] == "[main-manager] tamam"
+
+
+def test_execute_mode_prompt_demands_real_write_file(monkeypatch, tmp_path):
+    """UYGULA modunda ajan kodu metne dökmemeli; write_file çağırmalı."""
+    captured = {}
+
+    async def fake_chat(message, conversation_id=None, history=None, agent_id=None,
+                        tools_override=None, system_prefix=None):
+        captured["tools"] = tools_override
+        captured["prefix"] = system_prefix
+        return {"success": True, "response": "ok", "files_changed": ["index.html"],
+                "tools_used": ["write_file"], "thinking_steps": []}
+
+    monkeypatch.setattr(ai_agent, "chat", fake_chat)
+
+    mgr = cm.CodingTaskManager(working_dir=str(tmp_path))
+    step = {"role": "frontend-pro", "goal": "siteyi yaz", "write": True}
+
+    msg = asyncio.run(mgr._run_step("t1", "conv", 0, step, "execute", "yemek sitesi yap"))
+
+    assert "write_file" in captured["prefix"]
+    assert "generate_code dosyaya YAZMAZ" in captured["prefix"]
+    assert "write_file" in (captured["tools"] or [])
+    assert "generate_code" not in (captured["tools"] or [])
+    assert msg.changes == ["index.html"]
