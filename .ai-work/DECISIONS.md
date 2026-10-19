@@ -198,3 +198,50 @@
   `bot[GIZLI]` goruluyor, ham token YOK; yeni `tests/test_log_redaction.py` **6 PASS**
   (toplam **144 test PASS**). Telegram botu acilista otomatik basliyor:
   `Telegram bot started (running=True)`, `bot_username=maliyakbot`.
+
+## D-022 - Kodlama Yoneticisi: sabit pipeline yerine gercek orkestrasyon motoru
+- **Baglam**: Mevcut `/agents/team/run` sabit 3 cagrilik bir pipeline'di (uzman → denetci →
+  lider); gorevi siniflandirmiyor, uzmanlari goreve gore secmiyor, dosya cakismasini
+  engellemiyor, test kaniti toplamiyor, yeniden deneme yapmiyordu.
+- **Karar**: `coding_manager.py` icinde deterministik bir orkestrasyon motoru yazildi:
+  `classify_task` (8 gorev turu), `WORKFLOWS` (tur→uzman adimlari), adim-bazli en az yetki,
+  `FileLockRegistry`, kalite kapisi (`run_verification` gercek komut + sinirli retry),
+  11 alanli rapor, kalici gorev kaydi. Ajan personasina guvenmek yerine kararlar KODLA verilir.
+- **Gerekce**: 1.1 gercek islev; 5 akilli yonlendirme; 7 bagimsiz kalite kapisi; 8 kontrollu
+  otomatik duzeltme dongusu.
+- **Etki**: `coding_routes.py` ile disa acildi. Mevcut `/agents/team/run` KORUNDU.
+
+## D-023 - Adim-bazli EN AZ YETKI: `tools_override` + `_tools_payload` bos liste duzeltmesi
+- **Baglam**: Araclari yalnizca ajan taniminda listelemek yetmiyordu; ayrica
+  `_tools_payload()` bos listeyi "kisit yok = TUM araclar" diye yorumluyordu (guvenlik acigi).
+- **Karar**: `ai_agent.chat`'e `tools_override` ve `system_prefix` parametreleri eklendi.
+  `_tools_payload` semantigi: `None` → tum araclar; `[]` (bos liste) → HIC arac.
+  Kodlama Yoneticisi plan modunda yazma adimlarina bile yalnizca salt-okuma araclarini verir.
+- **Gerekce**: 10/11 - ajanlarin ihtiyaci olmayan araclara erismesini onle; en az yetki.
+- **Etki**: Mevcut yollar `None` kullandigi icin davranis bozulmadi; 165 test PASS.
+
+## D-024 - execute modu icin zorunlu onay (`confirm=true`)
+- **Baglam**: Ajanlarin gercekten dosya yazmasi gereken durumlar var, ama izinsiz yazma riskli.
+- **Karar**: `/api/v1/coding/run` `mode` alir: `plan` (varsayilan, HICBIR dosyayi degistirmez)
+  ve `execute` (`confirm=true` gerektirir; aksi halde otomatik `plan`'a duser ve raporlanir).
+- **Gerekce**: 11 - riskli islem icin onay; guvenli varsayilan.
+- **Etki**: Testle dogrulandi: onaysiz execute → `mode=plan`.
+
+## D-025 - Model yanitindaki "test gecti" iddiasi KANIT degildir
+- **Baglam**: LLM'ler kanitsiz basari iddia edebilir; bu "sahte basari" riskidir.
+- **Karar**: Rapor `6_test_sonuclari` bolumu yalnizca GERCEKTEN calistirilan dogrulama
+  komutunun cikis kodunu kanit sayar. `verify_command` verilmediyse "iddia dogrulanmadi"
+  notuyla `passed=null` yazilir; ajan iddiasi kanit yerine gecmez. `evidence-auditor` rolu
+  ve Ana Yonetici incelemesi bunu bagimsizca denetler.
+- **Gerekce**: 7/12.15 - test edilmeyen ozelligi basari sayma; 24 - kanit denetimi.
+- **Etki**: Canli testte Ana Yonetici, kanit eksikligini acikca bildirdi.
+
+## D-026 - 24 uzmanlik: mevcut ajanlari yeniden kullan, yalnizca eksikleri ekle
+- **Baglam**: 24 uzmanlik alaninin tamami icin yeni ajan olusturmak gereksiz kopya uretirdi.
+- **Karar**: 7 alan mevcut ajanlarla karsilandi (`coder`/`python-pro`, `backend-pro`,
+  `frontend-pro`, `reviewer`, `security`, `devops`); gorev planlama `coding-manager`'a verildi;
+  yalnizca GERCEKTEN eksik 19 kodlama uzmani eklendi (toplam 39 ajan). Esleme `custom_agents.py`
+  icinde yorumla belgelendi.
+- **Gerekce**: "Mevcut 20 ajani silme, gereksiz kopya olusturma, calisan sistemi bastan yazma."
+- **Etki**: Roster testleri ">=20 + orijinaller korunur" seklinde guncellendi; mevcut ajanlar
+  ve onlarin yonlendirmesi bozulmadi.

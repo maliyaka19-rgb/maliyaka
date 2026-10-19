@@ -558,3 +558,39 @@ yalnızca dağıtım dosyaları hazırdı; gerçek dağıtım hesap gerektirdiğ
   loglar silindi; kok `.gitignore`'a `*.log` kurallari eklendi.
 - **Test**: `python -m pytest tests/ -q --ignore=tests/test_api_live.py` -> **150 PASS**.
 - **NOT RUN / BLOCKED**: 7/24 bulut (Render) dağıtımı - platform hesabı gerekir (BLOCKED).
+
+---
+
+## Oturum 16 - 2026-10-19 - Kodlama Yöneticisi Ajanı + 19 kodlama uzmanı (MASTER PROMPT V3)
+
+Tam rapor: **`.ai-work/CODING-AGENTS.md`**. Özet:
+
+- **Amac**: 20 ajanlı klasik yapıyı, gerçekten çalışan bir kodlama ajan sistemine
+  dönüştürmek (görev yönlendirme + kod üretme + test + kanıt + rapor).
+- **Geri dönüş noktası**: git tag `pre-coding-agents` -> `719cb7e`.
+- **YENİ: `coding_manager.py`** — deterministik orkestrasyon motoru:
+  görev sınıflandırma (8 tür), tür→uzman iş akışı, adım-bazlı en az yetki
+  (`tools_override`), dosya çakışma kilidi (`FileLockRegistry`), kalite kapısı
+  (gerçek komut + sınırlı retry), 11 alanlı yapılandırılmış rapor, kalıcı görev kaydı.
+- **YENİ: `coding_routes.py`** — `/api/v1/coding/{run,tasks,tasks/{id},workflows,health}`.
+- **`custom_agents.py`**: mevcut 20 ajan KORUNDU; 19 kodlama uzmanı eklendi -> **39 ajan**
+  (`main-manager`, `coding-manager`, `code-analyst`, `architect`, `dependency-analyst`,
+  `bug-fixer`, `database-pro`, `integrator`, `test-engineer`, `performance-pro`,
+  `debugger`, `regression-tester`, `docs-writer`, `optimizer`, `tech-researcher`,
+  `rollback`, `evidence-auditor`, `code-standards`, `learning-agent`).
+- **`ai_agent.py`**: `tools_override` + `system_prefix` eklendi; `_tools_payload` artık
+  **boş liste = hiç araç** (önceden boş liste = TÜM araçlar — güvenlik açığıydı).
+- **Akış**: KULLANICI → Ana Yönetici → Kodlama Yöneticisi → uzmanlar → Kodlama Yöneticisi
+  → Ana Yönetici → KULLANICI (Ana Yönetici genel yetkisini korur; Kodlama Yöneticisi
+  ona bağlı uzman yöneticidir, yerini almaz).
+- **Gerçek testler**: `tests/test_coding_manager.py` **15 PASS**; tüm paket **165 PASS**
+  (önceki 150 korunmuş). Roster testleri ">=20 + orijinaller korunur" olarak güncellendi.
+- **CANLI KANIT (gerçek LLM, plan modu)**: `POST /api/v1/coding/run` → HTTP 200, ~116 sn,
+  adımlar `code-analyst → coder → reviewer`, `status: tamamlandi`; Ana Yönetici raporu
+  inceleyip kanıt eksikliğini ("test/doğrulama YOK") doğru bildirdi, yapılmamış işi
+  doğrulanmış SAYMADI.
+- **CANLI KANIT (kalite kapısı)**: gerçek komut çalıştırıldı →
+  `python -m pytest backend/tests/test_calculator.py -q` → exit 0, `32 passed`.
+- **BULGU**: `run_verification` çalışma dizini proje kökü (`multimodal-studio`); `verify_command`
+  buna göre verilmeli (ör. `backend/tests/...`). `working_dir` artık API'den ayarlanabilir.
+- **Commit**: `f10e0ef` pushed (main). Çalışma ağacı temiz.
