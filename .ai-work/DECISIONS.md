@@ -245,3 +245,15 @@
 - **Gerekce**: "Mevcut 20 ajani silme, gereksiz kopya olusturma, calisan sistemi bastan yazma."
 - **Etki**: Roster testleri ">=20 + orijinaller korunur" seklinde guncellendi; mevcut ajanlar
   ve onlarin yonlendirmesi bozulmadi.
+
+## D-027 - Arac allow-list'i executor duzeyinde ZORUNLU (derinlemesine savunma)
+- **Baglam**: D-023 ile allow-list reklam duzeyinde daraltiliyordu ama `tool_executor.execute`
+  izin kontrolu yapmiyordu; LLM allow-list disi bir araci cagirirsa yine calisiyordu.
+- **Karar**: `ToolExecutor.execute(..., allowed: Optional[set])` eklendi. `allowed` verilirse ve
+  arac adi kumede yoksa arac CALISTIRILMAZ (`success=False, denied=True`). `ai_agent.chat`
+  etkin izin kumesini `_allowed_tool_names()` ile (`_tools_payload` ile birebir tutarli) gecirir.
+  Davranis: `None` = kisit yok (tum araclar), `[]` = hic arac (fail-closed).
+  Ic fallback cagrilari (generate_code/visual/video) `allowed=None` ile korunur.
+- **Gerekce**: 10/11 - ajanlarin ihtiyaci olmayan araclara erismesini onle; 7 - bagimsiz savunma.
+- **Etki**: `tests/test_tool_allowlist.py` **5 PASS**; toplam **170 PASS**; ana sohbet yolu
+  canli testte bozulmadi (`/api/v1/ai/chat` 200, `success=true`). Commit `757af1e`.

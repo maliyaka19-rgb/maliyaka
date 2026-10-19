@@ -594,3 +594,17 @@ Tam rapor: **`.ai-work/CODING-AGENTS.md`**. Özet:
 - **BULGU**: `run_verification` çalışma dizini proje kökü (`multimodal-studio`); `verify_command`
   buna göre verilmeli (ör. `backend/tests/...`). `working_dir` artık API'den ayarlanabilir.
 - **Commit**: `f10e0ef` pushed (main). Çalışma ağacı temiz.
+
+### Ek (ayni oturum) - Derinlemesine savunma: allow-list executor'da zorlandi
+
+- `tool_executor.execute(..., allowed=set)` eklendi: izin verilmeyen arac **calistirilmiyor**
+  (`success=False`, `denied=True`); onceden allow-list yalnizca reklam duzeyindeydi.
+- `ai_agent._allowed_tool_names()` etkin izin kumesini `_tools_payload()` ile **birebir tutarli**
+  uretir; `ai_agent.chat` ana tool cagri yoluna gecirir.
+- Semantik: `None` = kisit yok, `[]` = hic arac (fail-closed).
+- **Test**: `tests/test_tool_allowlist.py` **5 PASS** -> toplam **170 PASS**.
+- **CANLI KANIT**: yeniden baslatma sonrasi `/api/v1/ai/chat` 200, `success=true`, dogru yanit
+  ("4") -> ana sohbet yolu bozulmadi.
+- **Commit**: `757af1e` pushed (main).
+- **Temizlik**: uzman uretimi artigi `multimodal-studio/snake.py` kaldirildi (projede referansi yok;
+  sistem etkilenmedi, `git status` temiz).

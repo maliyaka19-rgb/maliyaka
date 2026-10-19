@@ -3,7 +3,7 @@
 - Tarih: 2026-10-19 (Oturum 16)
 - Geri dönüş noktası: git tag `pre-coding-agents` → `719cb7e`
 - Commit: `f10e0ef` (main'e push edildi)
-- Test durumu: **165 PASS** (önceki 150 korundu + 15 yeni)
+- Test durumu: **170 PASS** (önceki 150 korundu + 15 kodlama + 5 allow-list)
 
 ---
 
@@ -101,7 +101,7 @@ KULLANICI → Ana Yönetici (intake/brief) → Kodlama Yöneticisi → uzmanlar
 **Birim/entegrasyon (pytest):** `python -m pytest tests/ -q --ignore=tests/test_api_live.py`
 
 ```
-165 passed
+170 passed
 ```
 
 Yeni `tests/test_coding_manager.py` (15 test):
@@ -124,6 +124,10 @@ Yeni `tests/test_coding_manager.py` (15 test):
 | 14 | `test_http_health_and_workflows` | HTTP health/workflows |
 | 15 | `test_http_run_and_tasks` | HTTP run + tasks + 404 |
 
+`tests/test_tool_allowlist.py` (5 test, yeni): executor izin verilmeyen aracı çalıştırmıyor
+(`denied=True`, dosya oluşmuyor); izinli araç çalışıyor; `allowed=None` = kısıt yok;
+`_allowed_tool_names` `_tools_payload` ile tutarlı; salt-okuma override yazmayı uçtan uca bloklar.
+
 **Canlı uçtan uca (gerçek LLM, plan modu):**
 - `POST /api/v1/coding/run` → HTTP 200, ~116 sn
 - adımlar: `code-analyst → coder → reviewer`, `status: tamamlandi`
@@ -134,7 +138,7 @@ Yeni `tests/test_coding_manager.py` (15 test):
 
 ## 8. Başarısız ve çalıştırılamayan testler
 
-- **Başarısız test yok.** 165/165 PASS.
+- **Başarısız test yok.** 170/170 PASS.
 - İlk canlı kalite kapısı denemesi `exit code 4 (no tests ran)` verdi: `run_verification`
   proje kökünde (`multimodal-studio`) çalışıyor, testler `backend/tests/` altında. Yol
   düzeltilince exit 0. Bu bir **bulgu ve düzeltme**dir; `working_dir` artık API'den
@@ -154,7 +158,7 @@ Yeni `tests/test_coding_manager.py` (15 test):
 
 | Risk | Derece | Açıklama |
 |------|--------|----------|
-| Araç executor'da zorlama yok | ORTA | allow-list reklam düzeyinde; plan modu LLM talimatı + salt-okuma listesiyle korunuyor, ama `tool_executor` hâlâ düz if/elif. Kalıcı çözüm: executor'da allow-list kontrolü. |
+| Araç executor'da zorlama | ÇÖZÜLDÜ | `tool_executor.execute(allowed=…)` artık izin verilmeyen aracı ÇALIŞTIRMIYOR; `ai_agent._allowed_tool_names()` `_tools_payload` ile birebir tutarlı (5 yeni test). |
 | Tek model sağlayıcı | ORTA | Yalnızca groq geçerli; kesintide tek nokta arızası. |
 | LLM kanıtsız iddia | DÜŞÜK | Kalite kapısı + evidence-auditor + Ana Yönetici ile azaltıldı; tam garanti değil. |
 | Uzun görev süresi | DÜŞÜK | 3 adım ~116 sn; TPM sınırı nedeniyle paralellik varsayılan KAPALI. |
@@ -162,7 +166,7 @@ Yeni `tests/test_coding_manager.py` (15 test):
 
 ## 11. Sonraki geliştirme adımları
 
-1. `tool_executor.execute` içine allow-list zorlaması ekle (derinlemesine savunma).
+1. `tool_executor.execute` içine allow-list zorlaması ekle (derinlemesine savunma) → **TAMAMLANDI** (commit `757af1e`).
 2. İkinci model sağlayıcı/yerel model (LM Studio/Ollama) yedekliliği ekle.
 3. `_active_tools`/`_active_model`'i istek-yerel (contextvar) yap.
 4. Öğrenme Ajanı için geçmiş görev kayıtlarından otomatik içgörü üretimi (denetimli).
