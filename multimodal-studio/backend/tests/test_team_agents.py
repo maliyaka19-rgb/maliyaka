@@ -6,12 +6,17 @@ import custom_agents as ca
 import custom_agent_routes as car
 
 
-def test_default_roster_has_20_unique_pro_agents():
+def test_default_roster_keeps_original_20_unique_agents():
+    """Mevcut 20 genel ajan KORUNMALI; kodlama ekibi EKLENEBİLİR (silinemez)."""
     ids = [a["id"] for a in ca.DEFAULT_AGENTS]
-    assert len(ids) == len(set(ids)) == 20
-    for must in ["chat-pro", "python-pro", "frontend-pro", "backend-pro",
-                 "image-pro", "video-pro", "reviewer", "team-lead"]:
-        assert must in ids
+    assert len(ids) == len(set(ids))          # benzersiz
+    assert len(ids) >= 20
+    original = ["assistant", "coder", "teacher", "designer", "analyst", "artist",
+                "researcher", "writer", "translator", "marketer", "devops", "security",
+                "chat-pro", "python-pro", "frontend-pro", "backend-pro",
+                "image-pro", "video-pro", "reviewer", "team-lead"]
+    for must in original:
+        assert must in ids, f"Mevcut ajan silinmis: {must}"
 
 
 def test_new_agents_have_narrow_toolboxes():

@@ -38,6 +38,9 @@ from fs_routes import router as fs_router
 # Custom Agent Builder Import
 from custom_agent_routes import router as custom_agent_router
 
+# Coding Manager Import (Kodlama Yöneticisi Ajanı)
+from coding_routes import router as coding_router
+
 # Telegram Integration Import (control + chat)
 from telegram_routes import router as telegram_router
 
@@ -125,6 +128,9 @@ app.include_router(fs_router)
 
 # Include Custom Agent Router
 app.include_router(custom_agent_router)
+
+# Include Coding Manager Router (Kodlama Yöneticisi)
+app.include_router(coding_router)
 
 # Include Telegram Router (bot control + chat)
 app.include_router(telegram_router)

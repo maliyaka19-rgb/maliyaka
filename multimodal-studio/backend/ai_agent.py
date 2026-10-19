@@ -334,10 +334,15 @@ After completing a task, ask yourself:
 
 When you need to use tools, call them. Work like a real coding assistant — read code before editing, test after changes."""
 
-    async def chat(self, user_message: str, conversation_id: str = None, history: List[Dict] = None, agent_id: str = None) -> Dict:
+    async def chat(self, user_message: str, conversation_id: str = None, history: List[Dict] = None, agent_id: str = None, tools_override: List[str] = None, system_prefix: str = None) -> Dict:
         """
         Main chat interface. Processes user message through LLM with tool use.
         Records experience in brain for continuous learning.
+
+        tools_override : adım-bazlı EN AZ YETKİ için araç allow-list'i ZORLAR
+                         (Kodlama Yöneticisi kullanır; yazma adımında salt-okuma
+                         araçlarına daraltılabilir).
+        system_prefix  : sistem istemine eklenen kısa ön-ek (görev tanımı/rol).
         """
         import time
         start_time = time.time()
@@ -366,6 +371,17 @@ When you need to use tools, call them. Work like a real coding assistant — rea
                         self._active_model = custom_agent["model"]
             except Exception as e:
                 logger.debug(f"Custom agent load error: {e}")
+
+        # Adım-bazlı araç izni: Kodlama Yöneticisi en az yetki ilkesini böyle uygular.
+        if tools_override is not None:
+            self._active_tools = list(tools_override)
+            if not self._active_tools:
+                # Boş liste = hiçbir araç yok (kesinlikle yazma yapamaz).
+                self._active_tools = []
+        if system_prefix:
+            custom_system_prompt = (
+                (custom_system_prompt + "\n\n") if custom_system_prompt else ""
+            ) + system_prefix
         
         # Get or create conversation
         if conversation_id is None:
@@ -792,11 +808,15 @@ Kurallar:
         or unknown so the agent is never left without tools.
         """
         allowed = getattr(self, "_active_tools", None)
-        if not allowed:
+        # None  => kısıt YOK (tüm araçlar).  []  => hiç araç YOK (en az yetki).
+        if allowed is None:
             return list(TOOLS)
         if not isinstance(allowed, (list, tuple, set)):
             logger.warning(f"Invalid _active_tools type {type(allowed).__name__}; using full TOOLS")
             return list(TOOLS)
+        if len(allowed) == 0:
+            # Kodlama Yöneticisi salt-okuma adımlarında bunu kullanır: hiç araç yok.
+            return []
         wanted = set(allowed)
         filtered = [t for t in TOOLS if t.get("function", {}).get("name") in wanted]
         if not filtered:
@@ -1554,10 +1574,13 @@ def reset_agent_v6():
     return get_agent_v6()
 
 
-async def chat(user_message: str, conversation_id: str = None, history=None, agent_id: str = None) -> Dict:
+async def chat(user_message: str, conversation_id: str = None, history=None, agent_id: str = None, tools_override: list = None, system_prefix: str = None) -> Dict:
     """Quick chat function."""
     agent = get_agent_v6()
-    return await agent.chat(user_message, conversation_id, history=history, agent_id=agent_id)
+    return await agent.chat(
+        user_message, conversation_id, history=history, agent_id=agent_id,
+        tools_override=tools_override, system_prefix=system_prefix,
+    )
 
 
 def get_agent_info() -> Dict:

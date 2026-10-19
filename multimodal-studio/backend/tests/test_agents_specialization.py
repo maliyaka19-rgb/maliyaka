@@ -21,10 +21,17 @@ import tools_spec
 
 
 def test_roster_integrity_and_specialization():
-    """Tüm 20 ajanın varlığı, temel alanları ve araç atamaları."""
+    """Ajan kadrosu bütünlüğü: mevcut 20 ajan korunur + kodlama ekibi eklenebilir."""
     agents = ca.load_agents()
-    assert len(agents) == 20
+    assert len(agents) >= 20
     by_id = {a["id"]: a for a in agents}
+    # Mevcut 20 genel ajan SİLİNMEMİŞ olmalı
+    original = ["assistant", "coder", "teacher", "designer", "analyst", "artist",
+                "researcher", "writer", "translator", "marketer", "devops", "security",
+                "chat-pro", "python-pro", "frontend-pro", "backend-pro",
+                "image-pro", "video-pro", "reviewer", "team-lead"]
+    for must in original:
+        assert must in by_id, f"Mevcut ajan silinmis: {must}"
 
     # Özel araç atamaları doğrulaması
     assert "generate_image" in by_id["designer"]["tools"], "Designer gerçek görsel üretebilmeli"
