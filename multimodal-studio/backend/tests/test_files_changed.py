@@ -58,7 +58,8 @@ def test_report_lists_files_actually_changed(tmp_files, monkeypatch):
     assert res["report"]["4_degistirilen_dosyalar"] == ["calc.py", "test_calc_sub.py"]
     saved = json.loads((tmp_files / "coding_tasks.json").read_text(encoding="utf-8"))
     assert saved[-1]["files_changed"] == ["calc.py", "test_calc_sub.py"]
-    assert saved[-1]["messages"][2]["changes"] == ["calc.py"]
+    coder_msg = [m for m in saved[-1]["messages"] if m["recipient"] == "coder"]
+    assert coder_msg and coder_msg[0]["changes"] == ["calc.py"]
 
 
 def test_no_changes_reports_empty(tmp_files, monkeypatch):

@@ -806,6 +806,28 @@ CODING_TEAM_AGENTS = [
         "created_at": datetime.now().isoformat()
     },
     {
+        "id": "task-planner",
+        "name": "Görev Planlama Uzmanı",
+        "description": "İsteği alt görevlere böler; sıra, bağımlılık ve kabul kriterlerini belirler",
+        "icon": "🗂️",
+        "color": "#6366f1",
+        "system_prompt": """Sen GÖREV PLANLAMA uzmanısın.
+
+## GÖREVİN
+- Kullanıcı isteğini ölçülebilir alt görevlere böl.
+- Her alt görev için: amaç, giriş/çıkış, bağımlılık ve KABUL KRİTERİ yaz.
+- Hangi uzmanın hangi sırayla çalışması gerektiğini öner.
+- Belirsizliği ve varsayımları açıkça ayır.
+
+## KURALLAR
+- Hiçbir dosyayı DEĞİŞTİRME/OLUŞTURMA; yalnızca plan üret.
+- Türkçe, kısa, numaralı liste halinde yaz. Kanıtsız süre/başarı iddiası yok.""",
+        "tools": ["read_file", "list_files", "search_files", "answer_question"],
+        "model": None,
+        "is_default": False,
+        "created_at": datetime.now().isoformat()
+    },
+    {
         "id": "code-analyst",
         "name": "Kod Analiz Uzmanı",
         "description": "Mevcut kodu ve dosya yapısını inceler; değişiklik alanlarını belirler",
@@ -1151,6 +1173,77 @@ CODING_TEAM_AGENTS = [
 ]
 
 DEFAULT_AGENTS.extend(CODING_TEAM_AGENTS)
+
+
+# ============================================================
+# KODLAMA EKİBİ RESMİ KADROSU
+# Ana Yönetici Ajan -> Kodlama Yöneticisi -> 20 uzman
+# ============================================================
+CODING_TEAM_GROUPS = [
+    "A. Analiz ve planlama",
+    "B. Yazılım geliştirme",
+    "C. Kalite ve güvenlik",
+    "D. Yayın ve sürekli geliştirme",
+]
+
+# Sıra kullanıcı tanımıyla birebir aynıdır (1..20).
+CODING_SPECIALISTS = [
+    {"group": "A. Analiz ve planlama", "role": "Kod Analiz Ajanı", "id": "code-analyst"},
+    {"group": "A. Analiz ve planlama", "role": "Sistem Mimarisi Ajanı", "id": "architect"},
+    {"group": "A. Analiz ve planlama", "role": "Görev Planlama Ajanı", "id": "task-planner"},
+    {"group": "A. Analiz ve planlama", "role": "Bağımlılık Analiz Ajanı", "id": "dependency-analyst"},
+    {"group": "B. Yazılım geliştirme", "role": "Kod Geliştirme Ajanı", "id": "coder"},
+    {"group": "B. Yazılım geliştirme", "role": "Hata Düzeltme Ajanı", "id": "bug-fixer"},
+    {"group": "B. Yazılım geliştirme", "role": "API ve Backend Ajanı", "id": "backend-pro"},
+    {"group": "B. Yazılım geliştirme", "role": "Arayüz ve Frontend Ajanı", "id": "frontend-pro"},
+    {"group": "B. Yazılım geliştirme", "role": "Veritabanı Ajanı", "id": "database-pro"},
+    {"group": "B. Yazılım geliştirme", "role": "Entegrasyon Ajanı", "id": "integrator"},
+    {"group": "C. Kalite ve güvenlik", "role": "Test Ajanı", "id": "test-engineer"},
+    {"group": "C. Kalite ve güvenlik", "role": "Kod İnceleme Ajanı", "id": "reviewer"},
+    {"group": "C. Kalite ve güvenlik", "role": "Güvenlik Ajanı", "id": "security"},
+    {"group": "C. Kalite ve güvenlik", "role": "Performans Ajanı", "id": "performance-pro"},
+    {"group": "C. Kalite ve güvenlik", "role": "Hata Bulma Ajanı", "id": "debugger"},
+    {"group": "D. Yayın ve sürekli geliştirme", "role": "DevOps ve Dağıtım Ajanı", "id": "devops"},
+    {"group": "D. Yayın ve sürekli geliştirme", "role": "Dokümantasyon Ajanı", "id": "docs-writer"},
+    {"group": "D. Yayın ve sürekli geliştirme", "role": "Kod Optimizasyonu Ajanı", "id": "optimizer"},
+    {"group": "D. Yayın ve sürekli geliştirme", "role": "Regresyon Kontrol Ajanı", "id": "regression-tester"},
+    {"group": "D. Yayın ve sürekli geliştirme", "role": "Öğrenme ve Gelişim Ajanı", "id": "learning-agent"},
+]
+
+
+def coding_hierarchy() -> Dict:
+    """Ana Yönetici -> Kodlama Yöneticisi -> 20 uzman ağacını döndürür.
+
+    Eksik ajan varsa `missing` alanında AÇIKÇA bildirilir (sessizce yutulmaz).
+    """
+    agents = {a.get("id"): a for a in load_agents() if isinstance(a, dict)}
+
+    def _brief(agent_id: str) -> Dict:
+        a = agents.get(agent_id) or {}
+        return {
+            "id": agent_id,
+            "name": a.get("name") or agent_id,
+            "description": a.get("description", ""),
+            "icon": a.get("icon", "🤖"),
+            "color": a.get("color", "#64748b"),
+            "tools": a.get("tools") or [],
+        }
+
+    groups = []
+    for group_name in CODING_TEAM_GROUPS:
+        members = [
+            {**_brief(s["id"]), "role": s["role"]}
+            for s in CODING_SPECIALISTS if s["group"] == group_name
+        ]
+        groups.append({"name": group_name, "specialists": members})
+
+    return {
+        "main_manager": _brief("main-manager"),
+        "coding_manager": _brief("coding-manager"),
+        "groups": groups,
+        "total_specialists": len(CODING_SPECIALISTS),
+        "missing": [s["id"] for s in CODING_SPECIALISTS if s["id"] not in agents],
+    }
 
 
 def load_agents() -> List[Dict]:

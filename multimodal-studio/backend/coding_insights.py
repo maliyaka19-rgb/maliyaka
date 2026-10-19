@@ -77,6 +77,7 @@ def _make_insight(kind: str, severity: str, finding: str, evidence: Dict[str, An
         "evidence": evidence,
         "recommendation": recommendation,
         "status": STATUS_PROPOSAL,
+        "agent": "learning-agent",  # üreten uzman (denetimli, uygulamaz)
         "applied": False,          # denetimli: hiçbir zaman otomatik uygulanmaz
         "created_at": _now(),
         "updated_at": _now(),

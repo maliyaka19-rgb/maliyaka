@@ -12,7 +12,8 @@ import uuid
 
 from custom_agents import (
     load_agents, get_agent, create_agent, 
-    update_agent, delete_agent, duplicate_agent
+    update_agent, delete_agent, duplicate_agent,
+    coding_hierarchy,
 )
 
 logger = logging.getLogger("nexus-custom-agents")
@@ -66,6 +67,13 @@ async def list_agents():
         "agents": agents,
         "total": len(agents)
     }
+
+
+@router.get("/hierarchy", summary="Ajan hiyerarşisi (Ana Yönetici -> Kodlama Yöneticisi -> 20 uzman)")
+async def agents_hierarchy():
+    """Kodlama ekibinin resmî kadrosunu gruplu döndürür (arayüzde gösterim için)."""
+    data = coding_hierarchy()
+    return {"success": True, **data}
 
 
 @router.get("/{agent_id}", summary="Get agent details")

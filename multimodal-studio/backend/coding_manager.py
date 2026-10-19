@@ -60,6 +60,9 @@ class TaskType(str, Enum):
     SECURITY = "security"
     PERFORMANCE = "performance"
     API = "api"
+    FRONTEND = "frontend"
+    DATABASE = "database"
+    DEVOPS = "devops"
     RESEARCH = "research"
     REFACTOR = "refactor"
     GENERAL = "general"
@@ -118,6 +121,12 @@ _TASK_KEYWORDS: Dict[TaskType, List[str]] = {
                            "latency", "gecikme", "profiling"],
     TaskType.API: ["api", "endpoint", "rest", "uç nokta", "uc nokta", "backend", "sunucu",
                    "server", "route", "jwt", "fastapi", "flask", "socket", "webhook"],
+    TaskType.FRONTEND: ["arayüz", "arayuz", "frontend", "ui", "ekran", "sayfa", "bileşen",
+                        "bilesen", "component", "react", "css", "html", "layout", "stil"],
+    TaskType.DATABASE: ["veritabanı", "veritabani", "database", "sql", "migration", "migrasyon",
+                        "şema", "sema", "tablo", "postgres", "mysql", "sqlite", "sorgu"],
+    TaskType.DEVOPS: ["deploy", "dağıt", "dagit", "docker", "kubernetes", "ci/cd", "pipeline",
+                      "yayınla", "yayinla", "sunucuya", "render", "nginx", "systemd"],
     TaskType.REFACTOR: ["refactor", "yeniden düzenle", "yeniden duzenle", "temizle", "kod kalitesi",
                         "basitleştir", "basitlestir", "modüler", "moduler", "duplicate", "tekrar eden"],
     TaskType.FEATURE: ["yeni özellik", "yeni ozellik", "özellik ekle", "ozellik ekle", "ekle",
@@ -131,6 +140,7 @@ _TASK_KEYWORDS: Dict[TaskType, List[str]] = {
 # Eşitlik durumunda tercih sırası (riskli/özel türler önce).
 _TASK_PRIORITY = [
     TaskType.SECURITY, TaskType.BUGFIX, TaskType.PERFORMANCE, TaskType.API,
+    TaskType.FRONTEND, TaskType.DATABASE, TaskType.DEVOPS,
     TaskType.REFACTOR, TaskType.FEATURE, TaskType.RESEARCH, TaskType.GENERAL,
 ]
 
@@ -163,7 +173,9 @@ def classify_task(message: str) -> TaskType:
 
 WORKFLOWS: Dict[TaskType, List[Dict[str, Any]]] = {
     TaskType.FEATURE: [
+        {"role": "task-planner", "goal": "İsteği alt görevlere böl; sıra, bağımlılık ve kabul kriterlerini yaz.", "write": False, "optional": True},
         {"role": "code-analyst", "goal": "İlgili dosyaları ve mevcut kod yapısını incele; değişiklik alanlarını listele.", "write": False},
+        {"role": "dependency-analyst", "goal": "Değişikliğin bağımlılık/ortam etkisini (paket, sürüm, platform) değerlendir.", "write": False, "optional": True},
         {"role": "architect", "goal": "Önerilen değişikliğin mimari etkisini ve risklerini değerlendir.", "write": False, "optional": True},
         {"role": "coder", "goal": "İstenen özelliği mevcut kod standartlarına uygun şekilde geliştir.", "write": True},
         {"role": "test-engineer", "goal": "Değişiklik için birim/entegrasyon testleri yaz ve çalıştır; gerçek çıktıyı raporla.", "write": True},
@@ -173,6 +185,7 @@ WORKFLOWS: Dict[TaskType, List[Dict[str, Any]]] = {
     TaskType.BUGFIX: [
         {"role": "debugger", "goal": "Hata mesajı/günlükleri incele; kök nedeni araştır (varsayımı bulgudan ayır).", "write": False},
         {"role": "code-analyst", "goal": "Hatayla ilgili kodu ve bağımlılıkları incele.", "write": False},
+        {"role": "dependency-analyst", "goal": "Hatanın bağımlılık/sürüm/ortam kaynaklı olup olmadığını kontrol et.", "write": False, "optional": True},
         {"role": "bug-fixer", "goal": "Hedefe yönelik, ilgisiz koda dokunmayan güvenli düzeltme yap.", "write": True},
         {"role": "test-engineer", "goal": "Hatayı yeniden üreten test yaz, düzeltmeyi doğrula, gerçek çıktıyı raporla.", "write": True},
         {"role": "reviewer", "goal": "Düzeltmeyi bağımsız incele.", "write": False},
@@ -194,7 +207,9 @@ WORKFLOWS: Dict[TaskType, List[Dict[str, Any]]] = {
         {"role": "regression-tester", "goal": "Regresyon kontrolü yap.", "write": False, "optional": True},
     ],
     TaskType.API: [
+        {"role": "task-planner", "goal": "API görevini alt görevlere böl; sözleşme ve kabul kriterlerini yaz.", "write": False, "optional": True},
         {"role": "architect", "goal": "API sözleşmesini, veri modellerini ve uç nokta tasarımını belirle.", "write": False},
+        {"role": "database-pro", "goal": "Veri modeli/şema ve sorgu etkisini değerlendir; gerekli değişikliği öner.", "write": False, "optional": True},
         {"role": "backend-pro", "goal": "Sunucu/API uç noktasını doğrulama, hata yanıtları ve yetkilendirmeyle geliştir.", "write": True},
         {"role": "integrator", "goal": "Yeni uç noktayı arayüz/istemcilerle entegre et; veri formatı uyumunu kontrol et.", "write": True},
         {"role": "security", "goal": "Yeni uç noktanın yetkilendirme ve girdi doğrulamasını incele.", "write": False},
@@ -213,6 +228,27 @@ WORKFLOWS: Dict[TaskType, List[Dict[str, Any]]] = {
         {"role": "test-engineer", "goal": "Refactor sonrası testleri çalıştır.", "write": True},
         {"role": "regression-tester", "goal": "Regresyon kontrolü yap.", "write": False},
         {"role": "reviewer", "goal": "Bağımsız incele.", "write": False},
+    ],
+    TaskType.FRONTEND: [
+        {"role": "code-analyst", "goal": "Mevcut arayüz kodunu ve bileşen yapısını incele.", "write": False},
+        {"role": "frontend-pro", "goal": "İstenen arayüz değişikliğini erişilebilirlik ve mevcut stil kurallarına uygun uygula.", "write": True},
+        {"role": "test-engineer", "goal": "Arayüz davranışını doğrulayan testi yaz/çalıştır; gerçek çıktıyı raporla.", "write": True},
+        {"role": "reviewer", "goal": "Değişikliği bağımsız incele; kırık bağlantı ve erişilebilirlik sorunu ara.", "write": False},
+        {"role": "regression-tester", "goal": "Mevcut ekranların bozulmadığını doğrula.", "write": False, "optional": True},
+    ],
+    TaskType.DATABASE: [
+        {"role": "code-analyst", "goal": "Mevcut veri modelini ve sorguları incele.", "write": False},
+        {"role": "dependency-analyst", "goal": "Veritabanı sürücüsü/bağımlılık ve sürüm uyumunu kontrol et.", "write": False, "optional": True},
+        {"role": "database-pro", "goal": "Şema/migration ve sorgu değişikliğini geri alınabilir biçimde uygula.", "write": True},
+        {"role": "test-engineer", "goal": "Veri katmanı testini yaz/çalıştır; gerçek çıktıyı raporla.", "write": True},
+        {"role": "reviewer", "goal": "Veri kaybı ve geriye dönük uyumluluk riskini incele.", "write": False},
+    ],
+    TaskType.DEVOPS: [
+        {"role": "dependency-analyst", "goal": "Çalışma zamanı/bağımlılık ve ortam gereksinimlerini çıkar.", "write": False},
+        {"role": "devops", "goal": "Dağıtım/CI yapılandırmasını en az yetkiyle hazırla; sırları koda yazma.", "write": True},
+        {"role": "test-engineer", "goal": "Yapılandırmayı doğrulayan komutu çalıştır; gerçek çıktıyı raporla.", "write": True},
+        {"role": "reviewer", "goal": "Dağıtım risklerini (sır sızıntısı, eksik ortam değişkeni) incele.", "write": False},
+        {"role": "evidence-auditor", "goal": "İddia edilen dağıtım adımları ile gerçek çıktıları karşılaştır.", "write": False, "optional": True},
     ],
     TaskType.GENERAL: [
         {"role": "code-analyst", "goal": "İlgili kodu incele ve durumu özetle.", "write": False},
@@ -693,6 +729,7 @@ class CodingTaskManager:
                 "total": int(result.get("total", len(items))),
                 "tasks_analyzed": int(result.get("tasks_analyzed", 0)),
                 "open": sum(1 for i in items if i.get("status") == proposal),
+                "agent": "learning-agent",
                 "applied": False,
             }
         except Exception as exc:  # öğrenme katmanı görevi asla düşürmez

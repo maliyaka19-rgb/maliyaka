@@ -860,3 +860,42 @@ yaziyordu** (guvenlik + ayrisim kusuru).
 yok** (`Depends`/Bearer yok). `execute` modu `shell=True` komut calistirdigi icin API
 disariya acilirsa **uzaktan komut calistirma** riski vardir. Render/Internet'e acmadan
 once mutlaka kapatilmali. Yerel kullanimda risk sinirli.
+
+---
+
+## Ek 11 - Kodlama ekibi hiyerarsisi: 20 uzman + arayuzde gosterim
+
+**Sorun:** Kullanici tanimindaki 20 uzmanin 19'u vardi; **Gorev Planlama Ajani yoktu**.
+Ayrica `coder`, `backend-pro`, `frontend-pro`, `reviewer`, `security`, `devops` kayitliydi
+ama hicbir is akisinda calismiyordu (kagit uzerinde). Ajan secim penceresi 40 ajani duz
+liste gosteriyordu; Ana Yonetici -> Kodlama Yoneticisi -> uzman iliskisi gorunmuyordu.
+
+**Yapilan:**
+- `task-planner` (Gorev Planlama Uzmani) eklendi.
+- `custom_agents.py`: `CODING_SPECIALISTS` resmi kadro (20, kullanici sirasiyla, 4/6/5/5)
+  + `coding_hierarchy()`; eksik ajan `missing` alaninda acikca bildirilir.
+- `GET /api/v1/agents/hierarchy` eklendi (`/api/v1/agents/{id}`'den once).
+- `coding_manager.py`: `TaskType.FRONTEND/DATABASE/DEVOPS` + deterministik anahtar kelime
+  yonlendirmesi + 3 yeni is akisi. FEATURE'a `task-planner` + `dependency-analyst`,
+  API'ye `task-planner` + `database-pro`, BUGFIX'e `dependency-analyst` eklendi.
+- `learning-agent`: gorev sonu otomatik icgoruler artik `agent="learning-agent"` alaniyla
+  isaretlenir (LLM adimi degil, denetimli katman; `applied=False`).
+- Arayuz (`js/app.js`): model/ajan penceresi hiyerarsik render - Yonetim, Kodlama
+  Yoneticisi - 20 uzman, A/B/C/D gruplari, Diger Ajanlar. `sohbet.html` v=70 (onbellek).
+
+**Kanit:**
+| Kalem | Sonuc |
+|---|---|
+| Test | **244 PASS** (12 yeni `test_coding_team.py`) |
+| ruff | temiz |
+| `/api/v1/agents/hierarchy` | `total_specialists=20`, `missing=[]`, 4 grup (4/6/5/5) |
+| `/api/v1/agents` | 40 ajan; `task-planner` kayitli |
+| Arayuz DOM | 40 kart; "KODLAMA YONETICISI - 20 UZMAN", A/B/C/D basliklari |
+| Canli gorev (`plan`) | 71.1 sn; `task_type=frontend`; uzmanlar: code-analyst -> frontend-pro -> test-engineer -> reviewer -> regression-tester |
+| Nihai yanit | Ana Yonetici rapor incelemesi (plan modunda yazma yok, acikca belirtildi) |
+| Icgoru | `agent=learning-agent`, `applied=false`, `created=0` (dedup) |
+
+**Not:** Plan modunda yazma beklenmez; uygulama kaniti Ek 9/10'daki `execute` kosularindadir.
+
+
+

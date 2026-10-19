@@ -410,3 +410,32 @@
   `shell=True` çalıştırdığı için API internete açılırsa uzaktan komut çalıştırma riski.
   Yerel kullanımda sınırlı; dağıtımdan önce kapatılmalı (opsiyonel `NEXUS_REQUIRE_AUTH`
   guard + arayüzde Bearer başlığı önerilir).
+
+## D-040 - Kodlama kadrosunun tek kaynağı: 20 uzman + açık eksik bildirimi
+- **Bağlam**: Kullanıcı tanımında 20 uzman var; sistemde 19'u vardı (Görev Planlama yoktu)
+  ve 6 uzman hiçbir iş akışında çalışmıyordu.
+- **Karar**: `custom_agents.CODING_SPECIALISTS` = resmî kadro (kullanıcı sırasıyla 20 kayıt,
+  4/6/5/5 grupları). `coding_hierarchy()` yöneticileri + grupları döndürür; kayıtlı olmayan
+  uzman `missing` alanında **açıkça** listelenir (sessiz yutma yok). `task-planner` eklendi.
+- **Sınır**: Kadroya eklemek ajanı otomatik "çalışıyor" yapmaz; iş akışı bağı ayrıca kurulur
+  (D-041) ve testle doğrulanır.
+- **Etki**: `test_coding_team.py` (12 test); toplam **244 PASS**.
+
+## D-041 - Görev türü yönlendirmesi: FRONTEND / DATABASE / DEVOPS
+- **Bağlam**: `frontend-pro`, `database-pro`, `devops` kayıtlıydı ama hiçbir akışta yoktu.
+- **Karar**: Üç yeni `TaskType` + deterministik anahtar kelime skoru. Öncelik sırası:
+  SECURITY > BUGFIX > PERFORMANCE > API > FRONTEND > DATABASE > DEVOPS > REFACTOR >
+  FEATURE > RESEARCH > GENERAL. Her tür kendi uzmanını **write=True** ile çalıştırır;
+  test ve inceleme adımları zorunlu, regresyon/kanıt adımları opsiyonel.
+- **Ek bağlar**: FEATURE -> `task-planner` (ilk) + `dependency-analyst`; API ->
+  `task-planner` + `database-pro` (danışma); BUGFIX -> `dependency-analyst`.
+- **Sınır**: Anahtar kelime yönlendirmesi deterministiktir; belirsiz istek `general` kalır.
+
+## D-042 - Hiyerarşi arayüzde API'den gelir; öğrenme ajanı içgörüye işaretlenir
+- **Karar**: Ajan seçim penceresi `/api/v1/agents/hierarchy` verisini kullanır ve
+  Yönetim -> Kodlama Yöneticisi · 20 uzman -> A/B/C/D -> Diğer Ajanlar olarak render eder.
+  Hiyerarşi istemcide elle yazılmaz (tek kaynak). `sohbet.html` script sürümü artırılır.
+- **Öğrenme**: Otomatik içgörüler `agent="learning-agent"` alanıyla üretilir; LLM adımı
+  değildir, `applied=False` kalır (D-031/D-037 korunur).
+- **Kanıt**: Canlı `plan` koşusu 71.1 sn, `task_type=frontend`, uzman zinciri doğru,
+  nihai yanıt Ana Yönetici'den; DOM'da 20 uzman ve 4 grup başlığı görünür.

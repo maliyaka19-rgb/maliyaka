@@ -279,3 +279,16 @@ LLM/ag kullanmaz; aynı girdiden aynı çıktıyı üretir (test edilebilir).
 - Ajan araclari artik gorevin dizininde yazar/calisir; eszamanli gorevler izole.
 - Canli API kaniti: dosya gorev dizininde, ana repo temiz, bagimsiz pytest exit=0.
 - **ACIK KRITIK RISK**: `/api/v1/coding/*` kimlik dogrulamasi yok; internete acmadan once kapat.
+
+## Ek 11 - 20 uzmanli kadro ve hiyerarsi
+- **Tek kaynak**: `custom_agents.CODING_SPECIALISTS` (20; 4/6/5/5). `task-planner` eklendi.
+  `coding_hierarchy()` eksik ajanı `missing` alanında açıkça bildirir.
+- **API**: `GET /api/v1/agents/hierarchy` (Ana Yönetici + Kodlama Yöneticisi + gruplar).
+- **Gerçek görev bağı**: FRONTEND/DATABASE/DEVOPS görev türleri + akışları; FEATURE/API/BUGFIX'e
+  planner ve bağımlılık/danışma adımları. `learning-agent` görev sonu içgörüleri üretir
+  (`agent` alanı), `applied=false`.
+- **Arayüz**: Ajan penceresi hiyerarşik: Yönetim -> Kodlama Yöneticisi · 20 uzman -> A/B/C/D ->
+  Diğer Ajanlar. `sohbet.html` `app.js?v=70`.
+- **Kanıt**: 244 PASS; canlı `plan` 71.1 sn, `task_type=frontend`, zincir
+  code-analyst -> frontend-pro -> test-engineer -> reviewer -> regression-tester; nihai yanıt
+  Ana Yönetici'den.

@@ -2147,6 +2147,7 @@
         let activeProvider = null;
         let activeModel = null;
         let allAgents = [];
+        let agentHierarchy = null;
 
         // Open model selector
         document.getElementById('model-btn').addEventListener('click', async () => {
@@ -2176,6 +2177,7 @@
         // AGENTS IN MODEL MODAL
         // ============================================================
         const AGENT_API_URL = `${API_BASE}/api/v1/agents`;
+        const HIERARCHY_API_URL = `${API_BASE}/api/v1/agents/hierarchy`;
         const agentGridModal = document.getElementById('agent-grid-modal');
         const autoAgentCard = document.getElementById('auto-agent-card');
         const teamAgentCard = document.getElementById('team-agent-card');
@@ -2184,38 +2186,89 @@
         // Load agents for modal display
         async function loadAgentsForModal() {
             try {
-                const res = await fetch(AGENT_API_URL);
+                const [res, hres] = await Promise.all([
+                    fetch(AGENT_API_URL),
+                    fetch(HIERARCHY_API_URL).catch(() => null),
+                ]);
                 const data = await res.json();
                 if (data.success) {
                     allAgents = data.agents;
                     if (agentCountLabel) agentCountLabel.textContent = allAgents.length;
-                    renderAgentGridModal();
                 }
+                if (hres) {
+                    const h = await hres.json().catch(() => null);
+                    if (h && h.success && Array.isArray(h.groups) && h.groups.length) {
+                        agentHierarchy = h;
+                    }
+                }
+                renderAgentGridModal();
             } catch (e) {
                 console.error('Agents load error:', e);
             }
         }
 
-        // Render agents in modal
-        function renderAgentGridModal() {
-            let html = '';
-            allAgents.forEach(agent => {
-                const isActive = agent.id === currentAgentId;
-                const toolsCount = (agent.tools || []).length;
-                html += `
-                    <div class="agent-modal-card ${isActive ? 'active' : ''}" data-id="${agent.id}">
-                        <div class="agent-modal-card-icon" style="background: ${agent.color}20; color: ${agent.color}">
-                            ${agent.icon}
-                        </div>
-                        <div class="agent-modal-card-info">
-                            <div class="agent-modal-card-name">${escapeHtml(agent.name)}</div>
-                            <div class="agent-modal-card-desc">${escapeHtml(agent.description || '')}</div>
-                            <div class="agent-modal-card-tools">${toolsCount} araç</div>
-                        </div>
-                        ${isActive ? '<span style="color: var(--accent)">✓</span>' : ''}
+        function agentModalCard(agent, note) {
+            if (!agent) return '';
+            const isActive = agent.id === currentAgentId;
+            const toolsCount = (agent.tools || []).length;
+            const color = agent.color || '#64748b';
+            return `
+                <div class="agent-modal-card ${isActive ? 'active' : ''}" data-id="${agent.id}">
+                    <div class="agent-modal-card-icon" style="background: ${color}20; color: ${color}">
+                        ${agent.icon || '🤖'}
                     </div>
-                `;
-            });
+                    <div class="agent-modal-card-info">
+                        <div class="agent-modal-card-name">${escapeHtml(agent.name || agent.id)}</div>
+                        <div class="agent-modal-card-desc">${escapeHtml(note || agent.description || '')}</div>
+                        <div class="agent-modal-card-tools">${toolsCount} araç</div>
+                    </div>
+                    ${isActive ? '<span style="color: var(--accent)">✓</span>' : ''}
+                </div>
+            `;
+        }
+
+        function hierarchyHeading(title, subtitle) {
+            return `
+                <div style="grid-column: 1 / -1; margin: 12px 0 2px; padding-top: 10px; border-top: 1px solid rgba(148,163,184,.18);">
+                    <div style="font-size: .78rem; font-weight: 700; letter-spacing: .04em; color: var(--fg-muted); text-transform: uppercase;">${escapeHtml(title)}</div>
+                    ${subtitle ? `<div style="font-size: .74rem; color: var(--fg-muted); opacity: .75; margin-top: 2px;">${escapeHtml(subtitle)}</div>` : ''}
+                </div>
+            `;
+        }
+
+        // Render agents in modal — hiyerarşi: Ana Yönetici -> Kodlama Yöneticisi -> 20 uzman
+        function renderAgentGridModal() {
+            const byId = {};
+            allAgents.forEach(a => { byId[a.id] = a; });
+
+            let html = '';
+            if (agentHierarchy) {
+                const h = agentHierarchy;
+                html += hierarchyHeading('Yönetim', 'Ana Yönetici → Kodlama Yöneticisi → uzmanlar');
+                html += agentModalCard(byId[h.main_manager.id] || h.main_manager);
+                html += hierarchyHeading(
+                    `Kodlama Yöneticisi · ${h.total_specialists} uzman`,
+                    'Tüm uzmanlar Kodlama Yöneticisi altında çalışır; raporu Ana Yönetici onaylar'
+                );
+                html += agentModalCard(byId[h.coding_manager.id] || h.coding_manager);
+
+                const used = new Set([h.main_manager.id, h.coding_manager.id]);
+                h.groups.forEach(group => {
+                    html += hierarchyHeading(group.name, `${group.specialists.length} uzman`);
+                    group.specialists.forEach(s => {
+                        used.add(s.id);
+                        html += agentModalCard(byId[s.id] || s, s.role);
+                    });
+                });
+
+                const others = allAgents.filter(a => !used.has(a.id));
+                if (others.length) {
+                    html += hierarchyHeading('Diğer Ajanlar', `${others.length} destek uzmanı`);
+                    others.forEach(a => { html += agentModalCard(a); });
+                }
+            } else {
+                allAgents.forEach(a => { html += agentModalCard(a); });
+            }
             agentGridModal.innerHTML = html;
 
             // Click handlers
