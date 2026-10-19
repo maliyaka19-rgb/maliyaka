@@ -63,3 +63,10 @@ generated_videos/
 
 # --- AI çalışma önbelleği ---
 .ai-work/cache/
+
+# --- Çalışma-zamanı loglar (commit edilmez) ---
+*.log
+**/*.log
+logs/
+**/logs/
+

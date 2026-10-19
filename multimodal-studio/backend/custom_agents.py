@@ -744,12 +744,30 @@ def load_agents() -> List[Dict]:
     # Merge: update default agents with latest definitions while keeping user custom agents
     default_ids = {a["id"] for a in DEFAULT_AGENTS}
     custom_user_agents = [a for a in stored_agents if a.get("id") not in default_ids]
-    
-    merged = list(DEFAULT_AGENTS) + custom_user_agents
-    try:
-        save_agents(merged)
-    except Exception:
-        pass
+
+    # Preserve the ORIGINAL created_at of default agents so that restarting the
+    # server does not rewrite the file on every boot (keeps git clean and keeps
+    # a truthful creation timestamp).
+    stored_created = {
+        a.get("id"): a.get("created_at")
+        for a in stored_agents
+        if a.get("id") in default_ids and a.get("created_at")
+    }
+    merged_defaults = []
+    for agent in DEFAULT_AGENTS:
+        agent = dict(agent)
+        if stored_created.get(agent["id"]):
+            agent["created_at"] = stored_created[agent["id"]]
+        merged_defaults.append(agent)
+
+    merged = merged_defaults + custom_user_agents
+    # Only rewrite the file when something actually changed (avoids timestamp
+    # churn on every startup).
+    if merged != stored_agents:
+        try:
+            save_agents(merged)
+        except Exception:
+            pass
     return merged
 
 

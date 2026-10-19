@@ -537,3 +537,24 @@ yalnızca dağıtım dosyaları hazırdı; gerçek dağıtım hesap gerektirdiğ
 - **Öneri**: token düz metin paylaşıldığı için @BotFather → `/revoke` ile yenileme.
 
 
+
+---
+
+## Oturum 15 - 2026-10-19 - Yerel calisma duzeni + git hijyeni
+
+- **Amac**: Projeyi tekrar localde calistirmak (kullanici istegi).
+- **Tek servis mimarisi**: backend :8000 hem API hem arayuzu (sohbet.html, index.html,
+  config.js, js/app.js, telegram.html) servis ediyor -> hepsi 200.
+- **Telegram botu**: `running:true`, `getUpdates?timeout=30` 200 OK, token logda `bot[GIZLI]`.
+- **AI sohbet**: `/api/v1/ai/chat` 200, gercek LLM yaniti. Arayuzde misafir girisi +
+  sohbet uctan uca test edildi, **0 konsol hatasi**.
+- **Yeni script'ler**: `baslat.ps1` (backend baslat + tarayici ac + health bekle),
+  `durdur.ps1` (:8000/:8080/:8090 durdur).
+- **GERCEK HATA (git hijyeni)**: `custom_agents.json` her backend acilisinda
+  `created_at` zaman damgalarini yeniden yaziyordu -> depo surekli kirli.
+  Duzeltme: `load_agents()` kayitli `created_at` degerlerini koruyor; dosya yalnizca
+  gercek degisiklik varsa yaziliyor.
+- **Temizlik**: test artefaktlari (`hello_world.py`, `fetch_weather.py`), gecici
+  loglar silindi; kok `.gitignore`'a `*.log` kurallari eklendi.
+- **Test**: `python -m pytest tests/ -q --ignore=tests/test_api_live.py` -> **150 PASS**.
+- **NOT RUN / BLOCKED**: 7/24 bulut (Render) dağıtımı - platform hesabı gerekir (BLOCKED).
