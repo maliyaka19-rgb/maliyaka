@@ -747,3 +747,31 @@ Tam rapor: **`.ai-work/CODING-AGENTS.md`**. Özet:
    `NEXUS_ENCRYPTION_PASSPHRASE`; `CORS_ORIGINS` boş bırakılabilir (tek servis).
 3. Deploy sonrası `https://<servis>.onrender.com/` doğrudan arayüzü açar.
 4. Ücretsiz plan: 15 dk hareketsizlikte uyur; kalıcı disk yok (görev/içgörü kaydı sıfırlanır).
+
+### Ek 7 (ayni oturum) - Saglayici devre kesici (tek-saglayici riskini azaltma)
+
+**Sorun (olculdu):** `_fallback_chain` gecersiz anahtarli saglayicilarin **tum modellerini**
+deniyordu: openrouter (17) + openai (5) = **22 gereksiz HTTP istegi**. Gercek olcum:
+**15.71 saniye**, her fallback'te tekrar.
+
+**Cozum:** `provider_health.py` - surec-yerel devre kesici.
+- **401/403** -> saglayici 30 dk devre disi (kardes modeller yine denenir; biri basarirsa
+  isaret temizlenir -> mevcut davranis korunur).
+- **404** -> yalnizca o model 15 dk disi; kardesler denenir.
+- **429** -> yalnizca o model beklemeye alinir (Retry-After, en cok 60 sn).
+- **5xx/timeout** -> karar DEGISMEZ (gecici olabilir; yanlis karar yok).
+- Anahtar panelden degisince `/api-key` **devre disini sifirlar** (`health_reset: true`).
+- `GET /api/v1/models/providers` artik `status`, `cooldown_seconds`, `last_error` ve
+  `health` ozeti dondurur (yalnizca bu surecte yapilan **gercek** cagrilalara dayanir).
+
+**Kanit:**
+| Olcum | Once | Sonra |
+|---|---|---|
+| 1. fallback (gecersiz anahtarlar) | 22 istek / **15.71 sn** | 22 istek / 15.71 sn (davranis korundu) |
+| 2. fallback | 22 istek / ~15 sn | **0 istek / 0.00 sn** |
+| Test | 200 PASS | **215 PASS** (15 yeni) |
+
+- Canli: `/providers` yeni alanlari donduruyor (`status=ok`, `health={}`); `/api-key` ->
+  `health_reset=true`; ana sohbet `success=true` "7 + 8 = 15."; `/` 200 HTML.
+- **Not (durust):** bu bir **dayaniklilik** iyilestirmesidir; gercek ikinci bulut
+  saglayicisi hala **BLOCKED** (gecerli anahtar gerekir).

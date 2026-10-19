@@ -160,7 +160,7 @@ Yeni `tests/test_coding_manager.py` (15 test):
 | Risk | Derece | Açıklama |
 |------|--------|----------|
 | Araç executor'da zorlama | ÇÖZÜLDÜ | `tool_executor.execute(allowed=…)` artık izin verilmeyen aracı ÇALIŞTIRMIYOR; `ai_agent._allowed_tool_names()` `_tools_payload` ile birebir tutarlı (5 yeni test). |
-| Tek model sağlayıcı | ORTA | Yalnızca groq geçerli; kesintide tek nokta arızası. |
+| Tek model sağlayıcı | ORTA (azaltıldı) | Yalnızca groq geçerli. **Devre kesici eklendi**: 401/403 alan sağlayıcı 30 dk atlanır (ölçüm: 22 istek/15.7 sn → **0 istek/0.00 sn**). Gerçek ikinci sağlayıcı için geçerli anahtar gerekir (BLOCKED). |
 | LLM kanıtsız iddia | DÜŞÜK | Kalite kapısı + evidence-auditor + Ana Yönetici ile azaltıldı; tam garanti değil. |
 | Uzun görev süresi | DÜŞÜK | 3 adım ~116 sn; TPM sınırı nedeniyle paralellik varsayılan KAPALI. |
 | Eşzamanlı istekler | ÇÖZÜLDÜ | `_active_tools`/`_active_model` artık **contextvar** (istek-yerel); eşzamanlı sohbetler birbirinin iznini ezmez (2 test). |
@@ -168,7 +168,7 @@ Yeni `tests/test_coding_manager.py` (15 test):
 ## 11. Sonraki geliştirme adımları
 
 1. `tool_executor.execute` içine allow-list zorlaması ekle (derinlemesine savunma) → **TAMAMLANDI** (commit `757af1e`).
-2. İkinci model sağlayıcı/yerel model (LM Studio/Ollama) yedekliliği ekle.
+2. İkinci model sağlayıcı/yerel model (LM Studio/Ollama) yedekliliği ekle → **TAMAMLANDI (yerel kısım)**; bulut ikinci sağlayıcı geçerli anahtar gerektirir (BLOCKED).
 3. `_active_tools`/`_active_model`'i istek-yerel (contextvar) yap → **TAMAMLANDI** (commit `6bfacd7`).
 4. Öğrenme Ajanı için geçmiş görev kayıtlarından otomatik içgörü üretimi (denetimli).
 5. CI'da `test_coding_manager.py` + regresyonu zorunlu kapı yap.

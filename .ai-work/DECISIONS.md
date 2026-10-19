@@ -351,3 +351,20 @@
 - **Güvenlik**: `.dockerignore` sır dosyalarını dışlar; `render.yaml` `AUTH_SECRET_KEY` ister
   (varsayılan geliştirme sırrı üretimde kullanılmasın).
 - **Etki**: `test_root_ui.py` (5 test); toplam **200 PASS**.
+
+## D-036 - Sağlayıcı devre kesici: 401/403 alan sağlayıcı atlanır
+- **Bağlam**: Yalnızca `groq` geçerli; `openrouter`/`openai` anahtarları 401 dönüyor.
+  `_fallback_chain` her fallback'te bu sağlayıcıların **tüm modellerini** deniyordu
+  (17 + 5 = 22 istek, ölçülen **15.71 sn**).
+- **Karar**: `provider_health.py` (süreç-yerel, bellek içi devre kesici):
+  401/403 → sağlayıcı 30 dk atlanır; 404 → yalnızca model; 429 → yalnızca model
+  (Retry-After, ≤60 sn); 5xx/timeout → **karar değişmez**.
+- **Gerekçe**: 10 - gerçek ölçümle doğrulandı (22 istek/15.71 sn → **0/0.00 sn**);
+  7 - tek sağlayıcıya bağımlılığın maliyeti azalır. Davranış korunur: ilk 401'de
+  kardeş modeller yine denenir (model bazlı yetki olabilir); başarı işareti temizler.
+- **Güvenlik**: anahtar/istek/yanıt metni **saklanmaz**; yalnızca HTTP kodu + etiket.
+  Kalıcılık yok → süreç yeniden başlayınca sıfırlanır; anahtar panelden değişince
+  `/api-key` `reset_provider()` çağırır.
+- **Etki**: `/providers` + `status/cooldown_seconds/last_error/health`;
+  `test_provider_health.py` (15 test) + `tests/conftest.py` (otomatik izolasyon);
+  toplam **215 PASS**. Gerçek ikinci bulut sağlayıcı hâlâ BLOCKED (anahtar yok).

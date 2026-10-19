@@ -26,6 +26,10 @@ import asyncio
 import httpx
 from contextvars import ContextVar
 
+# Sağlayıcı devre kesici: 401/403 alan sağlayıcıyı her sohbette yeniden denemeyi
+# önler (geçersiz anahtarla 22 gereksiz istek atılıyordu).
+from provider_health import health
+
 # Load .env file
 try:
     from dotenv import load_dotenv
@@ -1005,6 +1009,17 @@ Kurallar:
         if not api_key or api_key in ("sk-placeholder", "sk-your-openai-key-here") or provider == "fallback":
             logger.warning(f"No valid API key for {provider}, initiating fallback chain")
             return await self._fallback_chain(messages)
+
+        # Devre kesici: anahtari gecersiz oldugu bilinen saglayiciya HIÇ istek atmadan
+        # dogrudan zincire gec. (Anahtar panelden degisirse model_routes bunu sifirlar.)
+        if health.provider_blocked(provider):
+            logger.info(
+                "Provider %s devre disi (gecersiz anahtar, %.0f sn kaldi); fallback zincirine geciliyor",
+                provider, health.cooldown_remaining(provider),
+            )
+            return await self._fallback_chain(
+                messages, failed_provider=provider, failed_model=model
+            )
         
         try:
             async with httpx.AsyncClient(timeout=90) as client:
@@ -1055,6 +1070,8 @@ Kurallar:
 
                 if response is not None and response.status_code == 200:
                     data = response.json()
+                    # HTTP 200 = saglayici ve anahtar saglikli; onceki olumsuz karari temizle.
+                    health.note_success(provider, model)
                     if provider == "gemini" and "candidates" in data:
                         data = self._normalize_gemini_response(data)
                     
@@ -1090,6 +1107,7 @@ Kurallar:
                             retry_data = retry_resp.json()
                             if _validate_response(retry_data):
                                 logger.info("Tool-disabled retry succeeded")
+                                health.note_success(provider, model)
                                 return {"success": True, "data": retry_data, "tools_disabled": True}
                         logger.warning(
                             f"Tool-disabled retry failed {retry_resp.status_code}: {retry_resp.text[:150]}"
@@ -1102,6 +1120,19 @@ Kurallar:
                 # quota buckets) instead of dropping the only working provider.
                 status = response.status_code if response is not None else "?"
                 rate_limited = response is not None and response.status_code == 429
+                # Devre kesici: durum koduna gore saglayici/model karari kaydet.
+                # (5xx/timeout bilincli olarak NOTR: gecici olabilir.)
+                if response is not None:
+                    if response.status_code in (401, 403):
+                        health.mark_invalid(provider, response.status_code)
+                        logger.warning(
+                            "Provider %s anahtari gecersiz (HTTP %d); 30 dk devre disi",
+                            provider, response.status_code,
+                        )
+                    elif response.status_code == 404:
+                        health.mark_model_missing(provider, model, response.status_code)
+                    elif response.status_code == 429:
+                        health.mark_rate_limited(provider, model, _parse_retry_after(response))
                 detail = response.text[:200] if response is not None else "no response"
                 logger.warning(f"LLM API error {status} from {provider}/{model}: {detail}")
                 return await self._fallback_chain(
@@ -1153,6 +1184,15 @@ Kurallar:
             provider_info = MODEL_CATALOG.get(provider_id)
             if not provider_info:
                 continue
+
+            # Devre kesici: anahtari gecersiz oldugu bilinen saglayiciyi atla
+            # (17 modelli openrouter + 5 modelli openai = 22 bos istek onlenir).
+            if health.provider_blocked(provider_id):
+                logger.info(
+                    "Fallback: %s atlandi (gecersiz anahtar, %.0f sn kaldi)",
+                    provider_id, health.cooldown_remaining(provider_id),
+                )
+                continue
             
             # Get API key for this provider
             env_key = provider_info["env_key"]
@@ -1174,6 +1214,12 @@ Kurallar:
                 models_to_try = [m["id"] for m in provider_info["models"]]
             
             for model_id in models_to_try:
+                if health.model_blocked(provider_id, model_id):
+                    logger.debug(
+                        "Fallback: %s/%s atlandi (gecici olarak devre disi)",
+                        provider_id, model_id,
+                    )
+                    continue
                 try:
                     logger.info(f"Fallback trying: {provider_id}/{model_id}")
                     
@@ -1220,6 +1266,7 @@ Kurallar:
                                 continue
                             
                             logger.info(f"Fallback SUCCESS: {provider_id}/{model_id}")
+                            health.note_success(provider_id, model_id)
                             # Update active config for future calls
                             self.llm_config.api_key = api_key
                             self.llm_config.base_url = provider_info["base_url"]
@@ -1234,7 +1281,28 @@ Kurallar:
                             config["active_model"] = model_id
                             _save_config(config)
                             return {"success": True, "data": data}
+                        elif response.status_code in (401, 403):
+                            # Anahtar/hesap hatasi: saglayiciyi isaretle. KARDES modeller
+                            # yine denenir (bazi saglayicilarda yetki model bazli olabilir;
+                            # biri basarirsa note_success isareti temizler). Sonraki
+                            # cagrilarda saglayici tamamen atlanir.
+                            health.mark_invalid(provider_id, response.status_code)
+                            logger.warning(
+                                "Fallback: %s yetki hatasi (HTTP %d); sonraki cagrilarda atlanacak",
+                                provider_id, response.status_code,
+                            )
+                            continue
+                        elif response.status_code == 404:
+                            health.mark_model_missing(provider_id, model_id, 404)
+                            logger.warning(
+                                "Fallback: model yok %s/%s; diger model deneniyor",
+                                provider_id, model_id,
+                            )
+                            continue
                         elif response.status_code == 429:
+                            health.mark_rate_limited(
+                                provider_id, model_id, _parse_retry_after(response)
+                            )
                             logger.warning(f"Rate limited on {provider_id}/{model_id}, trying next model")
                             continue  # Try next model
                         else:

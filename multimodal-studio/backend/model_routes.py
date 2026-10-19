@@ -14,6 +14,8 @@ from cryptography.fernet import Fernet
 from cryptography.hazmat.primitives import hashes
 from cryptography.hazmat.primitives.kdf.pbkdf2 import PBKDF2HMAC
 
+from provider_health import health
+
 router = APIRouter(prefix="/api/v1/models", tags=["models"])
 
 # Config file path
@@ -329,7 +331,12 @@ async def set_api_key(data: dict):
 
     _save_config(config)
 
-    return {"success": True, "provider": provider, "has_key": bool(api_key)}
+    # Anahtar degisti: onceki "gecersiz anahtar" karari artik gecersiz ->
+    # devre disini kaldir ki yeni anahtar hemen kullanilabilsin.
+    health.reset_provider(provider)
+
+    return {"success": True, "provider": provider, "has_key": bool(api_key),
+            "health_reset": True}
 
 
 @router.get("/active")
@@ -380,15 +387,21 @@ async def list_providers():
     for pid, pinfo in MODEL_CATALOG.items():
         env_key = pinfo["env_key"]
         key = api_keys.get(pid) or os.getenv(env_key, "")
+        status = health.provider_status(pid)
         providers.append({
             "id": pid,
             "name": pinfo["name"],
             "free": pinfo["free"],
             "has_api_key": _is_valid_key(key),
-            "model_count": len(pinfo["models"])
+            "model_count": len(pinfo["models"]),
+            # Devre kesici durumu: "ok" | "invalid_key" | "rate_limited" ...
+            # (Yalnizca bu surecte yapilan gercek cagrilara dayanir; uydurma yok.)
+            "status": status["status"],
+            "cooldown_seconds": status.get("cooldown_seconds", 0.0),
+            "last_error": status.get("error"),
         })
 
-    return {"success": True, "providers": providers}
+    return {"success": True, "providers": providers, "health": health.snapshot()}
 
 
 @router.get("/local/status", summary="Yerel model (Ollama/LM Studio) durumu")
