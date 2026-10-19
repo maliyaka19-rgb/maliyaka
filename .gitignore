@@ -51,7 +51,7 @@ chroma_db/
 
 # --- Kodlama Yöneticisi çalışma-zamanı görev kayıtları ---
 **/coding_tasks.json
-
+**/coding_insights.json
 # --- Üretilen medya & yüklemeler ---
 uploads/
 **/uploads/

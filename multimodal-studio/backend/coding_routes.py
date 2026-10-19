@@ -94,3 +94,53 @@ async def coding_task_detail(task_id: str):
     if not task:
         raise HTTPException(status_code=404, detail="Görev bulunamadı")
     return {"success": True, "task": task}
+
+
+# ============================================================
+# ÖĞRENME AJANI — denetimli içgörüler (geçmiş görev kayıtlarından)
+# ============================================================
+
+class InsightDecision(BaseModel):
+    """İnsan kararı gerekçesi (opsiyonel)."""
+    note: str = Field(default="", max_length=500, description="Karar gerekçesi")
+
+
+@router.get("/insights", summary="Öğrenme Ajanı: denetimli içgörüler")
+async def coding_insights_list(status: Optional[str] = None):
+    """Saklanan içgörüleri listeler. `status` ile filtre: oneri/onaylandi/reddedildi."""
+    import coding_insights as cins
+    if status and status not in cins.VALID_STATUSES:
+        raise HTTPException(status_code=400,
+                            detail=f"Geçersiz durum: {status}. İzin verilenler: {sorted(cins.VALID_STATUSES)}")
+    items = cins.list_insights(status=status)
+    return {"success": True, "total": len(items), "insights": items}
+
+
+@router.post("/insights/analyze", summary="Görev geçmişinden içgörü üret (denetimli)")
+async def coding_insights_analyze():
+    """
+    Geçmiş görev kayıtlarını analiz eder ve ÖNERİ üretir.
+    Hiçbir kodu/modeli/güvenlik kuralını değiştirmez; yalnızca öneri kaydeder.
+    """
+    import coding_insights as cins
+    return cins.generate_insights()
+
+
+@router.post("/insights/{insight_id}/approve", summary="İçgörüyü onayla (uygulamaz)")
+async def coding_insights_approve(insight_id: str, data: Optional[InsightDecision] = None):
+    """Onayı kaydeder. Not: onay OTOMATİK uygulama DEĞİLDİR; yalnızca karar kaydıdır."""
+    import coding_insights as cins
+    item = cins.set_status(insight_id, "onaylandi", (data.note if data else ""))
+    if item is None:
+        raise HTTPException(status_code=404, detail="İçgörü bulunamadı")
+    return {"success": True, "insight": item}
+
+
+@router.post("/insights/{insight_id}/reject", summary="İçgörüyü reddet")
+async def coding_insights_reject(insight_id: str, data: Optional[InsightDecision] = None):
+    """Red kararını kaydeder."""
+    import coding_insights as cins
+    item = cins.set_status(insight_id, "reddedildi", (data.note if data else ""))
+    if item is None:
+        raise HTTPException(status_code=404, detail="İçgörü bulunamadı")
+    return {"success": True, "insight": item}

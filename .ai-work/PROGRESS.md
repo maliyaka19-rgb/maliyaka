@@ -644,3 +644,31 @@ Tam rapor: **`.ai-work/CODING-AGENTS.md`**. Özet:
   `test (3.11)`, `test (3.12)`, `test (3.13)`, `lint`, `frontend-check` hepsi yesil.
 - **Yerel regresyon**: 172 passed; import kontrolu OK.
 - **Commit'ler**: `c56bdb4` (bagimliliklar), `f13eff9` (teshis), `563e7ab` (test fix).
+
+### Ek 4 (ayni oturum) - #4 Ogrenme Ajani: denetimli icgoru + gercek arac hatasi
+
+- **Yeni yetenek**: `coding_insights.py` — gecmis gorev kayitlarindan DETERMINISTIK,
+  kanita dayali icgoru uretir (LLM yok; ayni girdiden ayni cikti).
+  Turler: `basarisizlik_orani`, `kanitsiz_tamamlama`, `retry_yogunlugu`,
+  `basarisiz_rol`, `tekrarlayan_kalan_risk`, `veri_yok`.
+- **Denetimli ogrenme (zorunlu kural)**: modul YALNIZCA `coding_insights.json` yazar;
+  kaynak kod/model/güvenlik kurallari DEGISMEZ. Onay dahi otomatik uygulama degildir
+  (`applied` daima `False`).
+- **Rotalar** (`/api/v1/coding`): `GET /insights`, `POST /insights/analyze`,
+  `POST /insights/{id}/approve`, `POST /insights/{id}/reject`.
+- **GERCEK HATA BULUNDU VE DUZELTILDI**: `search_learning` araci
+  `/api/v1/learning/report` adresine **POST** atiyordu, endpoint **GET**; canli sunucuda
+  **405 Method Not Allowed** donuyordu (arac "tanimli ama calismiyor" durumundaydi).
+  `tool_executor.py` GET'e cevrildi + non-200 icin gercek hata donduruyor.
+- **Test**: `tests/test_coding_insights.py` **15 PASS** -> toplam **187 PASS**
+  (kanit esigi, dedup, karar koruma, yalnizca-tek-dosya-yazma guvenlik siniri, rotalar,
+  arac GET regresyonu).
+- **CANLI KANIT (arac)**: `ToolExecutor.execute("search_learning", ...)` -> `success=True`,
+  rapor uzunlugu 1051 karakter (onceden 405).
+- **CANLI KANIT (rotalar)**: `GET /insights` 200; `analyze` 200; `approve` ->
+  `status=onaylandi, applied=False`; `reject` -> `reddedildi`; bilinmeyen id **404**;
+  gecersiz durum **400**.
+- **CANLI KANIT (gercek gorev)**: gercek plan modu gorevi (`9fcd39fa-f43`, `tamamlandi`)
+  kaydedildi; analiz kanita dayali icgoru uretti: **"1 gorev 'tamamlandi' ama dogrulama
+  kaniti yok"** (D-025 ilkesi gercek veride calisiyor).
+- **Regresyon**: ana sohbet `/api/v1/ai/chat` -> `success=true`, yanit "2 + 2 = 4."

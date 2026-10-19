@@ -219,3 +219,51 @@ Yeni `tests/test_coding_manager.py` (15 test):
 
 `bekliyor`, `calisiyor`, `inceleme_bekliyor`, `test_basarisiz`, `tamamlandi`,
 `basarisiz`, `onay_bekliyor`.
+
+---
+
+## Öğrenme katmanı (denetimli içgörü) — `coding_insights.py`
+
+"Öğrenme ve Gelişim Uzmanı" (`learning-agent`) için **deterministik** öğrenme katmanı.
+LLM/ag kullanmaz; aynı girdiden aynı çıktıyı üretir (test edilebilir).
+
+### Girdi → Çıktı
+- Girdi: `coding_tasks.json` (Kodlama Yöneticisi'nin kalıcı görev kayıtları).
+- Çıktı: `coding_insights.json` (öneri listesi).
+
+### Üretilen içgörü türleri
+| kind | önem | koşul |
+|---|---|---|
+| `basarisizlik_orani` | risk | Bir görev türünde (n≥2) başarısızlık oranı ≥ %50 |
+| `kanitsiz_tamamlama` | uyari | `tamamlandi` ama `verification.passed is not True` |
+| `retry_yogunlugu` | bilgi | `retries > 0` olan görevler |
+| `basarisiz_rol` | uyari | Aynı rol ≥2 görevde başarısız adım üretti |
+| `tekrarlayan_kalan_risk` | uyari | Normalize edilmiş kalan risk ≥2 görevde tekrar etti |
+| `veri_yok` | bilgi | Hiç görev kaydı yok |
+
+### GÜVENLİK SINIRI (denetimli öğrenme)
+- Modül **yalnızca** `coding_insights.json` yazar. Kaynak kod, `model_config.json`
+  (model/anahtar) veya güvenlik kuralları **değiştirilmez**.
+- Her içgörü `status="oneri"` başlar. `onaylandi` olsa bile `applied` **daima `False`**:
+  onay otomatik uygulama değildir, yalnızca insan kararı kaydıdır.
+- Test: `tests/test_coding_insights.py::test_module_writes_only_the_insights_file`
+  yazılan tüm dosya yollarını sarar ve tek dosya kuralını doğrular.
+
+### Rotalar (`/api/v1/coding`)
+| Metot | Yol | Açıklama |
+|---|---|---|
+| GET | `/insights?status=` | İçgörüleri listeler (`oneri`/`onaylandi`/`reddedildi`) |
+| POST | `/insights/analyze` | Geçmişi analiz eder, öneri üretir/kaydeder |
+| POST | `/insights/{id}/approve` | `{"note": "..."}` — kararı kaydeder (uygulamaz) |
+| POST | `/insights/{id}/reject` | `{"note": "..."}` — red kararını kaydeder |
+
+### Kalıcılık politikası
+- Her içgörü `kind + anahtar` için kararlı `imza` (sha1) taşır → tekrar analizde **çift
+  kayıt olmaz**; kanıt/gerekçe tazelenir, **kimlik ve insan kararı korunur**.
+- Kanıtı kalmayan kayıtlar yalnızca hâlâ `oneri` ise düşürülür; karar verilmiş kayıtlar
+  **denetim izi** olarak saklanır.
+
+### İlgili gerçek düzeltme
+- `search_learning` aracı `/api/v1/learning/report` adresine POST atıyordu; endpoint
+  yalnızca GET → canlı sunucuda **405**. GET'e çevrildi; artık gerçekten çalışıyor
+  (canlı kanıt: `success=True`, rapor uzunluğu 1051).

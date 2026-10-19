@@ -416,17 +416,29 @@ class ToolExecutor:
                     return {"success": False, "error": data.get("error", "Video generation failed")}
             
             elif tool_name == "search_learning":
+                # NOT: /api/v1/learning/report yalnızca GET kabul eder. Önceden POST
+                # atıldığı için gerçek sunucuda 405 dönüyordu (araç bozuktu).
+                params = {k: v for k, v in (arguments or {}).items() if v is not None}
                 async with httpx.AsyncClient() as client:
-                    resp = await client.post(
+                    resp = await client.get(
                         f"{self.backend_url}/api/v1/learning/report",
-                        json=arguments
+                        params=params,
                     )
-                    data = resp.json()
+                if resp.status_code != 200:
                     return {
-                        "success": True,
-                        "report": data.get("rapor", data.get("report", "")),
-                        "query": arguments.get("query", "")
+                        "success": False,
+                        "error": f"Öğrenme raporu alınamadı (HTTP {resp.status_code})",
+                        "query": (arguments or {}).get("query", ""),
                     }
+                try:
+                    data = resp.json()
+                except Exception:
+                    data = {}
+                return {
+                    "success": True,
+                    "report": data.get("rapor", data.get("report", "")),
+                    "query": (arguments or {}).get("query", ""),
+                }
             
             elif tool_name == "web_search":
                 query = arguments.get("query", "")

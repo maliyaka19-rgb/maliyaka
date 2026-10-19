@@ -290,3 +290,36 @@
 - **Gerekce**: 9 - kanit/olculebilirlik; 10/11 - CI sinyali guvenilir olmali. Bir testin
   sonucu makinedeki ortam degiskenlerine veya kullanici config'ine gore degismemeli.
 - **Etki**: Temiz klon + anahtarsiz ortamda 172 passed; CI (`563e7ab`) yesil. Commit `563e7ab`.
+
+## D-031 - Ogrenme Ajani: denetimli, deterministik icgoru katmani
+- **Baglam**: Kadroda `learning-agent` ("Ogrenme ve Gelisim Uzmani") tanimliydi ama
+  gecmis gorev kayitlarindan sistematik icgoru ureten bir katman yoktu; `coding_manager`
+  is akislarinda da hic kullanilmiyordu.
+- **Karar**: `coding_insights.py` eklendi. Gecmis `coding_tasks.json` kayitlarindan
+  DETERMINISTIK icgoru uretir (LLM/ag yok). Cikti **oneri**dir; onay/red insan kararidir.
+  **Sinir**: modul yalnizca `coding_insights.json` yazar; kaynak kodu, `model_config.json`
+  ve guvenlik kurallarini ASLA degistirmez. Onaylansa bile `applied` daima `False`.
+- **Gerekce**: 7/11 - denetimsiz kendini-degistirme yasagi; 9 - kanit/olculebilirlik
+  (deterministik cikti test edilebilir).
+- **Etki**: 15 yeni test; toplam **187 PASS**. Rotalar `/api/v1/coding/insights*`.
+  Gercek gorev kaydindan "kanitsiz tamamlama" icgorusu uretildi.
+
+## D-032 - `search_learning` araci 405: POST -> GET (gercek arac hatasi)
+- **Baglam**: `tool_executor.py` araci `/api/v1/learning/report` icin **POST** atiyordu,
+  ancak endpoint `app.py`'da yalnizca **GET** olarak tanimli. Canli sunucuda dogrulandi:
+  POST -> **405 Method Not Allowed**. Yani arac "tanimli" idi ama hic **calismiyordu**.
+- **Karar**: Cagri GET'e cevrildi; non-200 yanit artik sahte basari yerine
+  `success=False` + hata mesaji dondurur.
+- **Gerekce**: 10/11 - "tanimli != calisiyor"; araclarin gercekten calismasi.
+- **Etki**: Canli dogrulama `success=True` (rapor 1051 karakter). Regresyon testi
+  `test_search_learning_tool_uses_get`; toplam **187 PASS**.
+
+## D-033 - Icgoru kaliciligi: dedup + karar koruma + kanit tazeleme
+- **Baglam**: Ayni analiz tekrar calistirilinca cift kayit olusmamali; insan karari
+  (onay/red) yeni analizde kaybolmamali; ancak kaniti biten oneriler de yaniltici olmamali.
+- **Karar**: Her icgoru tur+anahtar icin kararli `imza` (sha1) tasir. Yeniden analizde
+  ayni imza **guncellenir** (kanit/gerekce tazelenir), karar ve kimlik korunur. Kaniti
+  kalmayan kayitlar yalnizca hala `oneri` ise dusurulur; karar verilmisse **saklanir**
+  (denetim izi).
+- **Gerekce**: 9 - tekrar uretilebilirlik; 11 - karar kaydi guvenilirligi.
+- **Etki**: `test_generate_persists_and_dedups`, `test_human_decision_survives_reanalysis`.
