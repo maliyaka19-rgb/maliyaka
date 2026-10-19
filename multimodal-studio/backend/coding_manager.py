@@ -95,6 +95,13 @@ READ_ONLY_SET = set(READ_ONLY_TOOLS)
 # en azından bunlarla çalışabilir.
 MINIMAL_READ_TOOLS = ["read_file", "list_files", "search_files"]
 
+# LLM'in "metin üretemedim" yanıtları: nihai yanıt bunlardan oluşamaz.
+_LLM_FAIL_MARKERS = (
+    "tam yanıt üretemiyorum",
+    "bir yanıt üretemedim",
+    "metin yanıt oluşturulamadı",
+)
+
 
 # ============================================================
 # GÖREV SINIFLANDIRMA
@@ -368,6 +375,8 @@ class CodingTaskManager:
         msg.duration_ms = int((time.time() - started) * 1000)
         msg.response = (result or {}).get("response") or ""
         msg.tools_used = list((result or {}).get("tools_used") or [])
+        # Ajanın GERÇEKTEN yazdığı dosyalar (araç sonucundan; iddia değil).
+        msg.changes = list((result or {}).get("files_changed") or [])
         msg.success = bool((result or {}).get("success"))
         if msg.success:
             msg.status = StepStatus.COMPLETED.value
@@ -478,6 +487,7 @@ class CodingTaskManager:
                     for r in results:
                         record["messages"].append(asdict(r))
                         record["tools_used"].extend(r.tools_used)
+                        record["files_changed"].extend(r.changes)
                         step_results.append(r)
                     i = j
                     continue
@@ -492,6 +502,7 @@ class CodingTaskManager:
             self.locks.release(f"__step_{i}__", lock_owner)
             record["messages"].append(asdict(rm))
             record["tools_used"].extend(rm.tools_used)
+            record["files_changed"].extend(rm.changes)
             step_results.append(rm)
             if step.get("write"):
                 write_steps.append(rm)
@@ -503,6 +514,7 @@ class CodingTaskManager:
 
         record["conflicts"].extend(self.locks.conflicts)
         record["tools_used"] = list(dict.fromkeys(record["tools_used"]))
+        record["files_changed"] = list(dict.fromkeys(record["files_changed"]))
 
         # ---- KALİTE KAPISI: gerçek doğrulama komutu -----------------------
         if verify_command:
@@ -540,6 +552,7 @@ class CodingTaskManager:
                                           extra_context=err_ctx)
                 record["messages"].append(asdict(rm) | {"phase": f"retry{attempt}"})
                 record["tools_used"].extend(rm.tools_used)
+                record["files_changed"].extend(rm.changes)
                 record["tools_used"] = list(dict.fromkeys(record["tools_used"]))
         else:
             # Doğrulama komutu yok -> test adımı gerçekten komut çalıştırdı mı?
@@ -553,6 +566,17 @@ class CodingTaskManager:
             }
             if record["status"] == TaskStatus.RUNNING.value:
                 record["status"] = TaskStatus.COMPLETED.value
+
+        # ---- KANITSIZ YAZMA ADIMI -----------------------------------------
+        # Adım "başarılı" dönebilir ama tek dosya bile değiştirmemiş olabilir
+        # (canlı E2E'de görüldü). Bu, sessizce yutulmaz; rapora risk olarak girer.
+        if mode == "execute":
+            for m in write_steps:
+                if m.success and not m.changes:
+                    record["remaining_issues"].append(
+                        f"'{m.recipient}' adımı başarılı göründü ama hiçbir dosya "
+                        "değiştirmedi (kanıtsız yazma)."
+                    )
 
         # ---- Ana Yönetici için sonuç raporu -------------------------------
         report = self.build_report(record, step_results, task_type)
@@ -573,6 +597,29 @@ class CodingTaskManager:
         else:
             record["final_answer"] = step_results[-1].response if step_results else ""
 
+        # LLM metni üretemediyse nihai yanıtı KANITTAN üret (uydurma yok).
+        _v = record.get("verification") or {}
+        _low = (record["final_answer"] or "").lower()
+        if (not record["final_answer"].strip()) or any(m in _low for m in _LLM_FAIL_MARKERS):
+            if _v.get("passed") is True:
+                _files = ", ".join(record.get("files_changed") or []) or "yok"
+                record["final_answer"] = (
+                    "Görev tamamlandı (kanıtlı). "
+                    f"Doğrulama: `{_v.get('command')}` → exit={_v.get('exit_code')}. "
+                    f"Değişen dosyalar: {_files}."
+                )
+            elif _v.get("ran"):
+                record["final_answer"] = (
+                    "Görev tamamlanmadı: doğrulama "
+                    f"`{_v.get('command')}` → exit={_v.get('exit_code')}."
+                )
+            else:
+                record["final_answer"] = (
+                    "Görev yürütüldü ancak LLM nihai metin üretemedi ve doğrulama komutu "
+                    "yok; sonuç kanıtsız."
+                )
+            record["final_answer_note"] = "LLM metni yok; özet yalnızca gerçek kanıttan üretildi."
+
         if record["status"] == TaskStatus.RUNNING.value:
             record["status"] = TaskStatus.COMPLETED.value
 
@@ -591,6 +638,7 @@ class CodingTaskManager:
             "mode": mode,
             "status": record["status"],
             "final_answer": record["final_answer"],
+            "final_answer_note": record.get("final_answer_note"),
             "report": report,
             "review": record["review"],
             "insights": insight_summary,
@@ -636,7 +684,7 @@ class CodingTaskManager:
     @staticmethod
     def build_report(record: Dict[str, Any], step_results: List[TaskMessage],
                      task_type: TaskType) -> Dict[str, Any]:
-        changed = sorted({f for m in step_results for f in (m.changes or [])})
+        changed = sorted(set(record.get("files_changed") or []))
         tools = list(dict.fromkeys(record.get("tools_used", [])))
         verification = record.get("verification") or {}
         return {

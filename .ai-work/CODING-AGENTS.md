@@ -267,3 +267,10 @@ LLM/ag kullanmaz; aynı girdiden aynı çıktıyı üretir (test edilebilir).
 - `search_learning` aracı `/api/v1/learning/report` adresine POST atıyordu; endpoint
   yalnızca GET → canlı sunucuda **405**. GET'e çevrildi; artık gerçekten çalışıyor
   (canlı kanıt: `success=True`, rapor uzunluğu 1051).
+
+## Ek 9 - Execute modu gercek kanit (izole proje)
+- Uctan uca `mode=execute`: gercek `write_file`/`edit_file` + gercek `pytest` (exit=0).
+- Rapor artik **gercek** degisen dosyalari listeler (arac sonucundan).
+- "Yazma adimi basarili ama 0 dosya" -> `kalan_riskler` uyarisi (canlida `coder` boyleydi).
+- Dogrulama gecerken LLM 429 verse bile `final_answer` kanittan uretilir.
+- Kalan kalite riski: ajanin urettigi kodda olu satir kalabiliyor; reviewer kacirdi.

@@ -797,3 +797,36 @@ cagrilir ve sonuc `insights` alaninda doner.
 | Canli gorev (plan) | 38.5 sn, `task_id=5b4eb209-0bb`, `status=tamamlandi` |
 | Otomatik icgoru | `ok=True`, `analyzed=2`, `open=1`, **`applied=False`**, dosya yazildi |
 | Tekrar kayit | `created=0` (imza dedup calisti; karar korunur) |
+
+### Ek 9 (ayni oturum) - Execute modu UCTAN UCA kanit + 3 gercek kusur
+
+**Amac:** "plan uretiyor" degil, **gercekten dosya yazip dogrulama komutunu gecme** kaniti.
+Izole gecici proje (`%TEMP%\opencode\nx_e2e`): `calc.py` (yalniz `add`), `test_calc.py`
+(`sub` testi FAIL). `NEXUS_WORKING_DIR` + `cwd` + gorev/icgoru dosyalari gecici dizine
+yonlendirildi. Ana repoya yazilmadi.
+
+| Kosu | Durum | Kanit |
+|---|---|---|
+| Baseline | FAIL (beklenen) | 1 failed, 1 passed, exit=1 |
+| 1. E2E (duzeltme oncesi) | tamamlandi | ajanin pytest'i 6 passed/exit=0; **ama** `files_changed=[]` ve `final_answer` = "yanit uretemiyorum" |
+| 2. E2E (`files_changed` sonrasi) | tamamlandi | `degistirilen_dosyalar=["calc.py"]`, exit=0, 2 passed |
+| 3. E2E (tum duzeltmeler) | tamamlandi | `["calc.py","test_calc_extra.py"]`, ajan pytest 5 passed, **bagimsiz pytest 5 passed/exit=0** |
+
+**Bulunan ve kapatilan 3 kusur:**
+1. **`files_changed` hic doldurulmuyordu.** Rapor gercekte 2 dosya degismisken `[]`
+   diyordu. Cozum: `ai_agent` yalnizca **basarili** `write_file`/`edit_file` sonucunun
+   `path`ini dondurur; `_run_step` -> `TaskMessage.changes`; `run()` retry dahil birlestirir.
+2. **"Basarili" yazma adimi hic dosya degistirmemis olabilir.** Canlida `coder` boyleydi
+   (metin uretti, yazmadi). Cozum: execute modunda `9_kalan_riskler`e
+   "kanitsiz yazma" uyarisi (sessizce yutulmaz).
+3. **Dogrulama gectigi halde `final_answer` LLM'in 429 ozru olabiliyordu.** Cozum:
+   LLM metni yoksa nihai yanit **yalnizca kanittan** uretilir
+   ("Dogrulama: `...` -> exit=0. Degisen dosyalar: ..."), `final_answer_note` ile isaretlenir.
+
+**Kanit:** **225 PASS** (6 yeni test: `test_files_changed.py`), ruff temiz.
+Canli 3. kosu: 120.3 sn, `task_id=739f6f26-3fd`, exit=0; bagimsiz pytest exit=0.
+
+**Durust not:** ajanin urettigi `calc.py` icinde olu kod (`return a + b` erisilemez satir)
+kaldi; testler geciyor ama kod kalitesi kusurlu. Reviewer bunu yakalamadi - ayri bir
+iyilestirme konusu. Ayrica `multimodal-studio/src/` **bu E2E'ye ait degil**: ayni anda
+canli UI oturumunun (`/api/v1/ai/chat`, 00:57) yazdigi kullanici verisi; silinmedi.

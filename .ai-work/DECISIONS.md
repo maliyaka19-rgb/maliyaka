@@ -381,3 +381,18 @@
 - **Gerekçe**: 4 - döngü gerçekten kapanır; 17 - denetimsiz öğrenme yok.
 - **Etki**: `test_auto_insights.py` (4 test); toplam **219 PASS**.
   Canlı: 38.5 sn'lik gerçek görev → `insights.ok=True, analyzed=2, applied=False`.
+
+## D-038 - Execute modu kaniti: dosya degisikligi arac sonucundan, nihai yanit kanittan
+- **Baglam**: Gercek execute E2E kosusunda (izole proje) 3 kusur ortaya cikti:
+  `files_changed` hep `[]`; "basarili" yazma adimi hic dosya yazmamis olabiliyor;
+  dogrulama gecerken `final_answer` LLM'in 429 ozru olabiliyor.
+- **Karar 1**: Degisen dosya listesi **yalnizca basarili `write_file`/`edit_file`
+  arac sonucunun `path` alanindan** uretilir (ajan iddiasindan degil).
+- **Karar 2**: Execute modunda yazma adimi basarili donup hicbir dosya degistirmediyse
+  `9_kalan_riskler`e "kanitsiz yazma" uyarisi eklenir (gorev dusurulmez).
+- **Karar 3**: LLM nihai metin uretemediyse `final_answer` **gercek kanittan** deterministik
+  uretilir (dogrulama komutu + exit kodu + degisen dosyalar); `final_answer_note` isaretler.
+- **Izolasyon**: Gercek E2E `NEXUS_WORKING_DIR` + `cwd` + gecici gorev/icgoru dosyalariyla
+  ana repodan ayrisir; ana repo degismez.
+- **Etki**: `test_files_changed.py` (6 test); toplam **225 PASS**.
+  Canli 3. kosu: 120.3 sn, exit=0, bagimsiz pytest 5 passed.

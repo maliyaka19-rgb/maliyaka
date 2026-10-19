@@ -491,6 +491,9 @@ Kurallar:
         # Call LLM with tool use
         try:
             tools_used = []
+            # Gerçekten DEĞİŞEN dosyalar (araç sonucunun `path` alanından).
+            # Rapor "0 dosya değişti" yalanı söylemesin: kanıt araç sonucudur.
+            files_changed: List[str] = []
             full_response = ""
             thinking_steps = []  # Track thinking process
             
@@ -564,6 +567,13 @@ Kurallar:
                     
                     tool_result = await self.tools.execute(func_name, func_args, allowed=_allowed_tools)
                     tools_used.append(func_name)
+
+                    # Değişen dosyayı yalnızca araç BAŞARILI olduysa kaydet.
+                    if (isinstance(tool_result, dict) and tool_result.get("success")
+                            and func_name in ("write_file", "edit_file")):
+                        _path = tool_result.get("path") or func_args.get("path")
+                        if _path and _path not in files_changed:
+                            files_changed.append(_path)
                     
                     # Add tool result summary
                     result_summary = self._summarize_tool_result(func_name, tool_result)
@@ -707,6 +717,7 @@ Kurallar:
                 "response": full_response,
                 "conversation_id": conversation_id,
                 "tools_used": tools_used,
+                "files_changed": files_changed,
                 "iterations": iteration + 1,
                 "thinking_steps": thinking_steps
             }
