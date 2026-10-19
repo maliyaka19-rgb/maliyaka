@@ -257,3 +257,14 @@
 - **Gerekce**: 10/11 - ajanlarin ihtiyaci olmayan araclara erismesini onle; 7 - bagimsiz savunma.
 - **Etki**: `tests/test_tool_allowlist.py` **5 PASS**; toplam **170 PASS**; ana sohbet yolu
   canli testte bozulmadi (`/api/v1/ai/chat` 200, `success=true`). Commit `757af1e`.
+
+## D-028 - Istek-yerel ajan durumu: `_active_tools`/`_active_model` -> contextvar
+- **Baglam**: `NexusAIAgent` tekil (singleton). `_active_tools` ve `_active_model` instance
+  attribute idi; iki eszamanli sohbet ayni anda farkli ajan/arac izni secerse son yazan
+  digerini EZIYORDU. `parallel_analysis` adimlarinda da yaris riski vardi.
+- **Karar**: Modul duzeyinde `_ACTIVE_TOOLS`/`_ACTIVE_MODEL` **ContextVar** tanimlandi; sinifa
+  `_active_tools`/`_active_model` property (getter/setter) eklendi. Boylece mevcut kod/API
+  degismeden her asyncio gorevi kendi context kopyasinda izole calisir.
+- **Gerekce**: 8.4 - paralel gorev guvenligi; 1.1 - gercek yaris duzeltmesi.
+- **Etki**: 2 yeni eszamanlilik testi; toplam **172 PASS**. Ana sohbet canli testte calisiyor
+  (`/api/v1/ai/chat` 200, `success=true`). Commit `6bfacd7`.

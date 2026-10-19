@@ -608,3 +608,14 @@ Tam rapor: **`.ai-work/CODING-AGENTS.md`**. Özet:
 - **Commit**: `757af1e` pushed (main).
 - **Temizlik**: uzman uretimi artigi `multimodal-studio/snake.py` kaldirildi (projede referansi yok;
   sistem etkilenmedi, `git status` temiz).
+
+### Ek 2 (ayni oturum) - Eszamanlilik: istek-yerel ajan durumu
+
+- **Gerçek yarış**: `NexusAIAgent` tekil; `_active_tools`/`_active_model` instance attribute
+  olduğu için eşzamanlı iki sohbet birbirinin araç iznini/modelini ezebiliyordu.
+- **Düzeltme**: modül düzeyinde `ContextVar` + sınıfta property. Her asyncio görevi kendi
+  context kopyasını taşır → izolasyon. Mevcut kod/API değişmedi.
+- **Test**: 2 yeni eşzamanlılık testi → toplam **172 PASS**.
+- **CANLI KANIT**: yeniden başlatma sonrası `/api/v1/ai/chat` 200, `success=true`, "8";
+  `coding.roles_ready=True`.
+- **Commit**: `6bfacd7` pushed (main).
