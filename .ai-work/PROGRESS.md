@@ -897,5 +897,32 @@ liste gosteriyordu; Ana Yonetici -> Kodlama Yoneticisi -> uzman iliskisi gorunmu
 
 **Not:** Plan modunda yazma beklenmez; uygulama kaniti Ek 9/10'daki `execute` kosularindadir.
 
+---
+
+## Ek 12 - Otomatik ajan secimi yalnizca Ana Yonetici'ye
+
+**Sorun:** Anahtar kelime secicisi yanlis uzmana gidebiliyor ve kodlama zincirini atliyordu.
+Canli ornekler: "veritabani semasi tasarla, migration ekle" -> `designer`;
+"sohbet sayfasina arayuz bileseni ekle" -> `chat-pro`.
+
+**Yapilan:**
+- `auto_select_agent()` artik daima `main-manager` dondurur; eski mantik
+  `keyword_select_agent()` olarak korunur (ekip modu `team/run` bunu kullanir).
+- `/api/v1/ai/chat`: otomatik secim + kodlama gorevi ise `CodingTaskManager.run(mode="plan",
+  via_main_manager=True)` cagrilir; yanit Ana Yonetici'nin nihai raporudur.
+  Genel sohbet tek ajan (hizli) kalir.
+- Yazma yok: sohbetten gelen isler **plan** modundadir (`confirm` yok, D-024).
+- Arayuz: yanitta kodlama zinciri rozeti (`task_type`, uzman sayisi, uzman sirasi, plan).
+- `sohbet.html` metni ve `app.js?v=71` guncellendi.
+
+**Kanit:**
+| Kalem | Sonuc |
+|---|---|
+| Test | **249 PASS** (5 yeni: auto=main-manager, keyword yedek, kodlama tespiti, zincir devri, genel sohbet) |
+| Canli genel mesaj (`agent_id=auto`) | 1 sn; `selected_agent=main-manager`; `coding` alani **yok** |
+| Canli kodlama mesaji (`agent_id=auto`) | 79.1 sn; `task_type=frontend`; uzmanlar: code-analyst -> frontend-pro -> test-engineer -> reviewer -> regression-tester; `mode=plan` |
+| Nihai yanit | Ana Yonetici raporu: "kod degisikligi yok, test kaniti yok, dogrulanmis sayilmaz" |
+
+
 
 

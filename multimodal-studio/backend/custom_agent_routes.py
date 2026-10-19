@@ -153,14 +153,15 @@ async def duplicate_agent_endpoint(agent_id: str):
 @router.post("/team/run", summary="Run agent team (uzman + denetçi + lider)")
 async def run_team_task(data: TeamRunRequest):
     """Ekip çalıştır: uzman üretir → denetçi doğrular → lider birleştirip teslim eder."""
-    from custom_agents import auto_select_agent, get_agent
+    from custom_agents import keyword_select_agent, get_agent
     import ai_agent as _ai
 
     message = data.message.strip()
     # Her aşama AYRI bir konuşma kimliğinde çalışır; böylece denetim/sentez
     # talimatları birbirinin bağlamına sızıp nihai çıktıya karışmaz.
     base_conv = data.conversation_id or str(uuid.uuid4())[:12]
-    specialist_id = auto_select_agent(message)
+    # Ekip modu: doğrudan uzman seçimi (otomatik seçim artık Ana Yönetici'ye gider).
+    specialist_id = keyword_select_agent(message)
     if specialist_id in ("reviewer", "team-lead"):
         specialist_id = "assistant"
     specialist = get_agent(specialist_id) or {}

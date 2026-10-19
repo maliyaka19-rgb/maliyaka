@@ -439,3 +439,20 @@
   değildir, `applied=False` kalır (D-031/D-037 korunur).
 - **Kanıt**: Canlı `plan` koşusu 71.1 sn, `task_type=frontend`, uzman zinciri doğru,
   nihai yanıt Ana Yönetici'den; DOM'da 20 uzman ve 4 grup başlığı görünür.
+
+## D-043 - Otomatik ajan seçimi = yalnızca Ana Yönetici Ajan
+- **Bağlam**: Anahtar kelime seçicisi yanlış uzmana gidebiliyordu ("veritabanı şeması tasarla"
+  → `designer`, "sohbet sayfasına arayüz bileşeni ekle" → `chat-pro`) ve kodlama zincirini
+  tamamen atlıyordu.
+- **Karar**: `auto_select_agent()` artık **daima** `main-manager` döndürür. Eski anahtar
+  kelime mantığı `keyword_select_agent()` olarak korunur (ekip modu + yedek).
+- **Gerçek devir**: `/api/v1/ai/chat` içinde otomatik seçim + kodlama görevi
+  (`classify_task != GENERAL`) ise görev `CodingTaskManager.run(mode="plan",
+  via_main_manager=True)` ile zincire verilir; yanıt Ana Yönetici'nin nihai raporudur.
+  Genel sohbet tek ajan olarak kalır (hızlı).
+- **Güvenlik**: Sohbetten gelen işler **plan** modundadır; `confirm` olmadığı için yazma
+  yapılmaz (D-024). Uygulama için Kodlama Ekibi/execute gerekir.
+- **Sınır**: `classify_task` anahtar kelime tabanlıdır; `GENERAL` kalan mesajlar zincire girmez.
+- **Etki**: **249 PASS**; canlı: genel mesaj 1 sn (zincir yok), kodlama mesajı 79.1 sn
+  (`task_type=frontend`; code-analyst → frontend-pro → test-engineer → reviewer →
+  regression-tester; `mode=plan`), nihai yanıt Ana Yönetici'den.

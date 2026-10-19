@@ -57,22 +57,22 @@ def test_roster_integrity_and_specialization():
         assert not invalid, f"{a['id']} geçersiz araçlar içeriyor: {invalid}"
 
 
-def test_auto_select_agent_enhanced():
-    """Geliştirilmiş anahtar kelimelerle doğru uzmana yönlendirme."""
+def test_keyword_select_agent_enhanced():
+    """Geliştirilmiş anahtar kelimelerle doğru uzmana yönlendirme (yedek seçici)."""
     # Matematik/istatistik -> analyst
-    assert ca.auto_select_agent("Bana bu tablonun ortalamasını ve varyansını hesapla") == "analyst"
+    assert ca.keyword_select_agent("Bana bu tablonun ortalamasını ve varyansını hesapla") == "analyst"
     # RAG / Belge araştırma -> researcher
-    assert ca.auto_select_agent("Doküman arşivinde literatür ve kaynakça araştırması yap") == "researcher"
+    assert ca.keyword_select_agent("Doküman arşivinde literatür ve kaynakça araştırması yap") == "researcher"
     # Siber güvenlik -> security
-    assert ca.auto_select_agent("Bu sistemdeki cve zafiyetlerini ve sızma açıklarını denetle") == "security"
+    assert ca.keyword_select_agent("Bu sistemdeki cve zafiyetlerini ve sızma açıklarını denetle") == "security"
     # Python -> python-pro
-    assert ca.auto_select_agent("python ile bir pytest testi yaz") == "python-pro"
+    assert ca.keyword_select_agent("python ile bir pytest testi yaz") == "python-pro"
     # Frontend -> frontend-pro
-    assert ca.auto_select_agent("responsive bir react componenti tasarla") in ("frontend-pro", "designer")
+    assert ca.keyword_select_agent("responsive bir react componenti tasarla") in ("frontend-pro", "designer")
     # Video -> video-pro
-    assert ca.auto_select_agent("bana mp4 video üret") == "video-pro"
+    assert ca.keyword_select_agent("bana mp4 video üret") == "video-pro"
     # Görsel -> image-pro
-    assert ca.auto_select_agent("görsel üret, illüstrasyon çiz") == "image-pro"
+    assert ca.keyword_select_agent("görsel üret, illüstrasyon çiz") == "image-pro"
 
 
 def test_tools_available_endpoint():
@@ -143,8 +143,8 @@ async def test_ai_agent_auto_routing(monkeypatch):
 
     res = await agent_inst.chat("Bana bu verinin ortalamasını hesapla", agent_id="auto")
     assert res["success"] is True
-    # Analyst ajanının promptunun seçildiğini doğrula
-    assert "Sen veri analizi uzmanısın" in captured["system"] or "calculate" in captured["system"]
+    # Otomatik seçim artık DAİMA Ana Yönetici Ajan'a gider (D-043).
+    assert "ANA YÖNETİCİ AJANIsın" in captured["system"]
 
 
 def test_telegram_bot_agents_listing_and_auto():

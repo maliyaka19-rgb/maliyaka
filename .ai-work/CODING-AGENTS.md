@@ -292,3 +292,12 @@ LLM/ag kullanmaz; aynı girdiden aynı çıktıyı üretir (test edilebilir).
 - **Kanıt**: 244 PASS; canlı `plan` 71.1 sn, `task_type=frontend`, zincir
   code-analyst -> frontend-pro -> test-engineer -> reviewer -> regression-tester; nihai yanıt
   Ana Yönetici'den.
+
+## Ek 12 - Otomatik seçim = yalnızca Ana Yönetici
+- `auto_select_agent()` daima `main-manager`; anahtar kelime mantığı `keyword_select_agent()`
+  olarak korunur (ekip modu kullanır).
+- `/api/v1/ai/chat`: otomatik + kodlama görevi → `CodingTaskManager.run(plan,
+  via_main_manager=True)`; genel sohbet tek ajan.
+- Sohbetten yazma yok (plan); uygulama için Kodlama Ekibi/execute.
+- Kanıt: **249 PASS**; canlı genel mesaj 1 sn (zincir yok), kodlama mesajı 79.1 sn
+  (frontend zinciri, nihai yanıt Ana Yönetici'den).

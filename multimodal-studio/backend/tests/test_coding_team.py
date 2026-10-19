@@ -116,6 +116,96 @@ def test_insights_are_attributed_to_learning_agent():
     assert ins["applied"] is False
 
 
+def test_auto_select_always_routes_to_main_manager():
+    import custom_agents as ca
+
+    for message in ["merhaba nasılsın", "python hatası düzelt", "video üret", "veritabanı tasarla"]:
+        assert ca.auto_select_agent(message) == "main-manager"
+
+
+def test_keyword_selector_kept_as_fallback():
+    import custom_agents as ca
+
+    assert ca.keyword_select_agent("bana mp4 video üret") == "video-pro"
+
+
+def test_coding_detection_for_auto_delegation():
+    from ai_agent_routes import _is_coding_task
+
+    assert _is_coding_task("python kodumda hata var, düzelt") is True
+    assert _is_coding_task("arayüz bileşeni ekle") is True
+    assert _is_coding_task("merhaba, nasılsın?") is False
+
+
+def test_auto_chat_delegates_coding_to_main_manager_chain(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    import ai_agent_routes as ar
+
+    called = {}
+
+    async def fake_run(self, message, mode="plan", conversation_id=None,
+                       via_main_manager=True, **kwargs):
+        called.update(message=message, mode=mode, via_main_manager=via_main_manager)
+        return {
+            "success": True,
+            "final_answer": "Zincir sonucu",
+            "conversation_id": conversation_id,
+            "task_id": "t1",
+            "task_type": "frontend",
+            "mode": "plan",
+            "report": {"3_kullanilan_uzmanlar": ["code-analyst", "frontend-pro"]},
+        }
+
+    monkeypatch.setattr(cm.CodingTaskManager, "run", fake_run)
+
+    app = FastAPI()
+    app.include_router(ar.router)
+    client = TestClient(app)
+
+    r = client.post("/api/v1/ai/chat", json={"message": "arayüz bileşeni ekle", "agent_id": "auto"})
+
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["success"] is True
+    assert data["response"] == "Zincir sonucu"
+    assert data["selected_agent"]["id"] == "main-manager"
+    assert data["coding"] == {
+        "task_id": "t1", "task_type": "frontend", "mode": "plan",
+        "experts": ["code-analyst", "frontend-pro"],
+    }
+    assert called == {"message": "arayüz bileşeni ekle", "mode": "plan", "via_main_manager": True}
+
+
+def test_auto_chat_general_message_stays_single_agent(monkeypatch):
+    from fastapi import FastAPI
+    from fastapi.testclient import TestClient
+
+    import ai_agent_routes as ar
+
+    async def fail_run(*args, **kwargs):
+        raise AssertionError("genel sohbet zinciri çalıştırmamalı")
+
+    async def fake_chat(message, conversation_id=None, history=None, agent_id=None):
+        return {"success": True, "response": "selam", "conversation_id": conversation_id or "c",
+                "tools_used": [], "thinking_steps": []}
+
+    monkeypatch.setattr(cm.CodingTaskManager, "run", fail_run)
+    monkeypatch.setattr(ar, "chat", fake_chat)
+
+    app = FastAPI()
+    app.include_router(ar.router)
+    client = TestClient(app)
+
+    r = client.post("/api/v1/ai/chat", json={"message": "merhaba, nasılsın?", "agent_id": "auto"})
+
+    assert r.status_code == 200, r.text
+    data = r.json()
+    assert data["response"] == "selam"
+    assert data["selected_agent"]["id"] == "main-manager"
+
+
 def test_main_manager_is_default_and_reviews_report(monkeypatch, tmp_path):
     assert cr.CodingRunRequest(message="x").via_main_manager is True
 

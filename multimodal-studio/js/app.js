@@ -681,6 +681,15 @@
                         </div><br>`;
                     }
                     
+                    // Otomatik seçim kodlama görevini zincire devrettiyse göster
+                    if (data.coding && Array.isArray(data.coding.experts) && data.coding.experts.length) {
+                        const experts = data.coding.experts.map(escapeHtml).join(' → ');
+                        html += `<div style="display:block;padding:6px 10px;background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;font-size:0.75rem;color:var(--fg-muted);margin-bottom:8px;">
+                            🧩 ${escapeHtml(data.coding.task_type || '')} · ${data.coding.experts.length} uzman · <strong>plan</strong><br>
+                            <span style="opacity:.85">${experts}</span>
+                        </div><br>`;
+                    }
+
                     // Add thinking steps if available
                     if (data.thinking_steps?.length) {
                         html += buildThinkingSteps(data.thinking_steps);

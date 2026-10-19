@@ -31,12 +31,13 @@ def test_new_agents_have_narrow_toolboxes():
         assert a["tools"]  # no agent left tool-less
 
 
-def test_auto_select_routes_to_specialists():
-    assert ca.auto_select_agent("python ile bir script yaz") == "python-pro"
-    assert ca.auto_select_agent("bana bir video üret, mp4 olsun") == "video-pro"
-    assert ca.auto_select_agent("görsel üret, illüstrasyon yap") == "image-pro"
-    assert ca.auto_select_agent("bu kodu denetle, hata var mı?") == "reviewer"
-    assert ca.auto_select_agent("ekip olarak hepsini yap, komple site") == "team-lead"
+def test_keyword_select_routes_to_specialists():
+    """Yedek anahtar kelime seçici korunur (otomatik seçim artık Ana Yönetici)."""
+    assert ca.keyword_select_agent("python ile bir script yaz") == "python-pro"
+    assert ca.keyword_select_agent("bana bir video üret, mp4 olsun") == "video-pro"
+    assert ca.keyword_select_agent("görsel üret, illüstrasyon yap") == "image-pro"
+    assert ca.keyword_select_agent("bu kodu denetle, hata var mı?") == "reviewer"
+    assert ca.keyword_select_agent("ekip olarak hepsini yap, komple site") == "team-lead"
 
 
 def _team_client(monkeypatch):

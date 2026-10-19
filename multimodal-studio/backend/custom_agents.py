@@ -1334,9 +1334,9 @@ AGENT_KEYWORDS = {
 }
 
 
-def auto_select_agent(user_message: str) -> str:
+def keyword_select_agent(user_message: str) -> str:
     """
-    Automatically select the best agent based on user message.
+    Anahtar kelimeye göre uzman seçer (eski davranış; yedek/istek üzerine kullanılır).
     Returns agent ID.
     """
     message_lower = user_message.lower().strip()
@@ -1364,6 +1364,16 @@ def auto_select_agent(user_message: str) -> str:
     
     # Default to general assistant
     return "assistant"
+
+
+def auto_select_agent(user_message: str) -> str:
+    """Otomatik ajan seçimi: DAİMA Ana Yönetici Ajan.
+
+    Neden: tüm işler tek çatı altında yürümeli. Ana Yönetici, kodlama görevini
+    Kodlama Yöneticisine devreder ve nihai raporu onaylar (D-043).
+    Anahtar kelime yönlendirmesi `keyword_select_agent()` olarak korunur.
+    """
+    return "main-manager"
 
 
 def save_agents(agents: List[Dict]):

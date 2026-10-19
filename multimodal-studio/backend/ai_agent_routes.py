@@ -10,6 +10,7 @@ from fastapi.security import HTTPBearer
 from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 import json
+import logging
 
 from ai_agent import chat, get_agent_v6, get_agent_info, reset_agent_v6
 from auth import auth_service, get_optional_user, get_current_user
@@ -41,6 +42,7 @@ class ChatResponse(BaseModel):
     tools_used: List[str] = []
     thinking_steps: List[Dict] = []
     selected_agent: Optional[Dict] = None
+    coding: Optional[Dict] = None
     error: Optional[str] = None
 
 
@@ -56,6 +58,23 @@ class AgentInfoResponse(BaseModel):
 # ============================================================
 # CHAT ENDPOINTS
 # ============================================================
+
+logger = logging.getLogger("nexus-ai-routes")
+
+
+def _is_coding_task(message: str) -> bool:
+    """Mesaj gerçekten bir kodlama görevi mi? (deterministik sınıflandırma)
+
+    Genel sohbet/soru -> False; kodlama görevi -> True. Otomatik seçimde
+    kodlama görevleri Ana Yönetici -> Kodlama Yöneticisi zincirine devredilir.
+    """
+    try:
+        from coding_manager import TaskType, classify_task
+
+        return classify_task(message) != TaskType.GENERAL
+    except Exception:
+        return False
+
 
 @router.post("/chat", response_model=ChatResponse, summary="Chat with AI Agent")
 async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optional_user)):
@@ -107,8 +126,9 @@ async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optiona
         
         # Handle auto agent selection
         agent_id = request.agent_id
+        auto_selected = agent_id == "auto"
         selected_agent_info = None
-        if agent_id == "auto":
+        if auto_selected:
             from custom_agents import auto_select_agent, get_agent
             agent_id = auto_select_agent(request.message)
             selected_agent = get_agent(agent_id)
@@ -118,8 +138,42 @@ async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optiona
                     "name": selected_agent["name"],
                     "icon": selected_agent["icon"]
                 }
-        
-        result = await chat(request.message, conversation_id, history=request.history, agent_id=agent_id)
+
+        # Otomatik seçim = Ana Yönetici. Kodlama görevini zincire devret
+        # (Ana Yönetici -> Kodlama Yöneticisi -> uzmanlar -> Ana Yönetici onayı).
+        # Yazma yapılmaz: sohbetten gelen işler PLAN modundadır (D-024).
+        result = None
+        if auto_selected and agent_id == "main-manager" and _is_coding_task(request.message):
+            try:
+                from coding_manager import CodingTaskManager
+
+                coding_run = await CodingTaskManager().run(
+                    request.message,
+                    mode="plan",
+                    conversation_id=conversation_id,
+                    via_main_manager=True,
+                )
+                final_text = coding_run.get("final_answer") or ""
+                if coding_run.get("success") and final_text:
+                    report = coding_run.get("report") or {}
+                    result = {
+                        "success": True,
+                        "response": final_text,
+                        "conversation_id": conversation_id or "",
+                        "tools_used": [],
+                        "thinking_steps": [],
+                        "coding": {
+                            "task_id": coding_run.get("task_id"),
+                            "task_type": coding_run.get("task_type"),
+                            "mode": coding_run.get("mode", "plan"),
+                            "experts": report.get("3_kullanilan_uzmanlar") or [],
+                        },
+                    }
+            except Exception as exc:  # zincir çökerse normal sohbete düş
+                logger.warning("Otomatik kodlama devri basarisiz: %s", exc)
+
+        if result is None:
+            result = await chat(request.message, conversation_id, history=request.history, agent_id=agent_id)
         
         # Add selected agent info to result
         if selected_agent_info:
