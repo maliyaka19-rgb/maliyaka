@@ -13,6 +13,7 @@ jobs:
   test:
     runs-on: ubuntu-latest
     strategy:
+      fail-fast: false
       matrix:
         python-version: ["3.11", "3.12", "3.13"]
 
@@ -42,7 +43,17 @@ jobs:
     - name: Run unit tests (live hariç)
       run: |
         cd multimodal-studio/backend
-        python -m pytest tests/ -v --tb=short
+        set +e
+        python -m pytest tests/ -v --tb=short 2>&1 | tee pytest.log
+        code=${PIPESTATUS[0]}
+        if [ "$code" -ne 0 ]; then
+          echo "----- Basarisiz test ozetleri -----"
+          grep -E "^(FAILED|ERROR)" pytest.log | head -n 25 | while IFS= read -r line; do
+            msg=$(printf '%s' "$line" | sed 's/%/%25/g; s/\r//g')
+            echo "::error title=pytest::$msg"
+          done
+          exit "$code"
+        fi
 
     - name: Import check (all modules load)
       run: |
