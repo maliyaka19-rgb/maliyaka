@@ -619,3 +619,28 @@ Tam rapor: **`.ai-work/CODING-AGENTS.md`**. Özet:
 - **CANLI KANIT**: yeniden başlatma sonrası `/api/v1/ai/chat` 200, `success=true`, "8";
   `coding.roles_ready=True`.
 - **Commit**: `6bfacd7` pushed (main).
+
+### Ek 3 (ayni oturum) - #5 CI kapisi: kirmizidan YESILE
+
+- **Ilk tespit (gercek kanit)**: GitHub Actions public API'den son calismalar sorgulandi ->
+  **9/9 run `failure`**. Isler: `lint` + `frontend-check` basarili, `test (*)` dusuyor.
+- **Teshis araci**: log indirme auth istedigi icin CI'a teshis eklendi (`fail-fast: false` +
+  basarisiz `FAILED/ERROR` satirlarini `::error::` anotasyonu olarak yayinlama). Anotasyonlar
+  public check-runs API'den okunabildi.
+- **Kok neden 1 (uretim bagimliligi)**: `requirements.txt`'te **`email-validator` yoktu**;
+  `auth_routes.py`/`auth.py` `pydantic.EmailStr` kullandigi icin temiz kurulumda `import app`
+  cokuyordu (testler collect asamasinda patliyordu). `python-multipart` da (`UploadFile=File(...)`)
+  runtime icin eksikti. Ikisi eklendi.
+- **Kok neden 2 (test ortam bagimliligi - ASIL neden)**: `test_call_llm_retries_429_then_succeeds`
+  3. denemede basari bekliyordu; ama `_RATE_LIMIT_MAX_RETRIES=1` -> yalnizca 2 deneme. Test
+  sadece **fallback zinciri ortamda gecerli bir API anahtari buldugunda** ("kazara") geciyordu.
+  CI'da anahtar yok -> fallback tukeniyor -> kural-tabanli yanit -> FAIL. Yerelde
+  `OPENROUTER_API_KEY` ortam degiskeni oldugu icin gizleniyordu.
+- **Duzeltme**: test butcesi monkeypatch ile 2'ye sabitlendi; fallback cagrilirsa test
+  basarisiz olacak sekilde kilitlendi -> ortamdan bagimsiz/hermetik.
+- **Yerel yeniden uretim**: temiz `git clone` + temiz venv + anahtarlar temizlenmis ortam ->
+  once **1 failed**, duzeltmeden sonra **172 passed** (CI taklidi).
+- **CI KANITI**: `563e7ab` push sonrasi run `39321183615` -> **`success`**;
+  `test (3.11)`, `test (3.12)`, `test (3.13)`, `lint`, `frontend-check` hepsi yesil.
+- **Yerel regresyon**: 172 passed; import kontrolu OK.
+- **Commit'ler**: `c56bdb4` (bagimliliklar), `f13eff9` (teshis), `563e7ab` (test fix).

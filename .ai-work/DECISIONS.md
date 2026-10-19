@@ -268,3 +268,25 @@
 - **Gerekce**: 8.4 - paralel gorev guvenligi; 1.1 - gercek yaris duzeltmesi.
 - **Etki**: 2 yeni eszamanlilik testi; toplam **172 PASS**. Ana sohbet canli testte calisiyor
   (`/api/v1/ai/chat` 200, `success=true`). Commit `6bfacd7`.
+
+## D-029 - Eksik uretim bagimliliklari `requirements.txt`'e eklendi
+- **Baglam**: CI'daki `test` isi uc Python surumunde de dusuyordu. Temiz klon + temiz venv
+  deneyi ile kok neden bulundu: `requirements.txt`'te `email-validator` yoktu. `auth_routes.py`
+  ve `auth.py`, `pydantic.EmailStr` kullaniyor; paket yoksa `import pydantic` zinciri hata verir
+  ve `import app` coker (testler collect asamasinda FAIL).
+- **Karar**: `requirements.txt`'e `email-validator>=2.0.0` ve `python-multipart>=0.0.9`
+  eklendi. Ikincisi `UploadFile = File(...)` uclari icin calisma zamaninda ZORUNLU.
+- **Gerekce**: 10/11 ve 4.x - temiz makinede/bulutta uygulamanin ayaga kalkmasi; "tanimli !=
+  calisiyor" ilkesi (yerel dev ortaminda tesadufen kurulu olan paketler artik bildiriliyor).
+- **Etki**: `import app` temiz kurulumda calisiyor; CI yesil. Commit `c56bdb4`.
+
+## D-030 - Testler ortam sir/anahtarlarina BAGIMLI OLMAMALI (hermetik test)
+- **Baglam**: `test_call_llm_retries_429_then_succeeds` 3. denemede basari bekliyordu ama
+  `_RATE_LIMIT_MAX_RETRIES=1` iken yalnizca 2 deneme yapiliyor. Test, ancak fallback zinciri
+  ortamda gecerli bir API anahtari bulunca geciyordu; yerelde `OPENROUTER_API_KEY` ortam
+  degiskeni oldugu icin yesil, CI'da anahtar olmadigi icin kirmiziydi.
+- **Karar**: (a) Test, test edilen sabiti monkeypatch ile acikca sabitler. (b) Beklenmeyen yol
+  (fallback) cagrilirsa test **basarisiz** olur; boylece ortam anahtari hatayi maskeleyemez.
+- **Gerekce**: 9 - kanit/olculebilirlik; 10/11 - CI sinyali guvenilir olmali. Bir testin
+  sonucu makinedeki ortam degiskenlerine veya kullanici config'ine gore degismemeli.
+- **Etki**: Temiz klon + anahtarsiz ortamda 172 passed; CI (`563e7ab`) yesil. Commit `563e7ab`.
