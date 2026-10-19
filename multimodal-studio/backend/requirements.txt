@@ -9,6 +9,13 @@ uvicorn[standard]>=0.27.0
 # Pydantic for data validation
 pydantic>=2.5.0
 
+# EmailStr dogrulamasi (auth_routes.py / auth.py) - ZORUNLU
+# Eksikse `from pydantic import EmailStr` import hatasi verir ve uygulama/testler acilmaz.
+email-validator>=2.0.0
+
+# Dosya yukleme (UploadFile = File(...)) - ZORUNLU (calisma zamani)
+python-multipart>=0.0.9
+
 # Python environment management
 python-dotenv>=1.0.0
 

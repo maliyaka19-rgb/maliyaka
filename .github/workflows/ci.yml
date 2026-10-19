@@ -47,7 +47,7 @@ jobs:
     - name: Import check (all modules load)
       run: |
         cd multimodal-studio/backend
-        python -c "import web_tools, tools_spec, memory, tool_executor, rag_system, ai_agent; print('All modules OK')"
+        python -c "import web_tools, tools_spec, memory, tool_executor, rag_system, ai_agent, app, custom_agents, coding_manager, coding_routes, telegram_bot; print('All modules OK')"
 
   lint:
     runs-on: ubuntu-latest
