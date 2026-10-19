@@ -15,3 +15,14 @@ chroma_db/
 auth_data/
 tests/
 .DS_Store
+
+# --- Yerel sirlar ve calisma verisi: IMAJA GIRMEMELI ---
+model_config.json
+telegram_config.json
+.encryption_key
+*.log
+
+# --- Calisma zamani durumu (imajda anlamsiz, sifirlanmali) ---
+coding_tasks.json
+coding_insights.json
+cron_state.json

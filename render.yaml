@@ -16,7 +16,9 @@ services:
     plan: free
     rootDir: multimodal-studio/backend
     buildCommand: pip install -r requirements.txt
-    startCommand: uvicorn app:app --host 0.0.0.0 --port $PORT
+    # run_server.py: PORT ortam degiskenini okur, calisma dizinini backend yapar
+    # ve arayuzu de ayni origin'de servis eder (tek servis yeterli).
+    startCommand: python run_server.py
     healthCheckPath: /health
     autoDeploy: true
     envVars:
@@ -24,11 +26,16 @@ services:
         value: 3.11.9
       - key: ENVIRONMENT
         value: production
-      # Arayüzün CORS ile erişebilmesi için statik sitenin adresi (virgülle ayrılır):
+      # Arayüzün CORS ile erişebilmesi için statik sitenin adresi (virgülle ayrılır).
+      # Backend arayüzü kendisi servis ettiği için bu genelde GEREKMEZ.
       - key: CORS_ORIGINS
         sync: false
       # --- Sırlar: panelde girilir ---
       - key: GROQ_API_KEY
+        sync: false
+      # JWT imzalama anahtari. Verilmezse gelistirme varsayilani kullanilir ->
+      # uretimde MUTLAKA ayarlanmali (aksi halde token'lar tahmin edilebilir).
+      - key: AUTH_SECRET_KEY
         sync: false
       - key: NEXUS_ENCRYPTION_PASSPHRASE
         sync: false
