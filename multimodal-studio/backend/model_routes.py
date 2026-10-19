@@ -389,3 +389,31 @@ async def list_providers():
         })
 
     return {"success": True, "providers": providers}
+
+
+@router.get("/local/status", summary="Yerel model (Ollama/LM Studio) durumu")
+async def local_llm_status():
+    """
+    OpenAI-uyumlu yerel sunuculari tespit eder (yalnizca loopback adresleri).
+
+    Yerel model varsayilan olarak KAPALIDIR; etkinlestirmek icin
+    ``NEXUS_LOCAL_LLM_URL`` ortam degiskenini ayarlayin.
+    """
+    import local_llm
+
+    info = await local_llm.detect()
+    return {
+        "success": True,
+        **info,
+        "enabled": local_llm.is_enabled(),
+        "configured_url": local_llm.configured_url() or None,
+        "configured_model": local_llm.model_name() or None,
+        "note": local_llm.status_note(),
+        "recommended_models": local_llm.RECOMMENDED_MODELS,
+        "how_to_enable": {
+            "env_url": "NEXUS_LOCAL_LLM_URL=http://127.0.0.1:11434/v1",
+            "env_model": "NEXUS_LOCAL_LLM_MODEL=qwen2.5:1.5b",
+            "runtimes": ["ollama", "lmstudio", "llamacpp"],
+        },
+        "safety": "Yalnizca localhost; API anahtari gerekmez; varsayilan KAPALI.",
+    }

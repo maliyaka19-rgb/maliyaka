@@ -1248,10 +1248,45 @@ Kurallar:
                     logger.warning(f"Fallback error on {provider_id}/{model_id}: {e}")
                     continue
         
+        # Yerel model yedegi (opt-in): bulut zinciri tukendikten sonra, kural-tabanli
+        # yanittan ONCE denenir. NEXUS_LOCAL_LLM_URL tanimli degilse hicbir sey yapmaz.
+        local_result = await self._try_local_llm(messages)
+        if local_result is not None:
+            return local_result
+
         # All fallbacks exhausted -> rule-based agent
         logger.warning("All LLM fallbacks exhausted, using rule-based fallback")
         return await self._fallback_response(messages)
-    
+
+    async def _try_local_llm(self, messages: List[Dict]) -> Optional[Dict]:
+        """Yerel OpenAI-uyumlu sunucu (Ollama/LM Studio/llama.cpp) yedegi.
+
+        Yalnizca ``NEXUS_LOCAL_LLM_URL`` (loopback) tanimliysa denenir; varsayilan
+        KAPALI. Basarisizlik ana akisi ETKILEMEZ (None doner). Yan etki yoktur:
+        bulut yapilandirmasi degistirilmez.
+        """
+        try:
+            import local_llm
+        except Exception as exc:  # pragma: no cover - modul yoksa sessiz gec
+            logger.debug("local_llm modulu yuklenemedi: %s", exc)
+            return None
+
+        if not local_llm.is_enabled():
+            return None
+
+        try:
+            result = await local_llm.chat(messages)
+        except Exception as exc:
+            logger.warning("Yerel model cagrisi basarisiz: %s", exc)
+            return None
+
+        if not isinstance(result, dict) or not result.get("success"):
+            logger.warning("Yerel model yanit vermedi: %s", (result or {}).get("error"))
+            return None
+
+        logger.info("Yerel model yedegi kullanildi: %s", result.get("model"))
+        return result
+
     def _normalize_gemini_response(self, data: Dict) -> Dict:
         """Convert Gemini response to OpenAI format."""
         try:

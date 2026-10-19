@@ -672,3 +672,38 @@ Tam rapor: **`.ai-work/CODING-AGENTS.md`**. Özet:
   kaydedildi; analiz kanita dayali icgoru uretti: **"1 gorev 'tamamlandi' ama dogrulama
   kaniti yok"** (D-025 ilkesi gercek veride calisiyor).
 - **Regresyon**: ana sohbet `/api/v1/ai/chat` -> `success=true`, yanit "2 + 2 = 4."
+
+### Ek 5 (ayni oturum) - #2 Yerel model yedekliligi
+
+**Tespit (gercek, bu makine):**
+- Yerel calisma zamani YOK: `ollama`, `lms`, `llama-server`, `lmstudio` bulunamadi;
+  portlar 11434/1234/8080 kapali (yalnizca bizim :8000).
+- Donanim zayif: **i5-5200U (2 cekirdek/4 is parcacigi), 7.9 GB RAM,
+  GeForce 940M 2 GB (nvidia-smi yok)**; disk bos 113 GB.
+
+**Yapilanlar (gercek kod):**
+- `local_llm.py`: OpenAI-uyumlu yerel sunuculari (Ollama/LM Studio/llama.cpp) TESPIT eder
+  ve yedek saglayici olarak kullanir. Guvenlik: yalnizca **loopback**; anahtar gerekmez;
+  ortam proxy'leri devre disi (`trust_env=False`).
+- `ai_agent._fallback_chain`: bulut zinciri tukendikten sonra, kural-tabanli yanittan ONCE
+  yerel model denenir (`_try_local_llm`). Yan etki yok: bulut yapilandirmasi degismez.
+- Rota: `GET /api/v1/models/local/status` (tespit + kurulum rehberi + onerilen modeller).
+- `.env.example`: `NEXUS_LOCAL_LLM_URL` / `NEXUS_LOCAL_LLM_MODEL` belgelendi.
+
+**Test/kanit siniflandirmasi:**
+| Kalem | Durum |
+|---|---|
+| Adaptor + tespit + yedek entegrasyonu (test+birim) | **PASS** (8 yeni test; toplam **195 PASS**) |
+| Gercek yerel LLM sunucusuna karsi uctan uca | **PASS** (gercek 127.0.0.1 sunucusu, model otomatik secildi) |
+| Gercek model agirliklariyla (Ollama/LM Studio) | **BLOCKED** (kurulum yok + donanim yetersiz) |
+
+**Canli kanitlar:**
+- Yerel sunucu yokken: `available=False`, `checked=ollama/lmstudio/llamacpp ConnectTimeout`.
+- Gercek yerel sunucu 11434'te calisirken: **`available=True`, `runtime=ollama`,
+  `models=[fake-local-model]`** (otomatik tespit).
+- Bulut katalogu bos + anahtar yokken: `_fallback_chain` -> **`provider=local`,
+  `local=True`**, gercek HTTP yaniti alindi.
+- Sunucu kapatilinca: `available=False` (sistem bozulmadi).
+- Regresyon: ana sohbet `success=true`, "3 + 5 = **8**".
+
+**Varsayilan KAPALI**: `NEXUS_LOCAL_LLM_URL` tanimli degilse hicbir ag cagrisi yapilmaz.

@@ -323,3 +323,20 @@
   (denetim izi).
 - **Gerekce**: 9 - tekrar uretilebilirlik; 11 - karar kaydi guvenilirligi.
 - **Etki**: `test_generate_persists_and_dedups`, `test_human_decision_survives_reanalysis`.
+
+## D-034 - Yerel model yedekliligi: opt-in, loopback-only, tespit + adaptor
+- **Baglam**: Tek bulut saglayicisi (`groq`) riskli: TPM/kota limiti veya ag/hesap sorunu
+  tum sistemi kural-tabanli yanita dusuruyor. Yerel bir model bagimsiz yedek olurdu.
+- **Karar**: `local_llm.py` eklendi: Ollama/LM Studio/llama.cpp gibi OpenAI-uyumlu yerel
+  sunuculari tespit eder ve `_fallback_chain` sonunda (kural-tabanli yanittan once) dener.
+  **Guvenlik**: yalnizca loopback adresler (`127.0.0.1`/`localhost`/`[::1]`), anahtar yok,
+  `trust_env=False` (proxy atlanir). Yerel/kucuk modellere **tools gonderilmez** (bilincli
+  sinirlama: metin yaniti).
+- **Varsayilan KAPALI**: `NEXUS_LOCAL_LLM_URL` tanimli degilse hicbir ag cagrisi yapilmaz ve
+  mevcut davranis birebir korunur. Bu, geriye donuk uyumluluk ve test izolasyonu icin sart.
+- **Gerekce**: 10/11 - gercek yedeklilik ve "tanimli != calisiyor" (her yol gercekten test
+  edildi); 7 - saglayici bagimliligi azalir.
+- **Durum**: Adaptor + entegrasyon **PASS** (8 yeni test, toplam **195 PASS**; gercek yerel
+  sunucuya karsi uctan uca dogrulandi). Gercek model agirliklari **BLOCKED**: bu makinede
+  yerel calisma zamani yok ve donanim zayif (i5-5200U, 7.9 GB RAM, 940M 2 GB).
+- **Etki**: `GET /api/v1/models/local/status`; `.env.example` guncellendi.
