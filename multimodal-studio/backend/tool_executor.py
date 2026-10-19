@@ -11,6 +11,7 @@ import time
 import subprocess
 import logging
 from typing import Dict, List, Optional, Any
+from contextvars import ContextVar
 
 import httpx
 
@@ -28,6 +29,11 @@ logger = logging.getLogger("nexus-agent-v6")
 # (önceden tanımsız `CALCULATOR` adı NameError veriyordu → araç çöküyordu).
 CALCULATOR = SafeCalculator()
 
+# Görev-yerel çalışma dizini. Kodlama Yöneticisi bir görev çalıştırırken bunu
+# ayarlar; böylece AYNI süreçteki eşzamanlı görevler birbirinin dosyalarını
+# ezmez ve yazımlar görevin dizininden dışarı çıkamaz (contextvar = istek-yerel).
+task_working_dir: ContextVar[Optional[str]] = ContextVar("task_working_dir", default=None)
+
 # ============================================================
 # TOOL EXECUTION ENGINE
 # ============================================================
@@ -39,6 +45,10 @@ class ToolExecutor:
         self.backend_url = backend_url
         # Project working directory
         self.working_dir = working_dir or os.getcwd()
+
+    def _root(self) -> str:
+        """Etkin kök dizin: görev-yerel ayar varsa o, yoksa örneğin dizini."""
+        return task_working_dir.get() or self.working_dir
     
     def _resolve_path(self, relative_path: str) -> str:
         """Resolve a relative path against the working directory, preventing path traversal.
@@ -47,7 +57,7 @@ class ToolExecutor:
         escape the working directory. Absolute paths inside the working dir are
         still allowed; paths outside it are rejected.
         """
-        root = os.path.realpath(self.working_dir)
+        root = os.path.realpath(self._root())
         clean_path = (relative_path or "").replace('\\', '/').lstrip('/')
         full_path = os.path.realpath(os.path.join(root, clean_path))
         try:
@@ -280,7 +290,7 @@ class ToolExecutor:
                     process = subprocess.Popen(
                         command,
                         shell=True,
-                        cwd=self.working_dir,
+                        cwd=self._root(),
                         stdout=subprocess.PIPE,
                         stderr=subprocess.PIPE,
                         text=True,

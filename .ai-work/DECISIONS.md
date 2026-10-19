@@ -396,3 +396,17 @@
   ana repodan ayrisir; ana repo degismez.
 - **Etki**: `test_files_changed.py` (6 test); toplam **225 PASS**.
   Canli 3. kosu: 120.3 sn, exit=0, bagimsiz pytest 5 passed.
+
+## D-039 - Görev-yerel çalışma dizini (ContextVar) + açık güvenlik bulgusu
+- **Bağlam**: `working_dir` yalnızca doğrulama komutunu yönlendiriyordu; araç yazımları
+  ve `execute_command` proje köküne gidiyordu (canlı E2E'de doğrulandı).
+- **Karar**: `tool_executor.task_working_dir` **ContextVar**; `ToolExecutor._root()`
+  contextvar → örnek dizini sırasıyla çözer. `CodingTaskManager.run()` görev boyunca
+  ayarlar, `finally` ile geri alır. Eşzamanlı görevler izole; sızıntı yok.
+- **Sınır**: Yol çözümleme yine `realpath + commonpath` ile kök dışına çıkamaz.
+- **Etki**: `test_task_working_dir.py` (7 test); toplam **232 PASS**.
+  Canlı API: 94.5 sn, `exit=0`, dosya yalnızca görev dizininde; ana repo temiz.
+- **AÇIK RİSK (kritik)**: `/api/v1/coding/*` kimlik doğrulaması **yok**. `execute` modu
+  `shell=True` çalıştırdığı için API internete açılırsa uzaktan komut çalıştırma riski.
+  Yerel kullanımda sınırlı; dağıtımdan önce kapatılmalı (opsiyonel `NEXUS_REQUIRE_AUTH`
+  guard + arayüzde Bearer başlığı önerilir).

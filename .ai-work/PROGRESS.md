@@ -830,3 +830,33 @@ Canli 3. kosu: 120.3 sn, `task_id=739f6f26-3fd`, exit=0; bagimsiz pytest exit=0.
 kaldi; testler geciyor ama kod kalitesi kusurlu. Reviewer bunu yakalamadi - ayri bir
 iyilestirme konusu. Ayrica `multimodal-studio/src/` **bu E2E'ye ait degil**: ayni anda
 canli UI oturumunun (`/api/v1/ai/chat`, 00:57) yazdigi kullanici verisi; silinmedi.
+
+### Ek 10 (ayni oturum) - working_dir artik ARACLARI da kapsiyor (gorev-yerel)
+
+**Kusur:** `/api/v1/coding/run` icindeki `working_dir` yalnizca `run_verification`i
+yonlendiriyordu. Ajanin `write_file`/`edit_file`/`execute_command` cagrilari surec
+genelindeki proje kokune gidiyordu; yani "baska dizinde calistir" istegi **yanlis yere
+yaziyordu** (guvenlik + ayrisim kusuru).
+
+**Cozum:**
+- `tool_executor.task_working_dir` = **ContextVar** (istek-yerel).
+- `ToolExecutor._root()`: contextvar varsa onu, yoksa ornegin dizinini kullanir.
+  `_resolve_path` (path traversal korumasi dahil) ve `execute_command` cwd'si bu koku izler.
+- `CodingTaskManager.run()` gorev boyunca contextvar'i ayarlar; `finally` ile **geri alir**.
+  Boylece eszamanli gorevler birbirini etkilemez, sonrasinda sizinti olmaz.
+- Yok olan dizin -> `ValueError` (API 400).
+
+**Kanit:**
+| Kalem | Sonuc |
+|---|---|
+| Test | **232 PASS** (7 yeni: izolasyon, varsayilan davranis, traversal, komut cwd, eszamanlilik, manager entegrasyonu, sizinti) |
+| ruff | temiz |
+| Canli API (`POST /api/v1/coding/run`, `working_dir=<temp>`) | 94.5 sn, `task_id=90b1a4f3-9fa`, `status=tamamlandi` |
+| Dosya yeri | `calc.py` **yalnizca gorev dizininde**; ana repoda `calc.py`/`test_calc.py` **YOK** |
+| Dogrulama | ajan: `ran=True passed=True exit=0`; **bagimsiz pytest: 2 passed, exit=0** |
+| Nihai yanit | "Gorev tamamlandi (kanitli). ... exit=0. Degisen dosyalar: calc.py." |
+
+**Yeni kritik bulgu (DUZELTILMEDI):** `/api/v1/coding/*` rotalarinda **kimlik dogrulama
+yok** (`Depends`/Bearer yok). `execute` modu `shell=True` komut calistirdigi icin API
+disariya acilirsa **uzaktan komut calistirma** riski vardir. Render/Internet'e acmadan
+once mutlaka kapatilmali. Yerel kullanimda risk sinirli.

@@ -274,3 +274,8 @@ LLM/ag kullanmaz; aynı girdiden aynı çıktıyı üretir (test edilebilir).
 - "Yazma adimi basarili ama 0 dosya" -> `kalan_riskler` uyarisi (canlida `coder` boyleydi).
 - Dogrulama gecerken LLM 429 verse bile `final_answer` kanittan uretilir.
 - Kalan kalite riski: ajanin urettigi kodda olu satir kalabiliyor; reviewer kacirdi.
+
+## Ek 10 - working_dir gorev-yerel (ContextVar)
+- Ajan araclari artik gorevin dizininde yazar/calisir; eszamanli gorevler izole.
+- Canli API kaniti: dosya gorev dizininde, ana repo temiz, bagimsiz pytest exit=0.
+- **ACIK KRITIK RISK**: `/api/v1/coding/*` kimlik dogrulamasi yok; internete acmadan once kapat.

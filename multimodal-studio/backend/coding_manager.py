@@ -406,7 +406,26 @@ class CodingTaskManager:
                     "error": str(exc)}
 
     # -- ana akış ----------------------------------------------------------
-    async def run(self, message: str, mode: str = "plan", confirm: bool = False,
+    async def run(self, *args, **kwargs) -> Dict[str, Any]:
+        """Görevi GÖREV-YEREL çalışma dizininde çalıştırır.
+
+        Araçların dosya yazımları ve komutları `working_dir`e hapsedilir
+        (contextvar). Eşzamanlı görevler birbirini etkilemez; bitince eski
+        değere döner (sızıntı yok).
+        """
+        from tool_executor import task_working_dir
+
+        target = os.path.realpath(self.working_dir)
+        if not os.path.isdir(target):
+            raise ValueError(f"Çalışma dizini bulunamadı: {target}")
+
+        token = task_working_dir.set(target)
+        try:
+            return await self._run(*args, **kwargs)
+        finally:
+            task_working_dir.reset(token)
+
+    async def _run(self, message: str, mode: str = "plan", confirm: bool = False,
                   conversation_id: Optional[str] = None, via_main_manager: bool = True,
                   verify_command: Optional[str] = None, max_retries: int = 2,
                   parallel_analysis: bool = False) -> Dict[str, Any]:
