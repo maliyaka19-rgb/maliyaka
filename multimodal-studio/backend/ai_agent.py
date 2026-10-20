@@ -1,11 +1,11 @@
 """
-NEXUS-CORE v6.0 - TRUE AI AGENT
+NEXUS-CORE v6.1 - TRUE AI AGENT
 ================================
 Real AI Agent with LLM reasoning, tool use, and conversation memory.
 Works like ChatGPT but with specialized multimodal tools.
 
 Architecture:
-- LLM Core: OpenAI GPT-4 / GPT-3.5 / any compatible API
+- LLM Core: OpenRouter or local OpenAI-compatible server (Ollama/LM Studio)
 - Tools: Code Gen, Visual Gen, Video Gen, Web Search, Learning
 - Memory: Conversation history + Long-term learning
 - Agent Loop: Plan → Act → Observe → Reflect
@@ -16,6 +16,7 @@ import time
 import uuid
 import os
 import re
+import socket
 import urllib.parse
 from datetime import datetime
 from typing import Dict, List, Optional, Any
@@ -410,7 +411,28 @@ When you need to use tools, call them. Work like a real coding assistant — rea
             conversation_id = str(uuid.uuid4())[:12]
         
         conv = self.memory.get_or_create(conversation_id)
-        
+
+        # Kimlik soruları model/anahtar durumundan BAĞIMSIZ ve deterministik
+        # yanıtlanır. Böylece yerel model kapalı veya OpenRouter anahtarı
+        # geçersizken bile kullanıcı "Üzgünüm, yanıt üretemiyorum" hatası
+        # yerine doğru bir kendini tanıtma alır.
+        if self._is_identity_query(user_message):
+            identity_text = self._identity_text()
+            self.memory.add_message(conversation_id, Message(role="user", content=user_message))
+            self.memory.add_message(conversation_id, Message(role="assistant", content=identity_text))
+            return {
+                "success": True,
+                "response": identity_text,
+                "conversation_id": conversation_id,
+                "tools_used": [],
+                "files_changed": [],
+                "iterations": 0,
+                "thinking_steps": [
+                    {"type": "thinking", "content": "Kimlik ve model bilgisi hazırlanıyor", "icon": "🧠"},
+                    {"type": "complete", "content": "Yanıt hazır", "icon": "✨"},
+                ],
+            }
+
         # Build message history for LLM with DYNAMIC brain context
         if custom_system_prompt:
             # Build tool guidance strictly for active tools to prevent tool mismatch hallucinations
@@ -1620,23 +1642,83 @@ Kurallar:
         combined = f"**{len(sections)} çıktı oluşturdum:**\n\n" + "\n\n---\n\n".join(sections)
         return self._llm_style(combined)
     
+    @staticmethod
+    def _is_identity_query(query: str) -> bool:
+        """Kimlik/model sorularını yakala (LLM/anahtar durumundan bağımsız)."""
+        q = (query or "").casefold()
+        phrases = (
+            "hangi modelsin", "hangi model", "hangi llm", "modelin ne",
+            "modelin adı", "modelin adi", "model ismi", "hangi yapay zeka",
+            "sen nesin", "sen kimsin", "kimsin", "kendini tanıt",
+            "kendini tanit", "adın ne", "adin ne", "ismin ne", "isminiz ne",
+            "ne yapabilirsin", "neler yapabilirsin",
+        )
+        return any(p in q for p in phrases)
+
+    @staticmethod
+    def _local_server_reachable(url: str, timeout: float = 0.35) -> bool:
+        """Kimlik yanıtında 'çalışıyor' demek için hızlı, güvenli port kontrolü."""
+        try:
+            parsed = urllib.parse.urlparse(url)
+            host = (parsed.hostname or "").lower()
+            if host not in {"127.0.0.1", "localhost", "::1"}:
+                return False
+            port = parsed.port or (443 if parsed.scheme == "https" else 80)
+            with socket.create_connection((host, port), timeout=timeout):
+                return True
+        except Exception:
+            return False
+
+    def _identity_text(self) -> str:
+        """Gerçek yapılandırmayı sızdırmadan açıklayan deterministik tanıtım."""
+        try:
+            self._refresh_llm_config()
+        except Exception:
+            pass
+        model = (getattr(self.llm_config, "model", "") or "bilinmiyor").strip()
+        provider = (getattr(self, "provider", "") or "openrouter").strip()
+        local_model = (os.getenv("NEXUS_LOCAL_LLM_MODEL") or "qwen2.5:3b").strip()
+        local_url = (os.getenv("NEXUS_LOCAL_LLM_URL") or "").strip()
+        if not local_url:
+            local_state = "kapalı"
+        elif self._local_server_reachable(local_url):
+            local_state = "çalışıyor"
+        else:
+            local_state = "yapılandırıldı (sunucu yanıt vermiyor)"
+
+        cloud_line = (
+            f"OpenRouter / `{model}`"
+            if provider == "openrouter"
+            else f"`{provider}` / `{model}`"
+        )
+        return (
+            "Ben **NEXUS-CORE v6.1** — çok modlu bir yapay zeka ajanıyım. "
+            "Ana Yönetici Ajan olarak çalışırım; kodlama görevlerini "
+            "Kodlama Yöneticisi ve 20 uzmanlık ajanına devrederim.\n\n"
+            "**Çalışma yapılandırmam:**\n"
+            f"- ☁️ Bulut: {cloud_line}\n"
+            f"- 💻 Yerel: `{local_model}` (Ollama, {local_state})\n\n"
+            "**Neler yapabilirim?**\n"
+            "1. 💻 Kod üretimi, dosya düzenleme, komut çalıştırma ve test\n"
+            "2. 🎨 Görsel prompt ve gerçek görsel üretimi\n"
+            "3. 🎬 Sinematik video promptu ve MP4 üretimi\n"
+            "4. 🌐 Web araması, soru-cevap ve öğrenme\n\n"
+            "Yerel model veya OpenRouter erişimi geçici olarak kesilse bile kimlik "
+            "sorularında hata mesajı vermem. OpenRouter'a geçmek için üstteki "
+            "model seçicisinden bir OpenRouter modeli seçebilirsiniz."
+        )
+
     def _answer_question(self, query: str) -> str:
         """Rule-based question answering."""
         q = query.lower().strip()
+
+        if self._is_identity_query(q):
+            return self._identity_text()
         
         if any(kw in q for kw in ["merhaba", "selam", "hey", "naber", "nasılsın", "nasilsin"]):
-            return ("Merhaba! Ben **NEXUS-CORE v6.0** yapay zeka ajanıyım. "
+            return ("Merhaba! Ben **NEXUS-CORE v6.1** yapay zeka ajanıyım. "
                     "Kod üretebilir, görsel/video prompt hazırlayabilir ve sorularınızı "
                     "yanıtlayabilirim. Nasıl yardımcı olabilirim?")
-        
-        if any(kw in q for kw in ["kimsin", "kimsin", "ne yapabilirsin", "neler yapabilirsin", "kendini tanıt"]):
-            return ("Ben **NEXUS-CORE v6.0**'ım — çok modlu bir yapay zeka ajanıyım.\n\n"
-                    "1. 💻 **Kod Üretimi** — Python, JavaScript, API'ler, scriptler\n"
-                    "2. 🎨 **Görsel Prompt** — Midjourney v6, SDXL, DALL-E 3\n"
-                    "3. 🎬 **Video Prompt** — Google Veo, Sora, Runway Gen-3\n"
-                    "4. ❓ **Soru-Cevap** — Genel bilgi ve açıklama\n"
-                    "5. 🧠 **Öğrenme** — Geçmiş görevlerden ders çıkarır\n\n"
-                    "Doğal dille yazmanız yeterli — gerisini ben hallederim.")
         
         if "yapay zeka" in q and ("nedir" in q or "ne demek" in q):
             return ("**Yapay Zeka (AI)**, insan zekasını taklit eden sistemlerin genel adıdır. "
@@ -1652,10 +1734,15 @@ Kurallar:
                     "çok amaçlı bir programlama dilidir. Veri bilimi, yapay zeka, web "
                     "geliştirme (FastAPI, Django) ve otomasyon için yaygındır.")
         
-        # Don't return a fallback that echoes the query
-        # Instead, try to give a useful generic response
-        return ("Üzgünüm, şu anda tam yanıt üretemiyorum. LLM API'sine erişimde sorun yaşıyorum. "
-                "Lütfen biraz bekleyip tekrar deneyin veya farklı bir soru sorun.")
+        # Bilinmeyen sorularda kimliği koru; ham API hatası gösterme.
+        return (
+            "Ben **NEXUS-CORE v6.1** — kodlama ve çok modlu üretim yapan bir "
+            "yapay zeka ajanıyım. Bu soru için şu anda dil modeli yanıtı "
+            "üretemedim.\n\n"
+            "Yerel model (`qwen2.5:3b`) veya OpenRouter seçili modeliyle "
+            "yeniden deneyebilirsiniz. Kodlama, dosya işlemi, görsel/video "
+            "promptu veya genel bilgi sorularınızı yazmaya devam edebilirsiniz."
+        )
 
 
 # ============================================================
@@ -1690,7 +1777,7 @@ async def chat(user_message: str, conversation_id: str = None, history=None, age
 def get_agent_info() -> Dict:
     """Get agent information."""
     return {
-        "name": "NEXUS-CORE v6.0",
+        "name": "NEXUS-CORE v6.1",
         "type": "True AI Agent",
         "capabilities": [
             "Question Answering",
@@ -1701,5 +1788,5 @@ def get_agent_info() -> Dict:
             "Learning"
         ],
         "tools": [t["function"]["name"] for t in TOOLS],
-        "llm_model": "gpt-4"
+        "llm_model": "openrouter + local fallback"
     }

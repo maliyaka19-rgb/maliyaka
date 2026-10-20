@@ -1024,3 +1024,47 @@ Yalnızca OpenRouter bulut sağlayıcısı, birincil/fallback ise yerel model ka
   için canlı sohbet kural-tabanlı yedeğe düşüyor. Anahtar düzeltilince bulut yolu hazır.
 - `/api/v1/coding/*` kimlik doğrulaması yok; `execute` `shell=True` (D-039).
 - Yemek sitesi (`Desktop\m`) bu temizlik kapsamında değiştirilmedi.
+
+---
+
+## Ek 15 - "Sen hangi modelsin?" hatası giderildi; yerel model canlı (2026-10-21)
+
+**Kullanıcı bildirimi:** "Sen hangi modelsin?" sorusuna
+"Üzgünüm, şu anda tam yanıt üretemiyorum. LLM API'sine erişimde sorun yaşıyorum."
+yanıtı geliyordu. Yerel model de çalışmalı, istenirse OpenRouter'a geçilebilmeli;
+iki durumda da hata yerine kendini tanıtmalı.
+
+**Kök neden:**
+- OpenRouter anahtarı **401 User not found** döndürüyordu.
+- Ollama kurulu ama **kapalıydı** (port 11434 dinlemiyordu).
+- Kural-tabanlı yedekte "hangi model" niyeti yoktu; genel hata metni dönüyordu.
+
+**Yapılan:**
+- Ollama `qwen2.5:3b` başlatıldı; `/api/v1/models/local/status` ile gerçek tespit
+  doğrulandı (`available=true`, `models=["qwen2.5:3b"]`).
+- `ai_agent.chat()`: kimlik/model soruları LLM'den önce deterministik yanıtlanır.
+  Yanıt NEXUS-CORE kimliğini, seçili OpenRouter modelini ve yerel modelin gerçek
+  port durumunu içerir; API anahtarına/LLM'e ihtiyaç duymaz.
+- `_answer_question()` kural-tabanlı yedeği de aynı kimlik yanıtını kullanır;
+  "Üzgünüm / LLM API" metni kaldırıldı.
+- `test_identity.py` (2 test) eklendi: kimlik sorusunda LLM **çağrılmadığını** ve
+  hata metni dönmediğini doğrular. `test_local_llm.py` gerçek Ollama çalışırken
+  hermetik kalması için aday uç noktaları testte boşaltır.
+
+**Kanıt:**
+| Kalem | Sonuç |
+|---|---|
+| pytest | **250 PASS**, 29 deselected, 0 fail |
+| ruff (`E9,F63,F7,F82`) | temiz |
+| `node --check js/app.js` | OK |
+| Yerel model durumu | `available=true`, `runtime=env`, `qwen2.5:3b` |
+| Kimlik API'si | **0.2 sn**, `success=true`, NEXUS-CORE + modeller |
+| Yerel model canlı | **15.3 sn**, "3+5" -> **9** |
+| Chromium DOM | `NEXUS-CORE v6.1`, `qwen2.5:3b (çalışıyor)`; genel hata **yok** |
+| Konsol | uyarı/hata **0** |
+
+**Sınır / açık:**
+- OpenRouter anahtarı **401**; bulut için geçerli anahtar gerekir.
+- Yerel model CPU'da yavaş (kısa soru ~15 sn); Ollama yeniden başlatmada açılmalı.
+- `/api/v1/coding/*` auth ve `execute` `shell=True` riski duruyor (D-039).
+- Yemek sitesi (`Desktop\m`) bu görevde değiştirilmedi.

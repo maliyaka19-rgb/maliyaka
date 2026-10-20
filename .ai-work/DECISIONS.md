@@ -512,3 +512,33 @@
 - **Sınır / açık**: OpenRouter anahtarı bu ortamda **401** veriyor; Ollama kapalı olduğu
   için canlı sohbet kural-tabanlı yedeğe düşüyor. `/api/v1/coding/*` kimlik doğrulaması
   ve `execute` `shell=True` riski duruyor (D-039). Yedek: `.ai-work/backups/ui-cleanup-20261021-002212/`.
+
+## D-046 - Kimlik soruları LLM'den bağımsız; yerel model canlı doğrulandı
+- **Tarih**: 2026-10-21
+- **Bağlam**: Kullanıcı "Sen hangi modelsin?" sorduğunda arayüz
+  "Üzgünüm, şu anda tam yanıt üretemiyorum. LLM API'sine erişimde sorun yaşıyorum."
+  hatasını gösterdi. Nedenler: OpenRouter anahtarı **401** dönüyordu ve Ollama
+  çalışmıyordu; kural-tabanlı yedekte kimlik niyeti tanınmıyordu.
+- **Karar**:
+  1. Ollama `qwen2.5:3b` başlatıldı; `NEXUS_LOCAL_LLM_URL`/`MODEL` ile yerel yol
+     etkinleştirildi. OpenRouter erişilemezse sohbet yerel modele düşer.
+  2. `ai_agent.chat()` içinde kimlik/model soruları **LLM çağrısından önce** ve
+     deterministik yanıtlanır. NEXUS-CORE kimliği, seçili OpenRouter modeli ve yerel
+     modelin gerçek port durumu (loopback socket kontrolü) döner.
+  3. `_answer_question()` kural-tabanlı yedeği de aynı kimlik yanıtını kullanır;
+     ham API hatası metni kullanıcıya gösterilmez.
+  4. OpenRouter seçimi korunur; geçerli anahtar girildiğinde model seçiciden bulut
+     modeli seçilebilir. Kimlik yanıtı iki yolda da aynıdır.
+  5. Gerçek Ollama çalışırken `test_detect_is_safe_when_nothing_listens` testi
+     aday uç noktaları boşaltılarak **hermetik** hale getirildi.
+- **Gerekçe**: Kimlik, bir sağlayıcı arızasına bağlı olmamalı; "tanımlı ≠ çalışıyor"
+  ilkesi gereği yerel modelin gerçekten yanıt verdiği ayrıca ölçüldü.
+- **Etki / kanıt**: `250 PASS`, 29 deselected; ruff `E9,F63,F7,F82` temiz;
+  `node --check` OK. `/api/v1/models/local/status` → `available=true`,
+  `models=["qwen2.5:3b"]`. Kimlik API yanıtı **0.2 sn**, yerel model yanıtı
+  **15.3 sn** ("3+5 → 9"). Chromium DOM: `NEXUS-CORE v6.1`, `qwen2.5:3b (çalışıyor)`,
+  genel hata metni **yok**, konsol uyarısı **0**.
+- **Sınır / açık**: OpenRouter anahtarı hâlâ **401**; bulut yolu geçerli anahtar
+  gerektirir. Yerel `qwen2.5:3b` CPU'da yavaştır (kısa soru ~15 sn). Ollama bu
+  oturumda açıldı; makine yeniden başlarsa yerel model için tekrar başlatılmalıdır.
+  `/api/v1/coding/*` auth ve `execute` `shell=True` riski duruyor (D-039).

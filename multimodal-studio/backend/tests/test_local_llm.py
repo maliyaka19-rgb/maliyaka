@@ -98,6 +98,8 @@ def test_detect_finds_running_local_server(local_server, monkeypatch):
 
 def test_detect_is_safe_when_nothing_listens(monkeypatch):
     monkeypatch.setenv(local_llm.ENV_URL, _closed_port_url())
+    # Makinede gerçek Ollama çalışıyor olabilir; testi deterministik yap.
+    monkeypatch.setattr(local_llm, "CANDIDATE_ENDPOINTS", [])
     info = asyncio.run(local_llm.detect(timeout=0.5))
     assert info["available"] is False
     assert info["models"] == []
