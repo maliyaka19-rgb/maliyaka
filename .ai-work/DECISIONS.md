@@ -470,8 +470,8 @@
   eşlemesi yalnızca resmî ID döndürür; bilinmeyen ajan ID'si `main-manager`'a yönlenir.
 - **Arayüz**: Eski localStorage `assistant` değeri `main-manager`'a taşınır; ajan
   penceresi 22 kartı hiyerarşik gösterir, "Diğer Ajanlar" bölümü oluşmaz.
-- **Sınır**: Kaynak dosyadaki eski tanımlar silinmedi; filtre nedeniyle **yüklenmiyor**.
-  Aktif kadro, JSON ve API tek kaynaktan 22'dir. `create_agent` API'si ileride yeni ajan
-  eklemeye izin verir (bu görevde mevcut kadro temizlendi).
+- **Sınır**: 18 ajanın kaynak tanım blokları AST ile **silindi** (1.565 -> 995 satır);
+  `REMOVED_AGENT_IDS` yalnızca eski JSON için güvenlik ağıdır. `create_agent` API'si
+  ileride yeni ajan eklemeye izin verir (bu görevde mevcut kadro temizlendi).
 - **Etki**: **251 PASS**; `/api/v1/agents` 22, `/api/v1/agents/hierarchy` 20 uzman /
   `missing=[]`; gerçek tarayıcı DOM'unda 22 kart ve 4/6/5/5 grupları doğrulandı.

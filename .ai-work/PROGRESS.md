@@ -936,7 +936,8 @@ kalacak; bu listede olmayan tüm ajanlar silinecek.
 - `DEFAULT_AGENTS` resmî kadroya filtrelendi. Kaldırılan 18 ajan:
   `assistant, teacher, designer, analyst, artist, researcher, writer, translator,
   marketer, chat-pro, python-pro, image-pro, video-pro, team-lead, tech-researcher,
-  rollback, evidence-auditor, code-standards`.
+  rollback, evidence-auditor, code-standards`. Bu 18 ajanın kaynak tanım blokları
+  AST ile **silindi** (1.565 -> 995 satır).
 - `load_agents()` eski `custom_agents.json` içinde kalan bu 18 ajanı **geri yüklemez**;
   JSON 22 kayda indirildi. Adlar kullanıcı listesiyle birebir eşlendi.
 - `coding_manager` iş akışlarındaki `evidence-auditor` -> `reviewer`,

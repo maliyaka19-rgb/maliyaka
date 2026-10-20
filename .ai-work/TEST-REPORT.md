@@ -332,6 +332,7 @@ Toplam backend testi: **138 passed**.
 | `GET /api/v1/agents` (gerçek sunucu :8000) | 22 ajan; 2 yönetici + 20 uzman |
 | `GET /api/v1/agents/hierarchy` | `total_specialists=20`, `missing=[]`, 4/6/5/5 |
 | `custom_agents.json` | 22 kayıt; kaldırılan 18 ID yok |
+| Kaynak temizliği | 18 eski tanım AST ile silindi; 1.565 -> 995 satır |
 | Arayüz DOM (gerçek Chromium) | 22 kart; Yönetim + Kodlama Yöneticisi + A/B/C/D; "Diğer Ajanlar" yok |
 | localStorage migrasyonu | `assistant` -> `main-manager`; başlık "Ana Yönetici Ajan" |
 | Konsol | 0 hata/uyarı |

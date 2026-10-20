@@ -310,6 +310,7 @@ LLM/ag kullanmaz; aynı girdiden aynı çıktıyı üretir (test edilebilir).
   tech-researcher, rollback, evidence-auditor, code-standards.
 - **Tek kaynak**: `OFFICIAL_AGENT_IDS`, `OFFICIAL_AGENT_NAMES`; `DEFAULT_AGENTS` ve
   `load_agents()` yalnızca bunları döndürür. Eski JSON'daki kaldırılmış kayıtlar yüklenmez.
+  18 eski ajanın kaynak tanım blokları da AST ile silindi (1.565 -> 995 satır).
 - **İş akışı**: `evidence-auditor` → `reviewer`; `tech-researcher` → `architect`;
   `team/run` lideri → `main-manager`.
 - **Arayüz**: 22 kart; Yönetim + 20 uzman (4/6/5/5); eski `assistant` seçimi
