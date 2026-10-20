@@ -1211,6 +1211,69 @@ CODING_SPECIALISTS = [
 ]
 
 
+# ============================================================
+# RESMÎ KADRO (kullanıcı talimatı)
+# Yalnızca Ana Yönetici + Kodlama Yöneticisi + 20 uzman kalır.
+# Bu listede olmayan ajanlar aktif kadroya alınmaz.
+# ============================================================
+OFFICIAL_AGENT_IDS = {"main-manager", "coding-manager"} | {
+    s["id"] for s in CODING_SPECIALISTS
+}
+
+# Kaldırılan ajanlar: eski JSON dosyasında kalmış olsalar bile yüklenmezler.
+REMOVED_AGENT_IDS = {
+    "assistant", "teacher", "designer", "analyst", "artist", "researcher",
+    "writer", "translator", "marketer", "chat-pro", "python-pro",
+    "image-pro", "video-pro", "team-lead", "tech-researcher", "rollback",
+    "evidence-auditor", "code-standards",
+}
+
+OFFICIAL_AGENT_NAMES = {
+    "main-manager": "Ana Yönetici Ajan",
+    "coding-manager": "Kodlama Yönetici Ajanı",
+    "code-analyst": "Kod Analiz Ajanı",
+    "architect": "Sistem Mimarisi Ajanı",
+    "task-planner": "Görev Planlama Ajanı",
+    "dependency-analyst": "Bağımlılık Analiz Ajanı",
+    "coder": "Kod Geliştirme Ajanı",
+    "bug-fixer": "Hata Düzeltme Ajanı",
+    "backend-pro": "API ve Backend Ajanı",
+    "frontend-pro": "Arayüz ve Frontend Ajanı",
+    "database-pro": "Veritabanı Ajanı",
+    "integrator": "Entegrasyon Ajanı",
+    "test-engineer": "Test Ajanı",
+    "reviewer": "Kod İnceleme Ajanı",
+    "security": "Güvenlik Ajanı",
+    "performance-pro": "Performans Ajanı",
+    "debugger": "Hata Bulma Ajanı",
+    "devops": "DevOps ve Dağıtım Ajanı",
+    "docs-writer": "Dokümantasyon Ajanı",
+    "optimizer": "Kod Optimizasyonu Ajanı",
+    "regression-tester": "Regresyon Kontrol Ajanı",
+    "learning-agent": "Öğrenme ve Gelişim Ajanı",
+}
+
+OFFICIAL_AGENT_DESCRIPTIONS = {
+    "main-manager": "Bütün yapay zekâyı yönetir ve nihai sonucu kontrol eder.",
+    "coding-manager": (
+        "20 uzmanlığı yönetir, görevleri dağıtır ve raporu Ana Yönetici Ajana gönderir."
+    ),
+}
+
+DEFAULT_AGENTS = [
+    a for a in DEFAULT_AGENTS if a.get("id") in OFFICIAL_AGENT_IDS
+]
+OFFICIAL_AGENT_ORDER = ["main-manager", "coding-manager"] + [
+    s["id"] for s in CODING_SPECIALISTS
+]
+_OFFICIAL_ORDER = {agent_id: i for i, agent_id in enumerate(OFFICIAL_AGENT_ORDER)}
+DEFAULT_AGENTS.sort(key=lambda a: _OFFICIAL_ORDER.get(a.get("id"), 999))
+for _agent in DEFAULT_AGENTS:
+    _agent["name"] = OFFICIAL_AGENT_NAMES.get(_agent["id"], _agent["name"])
+    if _agent["id"] in OFFICIAL_AGENT_DESCRIPTIONS:
+        _agent["description"] = OFFICIAL_AGENT_DESCRIPTIONS[_agent["id"]]
+
+
 def coding_hierarchy() -> Dict:
     """Ana Yönetici -> Kodlama Yöneticisi -> 20 uzman ağacını döndürür.
 
@@ -1262,7 +1325,12 @@ def load_agents() -> List[Dict]:
     
     # Merge: update default agents with latest definitions while keeping user custom agents
     default_ids = {a["id"] for a in DEFAULT_AGENTS}
-    custom_user_agents = [a for a in stored_agents if a.get("id") not in default_ids]
+    # Silinen ajanlar eski JSON'da kalmış olsa bile geri yüklenmez.
+    # (İleride kullanıcının bilinçli olarak eklediği yeni ajanlar korunur.)
+    custom_user_agents = [
+        a for a in stored_agents
+        if a.get("id") not in default_ids and a.get("id") not in REMOVED_AGENT_IDS
+    ]
 
     # Preserve the ORIGINAL created_at of default agents so that restarting the
     # server does not rewrite the file on every boot (keeps git clean and keeps
@@ -1333,6 +1401,28 @@ AGENT_KEYWORDS = {
     "learning-agent": ["öğrenme raporu", "ogrenme raporu", "gelişim raporu", "hata kalıpları"],
 }
 
+# Kaldırılan ajanların anahtar kelimeleri, resmî kadrodaki en yakın ajana yönlenir.
+# Böylece eski anahtar kelime seçici de yalnızca resmî 22 ajanın ID'sini döndürür.
+KEYWORD_FALLBACK_AGENTS = {
+    "teacher": "main-manager",
+    "designer": "frontend-pro",
+    "analyst": "code-analyst",
+    "artist": "main-manager",
+    "researcher": "architect",
+    "writer": "main-manager",
+    "translator": "main-manager",
+    "marketer": "main-manager",
+    "chat-pro": "main-manager",
+    "python-pro": "coder",
+    "image-pro": "main-manager",
+    "video-pro": "main-manager",
+    "team-lead": "coding-manager",
+    "tech-researcher": "architect",
+    "rollback": "main-manager",
+    "evidence-auditor": "reviewer",
+    "code-standards": "reviewer",
+}
+
 
 def keyword_select_agent(user_message: str) -> str:
     """
@@ -1344,7 +1434,7 @@ def keyword_select_agent(user_message: str) -> str:
     # Check for greetings and general chat first
     greetings = ["merhaba", "selam", "hey", "nasılsın", "naber", "günaydın", "iyi akşamlar", "iyi geceler", "selamlar"]
     if any(greeting in message_lower for greeting in greetings) and len(message_lower.split()) <= 5:
-        return "assistant"
+        return "main-manager"
     
     # Score each agent based on keyword matches
     scores = {}
@@ -1357,13 +1447,13 @@ def keyword_select_agent(user_message: str) -> str:
         if score > 0:
             scores[agent_id] = score
     
-    # Return agent with highest score, or default assistant
+    # Return agent with highest score, or default main manager
     if scores:
         best_agent = max(scores, key=scores.get)
-        return best_agent
+        return KEYWORD_FALLBACK_AGENTS.get(best_agent, best_agent)
     
-    # Default to general assistant
-    return "assistant"
+    # Default to main manager (assistant agent was removed from the official roster)
+    return "main-manager"
 
 
 def auto_select_agent(user_message: str) -> str:

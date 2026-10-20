@@ -162,9 +162,12 @@ async def run_team_task(data: TeamRunRequest):
     base_conv = data.conversation_id or str(uuid.uuid4())[:12]
     # Ekip modu: doğrudan uzman seçimi (otomatik seçim artık Ana Yönetici'ye gider).
     specialist_id = keyword_select_agent(message)
-    if specialist_id in ("reviewer", "team-lead"):
-        specialist_id = "assistant"
-    specialist = get_agent(specialist_id) or {}
+    if specialist_id in ("reviewer", "coding-manager", "main-manager"):
+        specialist_id = "coder"
+    specialist = get_agent(specialist_id)
+    if specialist is None:
+        specialist_id = "coder"
+        specialist = get_agent("coder") or {}
 
     draft = await _ai.chat(message, f"{base_conv}-d", agent_id=specialist_id)
     draft_text = (draft.get("response") or "")[:4000]
@@ -189,7 +192,7 @@ async def run_team_task(data: TeamRunRequest):
             "ve net açıklama. SADECE nihai teslimatı yaz; bu talimatı, görev metnini veya denetçi "
             "raporunu OLDUĞU GİBİ KOPYALAMA/tekrar etme. Eksik kaldıysa kısaca belirt."
         )
-        final = await _ai.chat(merge_prompt, f"{base_conv}-f", agent_id="team-lead")
+        final = await _ai.chat(merge_prompt, f"{base_conv}-f", agent_id="main-manager")
     else:
         final = review if review.get("success") else draft
 
@@ -201,7 +204,7 @@ async def run_team_task(data: TeamRunRequest):
         "stages": {
             "draft": {"agent_id": specialist_id, "success": draft.get("success"), "tools_used": draft_tools},
             "review": {"agent_id": "reviewer", "success": review.get("success")},
-            "final": {"agent_id": "team-lead" if data.refine else review.get("agent_id", "reviewer")},
+            "final": {"agent_id": "main-manager" if data.refine else review.get("agent_id", "reviewer")},
         },
         "tools_used": list(dict.fromkeys((draft_tools or []) + (final.get("tools_used", []) or []))),
     }

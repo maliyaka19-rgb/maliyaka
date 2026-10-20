@@ -301,3 +301,18 @@ LLM/ag kullanmaz; aynı girdiden aynı çıktıyı üretir (test edilebilir).
 - Sohbetten yazma yok (plan); uygulama için Kodlama Ekibi/execute.
 - Kanıt: **249 PASS**; canlı genel mesaj 1 sn (zincir yok), kodlama mesajı 79.1 sn
   (frontend zinciri, nihai yanıt Ana Yönetici'den).
+
+## Ek 13 - Resmî 22 ajanlık kadro (yalnızca istenen ajanlar)
+- **Kadro**: `main-manager` (Ana Yönetici Ajan) + `coding-manager` (Kodlama Yönetici Ajanı)
+  + `CODING_SPECIALISTS` (20). Toplam **22**.
+- **Kaldırılan 18 ajan**: assistant, teacher, designer, analyst, artist, researcher, writer,
+  translator, marketer, chat-pro, python-pro, image-pro, video-pro, team-lead,
+  tech-researcher, rollback, evidence-auditor, code-standards.
+- **Tek kaynak**: `OFFICIAL_AGENT_IDS`, `OFFICIAL_AGENT_NAMES`; `DEFAULT_AGENTS` ve
+  `load_agents()` yalnızca bunları döndürür. Eski JSON'daki kaldırılmış kayıtlar yüklenmez.
+- **İş akışı**: `evidence-auditor` → `reviewer`; `tech-researcher` → `architect`;
+  `team/run` lideri → `main-manager`.
+- **Arayüz**: 22 kart; Yönetim + 20 uzman (4/6/5/5); eski `assistant` seçimi
+  `main-manager`'a taşınır. `sohbet.html` `app.js?v=73`.
+- **Kanıt**: 251 PASS; ruff temiz; `/api/v1/agents` 22; `/api/v1/agents/hierarchy`
+  `total_specialists=20`, `missing=[]`; gerçek tarayıcı DOM'unda 22 kart ve 4/6/5/5.

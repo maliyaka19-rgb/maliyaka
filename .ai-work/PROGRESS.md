@@ -924,5 +924,49 @@ Canli ornekler: "veritabani semasi tasarla, migration ekle" -> `designer`;
 | Nihai yanit | Ana Yonetici raporu: "kod degisikligi yok, test kaniti yok, dogrulanmis sayilmaz" |
 
 
+---
+
+## Ek 13 - Resmî 22 ajanlık kadro (2026-10-21)
+
+**Kullanıcı talimatı:** Yalnızca **Ana Yönetici Ajan + Kodlama Yönetici Ajanı + 20 uzman**
+kalacak; bu listede olmayan tüm ajanlar silinecek.
+
+**Yapılan:**
+- `custom_agents.OFFICIAL_AGENT_IDS` = 2 yönetici + 20 uzman (toplam **22**).
+- `DEFAULT_AGENTS` resmî kadroya filtrelendi. Kaldırılan 18 ajan:
+  `assistant, teacher, designer, analyst, artist, researcher, writer, translator,
+  marketer, chat-pro, python-pro, image-pro, video-pro, team-lead, tech-researcher,
+  rollback, evidence-auditor, code-standards`.
+- `load_agents()` eski `custom_agents.json` içinde kalan bu 18 ajanı **geri yüklemez**;
+  JSON 22 kayda indirildi. Adlar kullanıcı listesiyle birebir eşlendi.
+- `coding_manager` iş akışlarındaki `evidence-auditor` -> `reviewer`,
+  `tech-researcher` -> `architect`; `team/run` son aşaması `team-lead` -> `main-manager`.
+- `keyword_select_agent()` yalnızca resmî ID döndürür; kaldırılan ajanların anahtar
+  kelimeleri en yakın resmî ajana eşlendi (ör. `python-pro` -> `coder`,
+  `video-pro` -> `main-manager`, `team-lead` -> `coding-manager`).
+- Arayüz: eski localStorage değeri `assistant` ise `main-manager`'a taşınır;
+  `sohbet.html` `app.js?v=73`.
+- `ai_agent.chat()`: silinmiş/bilinmeyen ajan ID'si gelirse `main-manager`'a yönlendirir;
+  tanımsız ajanla tüm araçlara erişim açılması engellendi.
+
+**Kanıt:**
+| Kalem | Sonuç |
+|---|---|
+| Test | **251 PASS** |
+| ruff (`E9,F63,F7,F82`) | temiz |
+| JS syntax (`node --check`) | OK |
+| `GET /api/v1/agents` | **22** ajan; 2 yönetici + 20 uzman |
+| `GET /api/v1/agents/hierarchy` | `total_specialists=20`, `missing=[]`, gruplar 4/6/5/5 |
+| Arayüz DOM | **22 kart**; Yönetim + Kodlama Yöneticisi + A/B/C/D; "Diğer Ajanlar" **yok** |
+| localStorage migrasyonu | `assistant` -> `main-manager`; başlık "Ana Yönetici Ajan" |
+| Yedek | `.ai-work/backups/agents-20261020-234747/` |
+
+**Sınır / açık:**
+- `Desktop\m` hâlâ yarıda kesilen yerel zincir çıktısını içeriyor (iç içe `m`,
+  `node_modules`, `package.json`); bu görevde dokunulmadı.
+- Yerel model/Ollama şu an kapalı; yemek sitesi üretimi yeniden başlatılmadı.
+- `/api/v1/coding/*` kimlik doğrulaması hâlâ yok (D-039).
+
+
 
 

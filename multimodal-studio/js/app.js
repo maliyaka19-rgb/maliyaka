@@ -811,7 +811,7 @@
         // const agentApiKeyHelp = document.getElementById('api-key-help-agent');
         
         let agents = [];
-        let currentAgentId = localStorage.getItem('current_agent_id') || 'assistant';
+        let currentAgentId = localStorage.getItem('current_agent_id') || 'main-manager';
         let editingAgentId = null;
         let selectedIcon = '🤖';
         let selectedColor = '#6366f1';
@@ -844,6 +844,13 @@
                 const data = await res.json();
                 if (data.success) {
                     agents = data.agents;
+                    // Eski localStorage'da silinmis bir ajan ID'si kalmis olabilir.
+                    // Gecerli degilse resmi varsayilan olan Ana Yonetici'ye tasi.
+                    if (currentAgentId !== 'auto' && currentAgentId !== 'team'
+                        && !agents.some(a => a.id === currentAgentId)) {
+                        currentAgentId = 'main-manager';
+                        localStorage.setItem('current_agent_id', currentAgentId);
+                    }
                     renderAgentGrid();
                     updateCurrentAgentDisplay();
                     updateHeaderAgentButton(currentAgentId);
@@ -1146,8 +1153,8 @@
                 const data = await res.json();
                 if (data.success) {
                     if (currentAgentId === agentId) {
-                        currentAgentId = 'assistant';
-                        localStorage.setItem('current_agent_id', 'assistant');
+                        currentAgentId = 'main-manager';
+                        localStorage.setItem('current_agent_id', 'main-manager');
                     }
                     await loadAgents();
                 } else {
@@ -2515,6 +2522,11 @@
         // Update model button on load
         async function updateModelButton() {
             try {
+                // Eski localStorage'daki 'assistant' ID'sini resmî varsayılana taşı.
+                if (currentAgentId === 'assistant') {
+                    currentAgentId = 'main-manager';
+                    localStorage.setItem('current_agent_id', currentAgentId);
+                }
                 if (currentAgentId === 'team') {
                     modelBtnText.textContent = '🧭 Ekip';
                     modelStatusDot.classList.remove('disconnected');

@@ -126,7 +126,7 @@ def test_auto_select_always_routes_to_main_manager():
 def test_keyword_selector_kept_as_fallback():
     import custom_agents as ca
 
-    assert ca.keyword_select_agent("bana mp4 video üret") == "video-pro"
+    assert ca.keyword_select_agent("bana mp4 video üret") == "main-manager"
 
 
 def test_coding_detection_for_auto_delegation():

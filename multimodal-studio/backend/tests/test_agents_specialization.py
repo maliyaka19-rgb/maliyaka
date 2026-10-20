@@ -2,9 +2,9 @@
 Tests for Agent Specialization, Dynamic Prompting, and Auto-Routing
 ===================================================================
 AŞAMA 3, 4, 5, 6 ve 7 testleri:
-- 20 ajanın uzmanlık alanları ve araç uyumu
-- Analyst, Designer, Researcher ve Assistant için geliştirilmiş araçlar
-- auto_select_agent gelişmiş anahtar kelime yönlendirmesi
+- 22 ajanlık resmî kadro (Ana Yönetici + Kodlama Yöneticisi + 20 uzman)
+- Uzmanların araç uyumu ve silinen ajanların geri gelmemesi
+- Eski anahtar kelimelerin resmî ajana yönlendirilmesi
 - ai_agent.chat() dinamik prompt oluşturma (araç uyumsuzluğu koruması)
 - ai_agent.chat() agent_id='auto' otomatik uzman seçimi
 - custom_agent_routes /tools/available tam araç kapsamı
@@ -21,28 +21,26 @@ import tools_spec
 
 
 def test_roster_integrity_and_specialization():
-    """Ajan kadrosu bütünlüğü: mevcut 20 ajan korunur + kodlama ekibi eklenebilir."""
+    """Resmî kadro: Ana Yönetici + Kodlama Yöneticisi + 20 uzman (toplam 22)."""
     agents = ca.load_agents()
-    assert len(agents) >= 20
+    assert len(agents) == 22
     by_id = {a["id"]: a for a in agents}
-    # Mevcut 20 genel ajan SİLİNMEMİŞ olmalı
-    original = ["assistant", "coder", "teacher", "designer", "analyst", "artist",
-                "researcher", "writer", "translator", "marketer", "devops", "security",
-                "chat-pro", "python-pro", "frontend-pro", "backend-pro",
-                "image-pro", "video-pro", "reviewer", "team-lead"]
-    for must in original:
-        assert must in by_id, f"Mevcut ajan silinmis: {must}"
+    expected_ids = ["main-manager", "coding-manager"] + [
+        s["id"] for s in ca.CODING_SPECIALISTS
+    ]
+    assert [a["id"] for a in agents] == expected_ids
+    assert set(by_id) == ca.OFFICIAL_AGENT_IDS
+    assert not (set(by_id) & ca.REMOVED_AGENT_IDS), "silinen ajan kadroya geri dondu"
 
-    # Özel araç atamaları doğrulaması
-    assert "generate_image" in by_id["designer"]["tools"], "Designer gerçek görsel üretebilmeli"
-    assert "calculate" in by_id["analyst"]["tools"], "Analyst hesaplama yapabilmeli"
-    assert "calculate" in by_id["coder"]["tools"], "Coder hesaplama yapabilmeli"
-    assert "calculate" in by_id["teacher"]["tools"], "Teacher hesaplama yapabilmeli"
-    assert "rag_search" in by_id["researcher"]["tools"], "Researcher RAG araması yapabilmeli"
-    assert "rag_list_documents" in by_id["researcher"]["tools"], "Researcher belgeleri listeleyebilmeli"
-    assert "calculate" in by_id["assistant"]["tools"], "Genel asistan hesaplama yapabilmeli"
-    assert "generate_image" in by_id["assistant"]["tools"], "Genel asistan görsel üretebilmeli"
-    assert "rag_search" in by_id["assistant"]["tools"], "Genel asistan RAG araması yapabilmeli"
+    # Adlar kullanıcı tanımıyla birebir aynı olmalı.
+    for agent_id, name in ca.OFFICIAL_AGENT_NAMES.items():
+        assert by_id[agent_id]["name"] == name
+
+    # Uzmanlık araçları: yazma/çalıştırma yetkisi dar tutulmalı.
+    assert "write_file" in by_id["frontend-pro"]["tools"]
+    assert "execute_command" in by_id["coder"]["tools"]
+    assert "execute_command" not in by_id["code-analyst"]["tools"]
+    assert "web_search" in by_id["security"]["tools"]
 
     # Her ajanın geçerli araçlara sahip olduğu ve prompt uzunluğu
     all_spec_tools = {t["function"]["name"] for t in tools_spec.TOOLS}
@@ -58,21 +56,19 @@ def test_roster_integrity_and_specialization():
 
 
 def test_keyword_select_agent_enhanced():
-    """Geliştirilmiş anahtar kelimelerle doğru uzmana yönlendirme (yedek seçici)."""
-    # Matematik/istatistik -> analyst
-    assert ca.keyword_select_agent("Bana bu tablonun ortalamasını ve varyansını hesapla") == "analyst"
-    # RAG / Belge araştırma -> researcher
-    assert ca.keyword_select_agent("Doküman arşivinde literatür ve kaynakça araştırması yap") == "researcher"
-    # Siber güvenlik -> security
+    """Eski anahtar kelimeler resmî kadrodaki en yakın ajana yönlenir."""
+    assert ca.keyword_select_agent("Bana bu tablonun ortalamasını ve varyansını hesapla") == "code-analyst"
+    assert ca.keyword_select_agent("Doküman arşivinde literatür ve kaynakça araştırması yap") == "architect"
     assert ca.keyword_select_agent("Bu sistemdeki cve zafiyetlerini ve sızma açıklarını denetle") == "security"
-    # Python -> python-pro
-    assert ca.keyword_select_agent("python ile bir pytest testi yaz") == "python-pro"
-    # Frontend -> frontend-pro
-    assert ca.keyword_select_agent("responsive bir react componenti tasarla") in ("frontend-pro", "designer")
-    # Video -> video-pro
-    assert ca.keyword_select_agent("bana mp4 video üret") == "video-pro"
-    # Görsel -> image-pro
-    assert ca.keyword_select_agent("görsel üret, illüstrasyon çiz") == "image-pro"
+    assert ca.keyword_select_agent("python ile bir pytest testi yaz") == "coder"
+    assert ca.keyword_select_agent("responsive bir react componenti tasarla") == "frontend-pro"
+    assert ca.keyword_select_agent("bana mp4 video üret") == "main-manager"
+    assert ca.keyword_select_agent("görsel üret, illüstrasyon çiz") == "main-manager"
+    assert ca.keyword_select_agent("ekip olarak hepsini yap, komple site") == "coding-manager"
+    assert ca.keyword_select_agent("bu kodu denetle, hata var mı?") == "reviewer"
+
+    for message in ["merhaba", "video üret", "python script yaz", "bilmiyorum"]:
+        assert ca.keyword_select_agent(message) in ca.OFFICIAL_AGENT_IDS
 
 
 def test_tools_available_endpoint():
@@ -96,19 +92,19 @@ async def test_ai_agent_dynamic_tool_prompting():
     """Dinamik sistem promptunun sadece ajana tahsisli araçları içermesi (araç uyumsuzluğu koruması)."""
     import ai_agent
 
-    # chat-pro ajanı (sadece sohbet ve okuma araçları var; execute_command YOK)
-    chat_agent = ca.get_agent("chat-pro")
-    assert chat_agent is not None
-    assert "execute_command" not in chat_agent["tools"]
+    # code-analyst ajanı (sadece okuma/analiz araçları var; execute_command YOK)
+    narrow_agent = ca.get_agent("code-analyst")
+    assert narrow_agent is not None
+    assert "execute_command" not in narrow_agent["tools"]
 
     # TrueAIAgent sınıfının prompt yapılandırmasını test et
     agent_inst = ai_agent.get_agent_v6()
     try:
         # Chat çağrısını taklit eden yapay bir çağrıyla prompt içeriğini kontrol et
-        # _tools_payload() chat-pro için sadece onun araçlarını dönmeli
-        agent_inst._active_tools = chat_agent["tools"]
+        # _tools_payload() code-analyst için sadece onun araçlarını dönmeli
+        agent_inst._active_tools = narrow_agent["tools"]
         payload_tool_names = {t["function"]["name"] for t in agent_inst._tools_payload()}
-        assert payload_tool_names == set(chat_agent["tools"])
+        assert payload_tool_names == set(narrow_agent["tools"])
         assert "execute_command" not in payload_tool_names
         assert "generate_real_video" not in payload_tool_names
     finally:

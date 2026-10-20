@@ -197,7 +197,7 @@ WORKFLOWS: Dict[TaskType, List[Dict[str, Any]]] = {
         {"role": "bug-fixer", "goal": "Kritik güvenlik bulgularını en az yetkiyle düzelt.", "write": True},
         {"role": "test-engineer", "goal": "Güvenlik düzeltmesini doğrulayan test yaz/çalıştır.", "write": True},
         {"role": "reviewer", "goal": "Düzeltmeyi bağımsız incele.", "write": False},
-        {"role": "evidence-auditor", "goal": "İddia edilen işlemler ile kanıtları karşılaştır; eksik kanıtı bildir.", "write": False},
+        {"role": "reviewer", "goal": "İddia edilen işlemler ile kanıtları karşılaştır; eksik kanıtı bildir.", "write": False},
     ],
     TaskType.PERFORMANCE: [
         {"role": "code-analyst", "goal": "Sıcak yolları ve ilgili kodu incele.", "write": False},
@@ -217,7 +217,7 @@ WORKFLOWS: Dict[TaskType, List[Dict[str, Any]]] = {
         {"role": "docs-writer", "goal": "Yeni uç noktanın kullanım/teknik belgesini güncelle (olmayan özellik ekleme).", "write": True, "optional": True},
     ],
     TaskType.RESEARCH: [
-        {"role": "tech-researcher", "goal": "Belirsiz teknik noktayı izinli kaynaklarla araştır; bulgu ile varsayımı ayır.", "write": False},
+        {"role": "architect", "goal": "Belirsiz teknik noktayı izinli kaynaklarla araştır; bulgu ile varsayımı ayır.", "write": False},
         {"role": "code-analyst", "goal": "Projede ilgili mevcut kodu incele.", "write": False},
         {"role": "coder", "goal": "Araştırma sonucuna göre en uygun çözümü uygula.", "write": True},
         {"role": "reviewer", "goal": "Sonucu bağımsız incele.", "write": False},
@@ -248,7 +248,7 @@ WORKFLOWS: Dict[TaskType, List[Dict[str, Any]]] = {
         {"role": "devops", "goal": "Dağıtım/CI yapılandırmasını en az yetkiyle hazırla; sırları koda yazma.", "write": True},
         {"role": "test-engineer", "goal": "Yapılandırmayı doğrulayan komutu çalıştır; gerçek çıktıyı raporla.", "write": True},
         {"role": "reviewer", "goal": "Dağıtım risklerini (sır sızıntısı, eksik ortam değişkeni) incele.", "write": False},
-        {"role": "evidence-auditor", "goal": "İddia edilen dağıtım adımları ile gerçek çıktıları karşılaştır.", "write": False, "optional": True},
+        {"role": "reviewer", "goal": "İddia edilen dağıtım adımları ile gerçek çıktıları karşılaştır.", "write": False, "optional": True},
     ],
     TaskType.GENERAL: [
         {"role": "code-analyst", "goal": "İlgili kodu incele ve durumu özetle.", "write": False},
@@ -778,7 +778,7 @@ class CodingTaskManager:
                                        if m.recipient in ("test-engineer", "regression-tester")],
             },
             "7_inceleme_ve_guvenlik": [m.response[:600] for m in step_results
-                                        if m.recipient in ("reviewer", "security", "evidence-auditor")],
+                                        if m.recipient in ("reviewer", "security")],
             "8_basarisiz_islemler": [m.purpose for m in step_results if not m.success],
             "9_kalan_riskler": record.get("remaining_issues", []),
             "10_geri_donus_durumu": {

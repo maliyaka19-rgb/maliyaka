@@ -393,6 +393,14 @@ When you need to use tools, call them. Work like a real coding assistant — rea
             try:
                 from custom_agents import get_agent
                 custom_agent = get_agent(agent_id)
+                if custom_agent is None:
+                    # Silinmiş/eski bir ajan ID'si gelirse tanımsız ajanla tüm
+                    # araçlara erişim açılmasın; resmî varsayılana yönlendir.
+                    logger.warning(
+                        "Ajan bulunamadı (%s); main-manager kullanılacak", agent_id
+                    )
+                    agent_id = "main-manager"
+                    custom_agent = get_agent(agent_id)
                 if custom_agent:
                     custom_system_prompt = custom_agent.get("system_prompt")
                     self._active_tools = custom_agent.get("tools") or None

@@ -456,3 +456,22 @@
 - **Etki**: **249 PASS**; canlı: genel mesaj 1 sn (zincir yok), kodlama mesajı 79.1 sn
   (`task_type=frontend`; code-analyst → frontend-pro → test-engineer → reviewer →
   regression-tester; `mode=plan`), nihai yanıt Ana Yönetici'den.
+
+## D-044 - Resmî kadro: 22 ajan; diğer 18 ajan kaldırıldı
+- **Bağlam**: Kullanıcı, ana yönetici + kodlama yöneticisi + 20 uzman dışındaki **tüm**
+  ajanların silinmesini istedi. Önceki kadro 40 ajandı; 18'i bu resmî listede değildi.
+- **Karar**: `OFFICIAL_AGENT_IDS` = `main-manager`, `coding-manager` + `CODING_SPECIALISTS`
+  (20). `DEFAULT_AGENTS` yalnızca bu 22 kaydı içerir. `REMOVED_AGENT_IDS` eski JSON'da
+  kalan 18 ajanın yeniden yüklenmesini engeller.
+- **Adlar**: Kullanıcı listesiyle birebir (`Kod Analiz Ajanı`, `Sistem Mimarisi Ajanı`, ...).
+  `coding_hierarchy()` rol + ad alanlarını bu kadrodan üretir.
+- **Bağlı düzeltmeler**: `coding_manager` içindeki `evidence-auditor` → `reviewer`,
+  `tech-researcher` → `architect`; `team/run` lideri `main-manager`; anahtar kelime
+  eşlemesi yalnızca resmî ID döndürür; bilinmeyen ajan ID'si `main-manager`'a yönlenir.
+- **Arayüz**: Eski localStorage `assistant` değeri `main-manager`'a taşınır; ajan
+  penceresi 22 kartı hiyerarşik gösterir, "Diğer Ajanlar" bölümü oluşmaz.
+- **Sınır**: Kaynak dosyadaki eski tanımlar silinmedi; filtre nedeniyle **yüklenmiyor**.
+  Aktif kadro, JSON ve API tek kaynaktan 22'dir. `create_agent` API'si ileride yeni ajan
+  eklemeye izin verir (bu görevde mevcut kadro temizlendi).
+- **Etki**: **251 PASS**; `/api/v1/agents` 22, `/api/v1/agents/hierarchy` 20 uzman /
+  `missing=[]`; gerçek tarayıcı DOM'unda 22 kart ve 4/6/5/5 grupları doğrulandı.

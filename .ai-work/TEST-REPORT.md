@@ -321,3 +321,20 @@ Komut: `python -m pytest tests/ -q --ignore=tests/test_api_live.py` → `125 pas
 - Paket iceriginde sir YOK (model_config.json / .encryption_key / .env / telegram_config.json).
 
 Toplam backend testi: **138 passed**.
+
+## 8) Resmî 22 ajanlık kadro (2026-10-21)
+
+| Kontrol | Sonuç |
+|---|---|
+| `pytest tests/ -q --ignore=tests/test_api_live.py` | **251 PASS**, 0 FAIL |
+| ruff (`E9,F63,F7,F82`) | temiz |
+| `node --check js/app.js` | OK |
+| `GET /api/v1/agents` (gerçek sunucu :8000) | 22 ajan; 2 yönetici + 20 uzman |
+| `GET /api/v1/agents/hierarchy` | `total_specialists=20`, `missing=[]`, 4/6/5/5 |
+| `custom_agents.json` | 22 kayıt; kaldırılan 18 ID yok |
+| Arayüz DOM (gerçek Chromium) | 22 kart; Yönetim + Kodlama Yöneticisi + A/B/C/D; "Diğer Ajanlar" yok |
+| localStorage migrasyonu | `assistant` -> `main-manager`; başlık "Ana Yönetici Ajan" |
+| Konsol | 0 hata/uyarı |
+
+**Sınıflandırma:** PASS. `Desktop\m` site üretimi bu görevde çalıştırılmadı (yarıda
+kesilen çıktı korunuyor).
