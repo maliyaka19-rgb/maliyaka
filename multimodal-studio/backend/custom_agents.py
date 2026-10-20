@@ -886,16 +886,6 @@ def keyword_select_agent(user_message: str) -> str:
     return "main-manager"
 
 
-def auto_select_agent(user_message: str) -> str:
-    """Otomatik ajan seçimi: DAİMA Ana Yönetici Ajan.
-
-    Neden: tüm işler tek çatı altında yürümeli. Ana Yönetici, kodlama görevini
-    Kodlama Yöneticisine devreder ve nihai raporu onaylar (D-043).
-    Anahtar kelime yönlendirmesi `keyword_select_agent()` olarak korunur.
-    """
-    return "main-manager"
-
-
 def save_agents(agents: List[Dict]):
     """Save agents to file."""
     with open(AGENTS_FILE, 'w', encoding='utf-8') as f:

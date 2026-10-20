@@ -56,7 +56,7 @@ class Recorder:
         return out
 
 
-def make_bot(recorder: Recorder, *, allowed=None, default_agent="auto"):
+def make_bot(recorder: Recorder, *, allowed=None, default_agent="main-manager"):
     """MockTransport kullanan bir TelegramBot + istemci oluşturur."""
     transport = httpx.MockTransport(recorder.handler)
     client = httpx.AsyncClient(transport=transport, base_url="https://api.telegram.org")
@@ -261,14 +261,14 @@ def test_agent_command_rejects_unknown(monkeypatch):
     recorder = Recorder()
     bot, client = make_bot(recorder)
 
-    run(bot._dispatch(10, "/status"))  # durumu başlat (varsayılan ajan: auto)
-    assert bot._chats[10]["agent_id"] == "auto"
+    run(bot._dispatch(10, "/status"))  # durumu başlat (varsayılan ajan: main-manager)
+    assert bot._chats[10]["agent_id"] == "main-manager"
 
     run(bot._dispatch(10, "/agent bilinmeyen"))
     run(client.aclose())
 
-    # Ajan değişmemeli (varsayılan auto)
-    assert bot._chats[10]["agent_id"] == "auto"
+    # Ajan değişmemeli (varsayılan main-manager)
+    assert bot._chats[10]["agent_id"] == "main-manager"
     sends = recorder.sends()
     assert any("bulunamadı" in s["text"] for s in sends)
 

@@ -44,7 +44,7 @@ async function main() {
     const r = await get("/js/app.js");
     assert.strictEqual(r.status, 200);
     assert.ok(r.type.includes("javascript"), "MIME: " + r.type);
-    assert.ok(r.text.includes("TEAM_API"));
+    assert.ok(r.text.includes("CHAT_API"));
   });
 
   await check("/css/style.css 200", async () => {

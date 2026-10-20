@@ -475,3 +475,40 @@
   ileride yeni ajan eklemeye izin verir (bu görevde mevcut kadro temizlendi).
 - **Etki**: **251 PASS**; `/api/v1/agents` 22, `/api/v1/agents/hierarchy` 20 uzman /
   `missing=[]`; gerçek tarayıcı DOM'unda 22 kart ve 4/6/5/5 grupları doğrulandı.
+
+## D-045 - Otomatik/Ekip modu ve 5 bulut sağlayıcı kaldırıldı
+- **Tarih**: 2026-10-21
+- **Bağlam**: Kullanıcı, arayüzde ve akışta **Otomatik Ajan Seçimi** ile **Ekip Modu**nu
+  istemedi; ayrıca Groq, OpenAI, Anthropic, Google Gemini ve Together AI sağlayıcılarının
+  tamamen kaldırılmasını istedi. Tek bulut sağlayıcısı **OpenRouter**, birincil/fallback
+  ise **yerel model** olacak.
+- **Karar**:
+  1. `sohbet.html` ve `js/app.js` içinden auto/ekip kartları, `TEAM_API`, `useTeam`,
+     `selected_agent` gösterimi ve ilgili tıklama/başlık akışları kaldırıldı.
+     `app.js?v=74`.
+  2. Eski istemciler için `agent_id="auto"` yalnızca **`main-manager` takma adı**dır;
+     istek bazlı otomatik uzman seçimi yapılmaz. Eski localStorage `auto`/`team`
+     değerleri yüklemede `main-manager`'a taşınır.
+  3. `/api/v1/agents/team/run`, `TeamRunRequest` ve `custom_agents.auto_select_agent`
+     kaldırıldı. `keyword_select_agent()` yalnızca yardımcı/yedek olarak kaldı.
+  4. `MODEL_CATALOG` yalnızca `openrouter` içerir. `ai_agent` başlangıcı, anahtar
+     seçimi ve fallback zinciri OpenRouter + yerel modelle sınırlandı; ölü Gemini
+     normalizasyon kodu kaldırıldı.
+  5. Fallback, başarısız sağlayıcının **kardeş modellerini** önce dener. Tek bulut
+     sağlayıcısı kaldığı için sert hatada sağlayıcıyı tamamen düşürmek yanlış olur;
+     geçersiz anahtar `provider_health` tarafından ayrıca işaretlenir.
+  6. Telegram varsayılanı `main-manager`; eski `/agent auto` komutu ve `auto` ayarı
+     `main-manager`'a normalize edilir.
+- **Gerekçe**: Ücretli API kullanmama, sırları koruma, tek sağlayıcıyla öngörülebilir
+  maliyet ve kullanıcının istediği sade ajan/model arayüzü.
+- **Alternatif**: Auto/ekip akışını yalnızca gizlemek (reddedildi: ölü endpoint ve
+  yanlış yönlendirme riski kalırdı).
+- **Etki / kanıt**: `248 PASS` (29 deselected); ruff `E9,F63,F7,F82` temiz;
+  `node --check` OK. `/api/v1/agents` **22**, `/api/v1/agents/hierarchy` **20 uzman /
+  missing=[]**, `/api/v1/models/catalog` ve `/providers` yalnızca **openrouter**.
+  Gerçek Chromium DOM: **22 kart**, **1 sağlayıcı**, auto/ekip ve 5 sağlayıcı metni yok;
+  localStorage `auto`/`team` -> `main-manager`. `/api/v1/agents/team/run` OpenAPI'de yok;
+  kaldırılan sağlayıcılarla `/api-key` ve `/activate` **400** döndürür.
+- **Sınır / açık**: OpenRouter anahtarı bu ortamda **401** veriyor; Ollama kapalı olduğu
+  için canlı sohbet kural-tabanlı yedeğe düşüyor. `/api/v1/coding/*` kimlik doğrulaması
+  ve `execute` `shell=True` riski duruyor (D-039). Yedek: `.ai-work/backups/ui-cleanup-20261021-002212/`.

@@ -92,10 +92,14 @@ def _try_decrypt(cfg: Dict[str, Any]) -> str:
 
 def _normalize_config(config: Dict[str, Any]) -> Dict[str, Any]:
     """Bilinmeyen alanları temizler ve değer tiplerini düzeltir."""
+    default_agent = (config.get("default_agent_id") or "main-manager").strip()
+    if not default_agent or default_agent.lower() == "auto":
+        # Otomatik seçim kaldırıldı; eski ayarlar Ana Yönetici'ye taşınır.
+        default_agent = "main-manager"
     cfg: Dict[str, Any] = {
         "allowed_chat_ids": [],
         "enabled": bool(config.get("enabled", False)),
-        "default_agent_id": (config.get("default_agent_id") or "auto"),
+        "default_agent_id": default_agent,
     }
 
     raw_ids = config.get("allowed_chat_ids") or []
@@ -131,7 +135,7 @@ def load_config() -> dict:
                 return _normalize_config(data)
         except Exception:
             pass
-    return {"allowed_chat_ids": [], "enabled": False, "default_agent_id": "auto"}
+    return {"allowed_chat_ids": [], "enabled": False, "default_agent_id": "main-manager"}
 
 
 def save_config(config: dict) -> dict:
@@ -236,12 +240,12 @@ class TelegramBot:
         self,
         token: str,
         allowed_chat_ids: Optional[List[int]] = None,
-        default_agent_id: str = "auto",
+        default_agent_id: str = "main-manager",
         client: Optional[httpx.AsyncClient] = None,
     ) -> None:
         self.token = token or ""
         self.allowed_chat_ids: List[int] = [int(x) for x in (allowed_chat_ids or [])]
-        self.default_agent_id = default_agent_id or "auto"
+        self.default_agent_id = default_agent_id or "main-manager"
 
         # Enjekte edilen istemci testlerde MockTransport ile verilir.
         self._client: Optional[httpx.AsyncClient] = client
@@ -433,7 +437,7 @@ class TelegramBot:
             icon = agent.get("icon", "•")
             lines.append(f"{icon} {agent.get('id', '?')} — {agent.get('name', '')}")
         lines.append("\nSeçmek için: /agent <id>")
-        lines.append("Otomatik seçim için: /agent auto")
+        lines.append("Varsayılan: /agent main-manager")
         return "\n".join(lines)
 
     async def _set_agent(self, chat_id: int, args: str) -> None:
@@ -444,10 +448,8 @@ class TelegramBot:
             )
             return
         if agent_id.lower() == "auto":
-            state = self._state(chat_id)
-            state["agent_id"] = "auto"
-            await self.send_message(chat_id, "✅ Ajan ayarlandı: Otomatik (istek bazlı uzman seçimi)")
-            return
+            # Otomatik seçim kaldırıldı; eski komutu Ana Yönetici'ye yönlendir.
+            agent_id = "main-manager"
         try:
             from custom_agents import get_agent  # lazy import
 
@@ -482,7 +484,7 @@ class TelegramBot:
         state = self._state(chat_id)
         agent_id = state.get("agent_id") or self.default_agent_id
         if agent_id in (None, ""):
-            agent_id = "auto"
+            agent_id = "main-manager"
 
         try:
             import ai_agent  # lazy import (ağır)
@@ -568,7 +570,7 @@ async def start_bot_from_config() -> dict:
     _bot = TelegramBot(
         token,
         allowed_chat_ids=cfg.get("allowed_chat_ids") or [],
-        default_agent_id=cfg.get("default_agent_id") or "auto",
+        default_agent_id=cfg.get("default_agent_id") or "main-manager",
     )
     await _bot.start()
     return _bot.status()

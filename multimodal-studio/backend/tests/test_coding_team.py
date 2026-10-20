@@ -116,20 +116,13 @@ def test_insights_are_attributed_to_learning_agent():
     assert ins["applied"] is False
 
 
-def test_auto_select_always_routes_to_main_manager():
-    import custom_agents as ca
-
-    for message in ["merhaba nasılsın", "python hatası düzelt", "video üret", "veritabanı tasarla"]:
-        assert ca.auto_select_agent(message) == "main-manager"
-
-
 def test_keyword_selector_kept_as_fallback():
     import custom_agents as ca
 
     assert ca.keyword_select_agent("bana mp4 video üret") == "main-manager"
 
 
-def test_coding_detection_for_auto_delegation():
+def test_coding_detection_for_manager_delegation():
     from ai_agent_routes import _is_coding_task
 
     assert _is_coding_task("python kodumda hata var, düzelt") is True
@@ -137,7 +130,7 @@ def test_coding_detection_for_auto_delegation():
     assert _is_coding_task("merhaba, nasılsın?") is False
 
 
-def test_auto_chat_delegates_coding_to_main_manager_chain(monkeypatch):
+def test_main_manager_chat_delegates_coding_to_chain(monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -164,13 +157,12 @@ def test_auto_chat_delegates_coding_to_main_manager_chain(monkeypatch):
     app.include_router(ar.router)
     client = TestClient(app)
 
-    r = client.post("/api/v1/ai/chat", json={"message": "arayüz bileşeni ekle", "agent_id": "auto"})
+    r = client.post("/api/v1/ai/chat", json={"message": "arayüz bileşeni ekle", "agent_id": "main-manager"})
 
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["success"] is True
     assert data["response"] == "Zincir sonucu"
-    assert data["selected_agent"]["id"] == "main-manager"
     assert data["coding"] == {
         "task_id": "t1", "task_type": "frontend", "mode": "plan",
         "experts": ["code-analyst", "frontend-pro"],
@@ -178,7 +170,7 @@ def test_auto_chat_delegates_coding_to_main_manager_chain(monkeypatch):
     assert called == {"message": "arayüz bileşeni ekle", "mode": "plan", "via_main_manager": True}
 
 
-def test_auto_chat_general_message_stays_single_agent(monkeypatch):
+def test_legacy_auto_chat_general_message_stays_single_agent(monkeypatch):
     from fastapi import FastAPI
     from fastapi.testclient import TestClient
 
@@ -187,7 +179,10 @@ def test_auto_chat_general_message_stays_single_agent(monkeypatch):
     async def fail_run(*args, **kwargs):
         raise AssertionError("genel sohbet zinciri çalıştırmamalı")
 
+    seen = {}
+
     async def fake_chat(message, conversation_id=None, history=None, agent_id=None):
+        seen["agent_id"] = agent_id
         return {"success": True, "response": "selam", "conversation_id": conversation_id or "c",
                 "tools_used": [], "thinking_steps": []}
 
@@ -203,7 +198,7 @@ def test_auto_chat_general_message_stays_single_agent(monkeypatch):
     assert r.status_code == 200, r.text
     data = r.json()
     assert data["response"] == "selam"
-    assert data["selected_agent"]["id"] == "main-manager"
+    assert seen["agent_id"] == "main-manager"
 
 
 def test_main_manager_is_default_and_reviews_report(monkeypatch, tmp_path):

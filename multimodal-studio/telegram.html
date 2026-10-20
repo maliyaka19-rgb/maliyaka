@@ -107,7 +107,7 @@
     <div class="hint">Boş bırakılırsa herkes kullanabilir. Kendi ID'ni Telegram'da bota <code>/id</code> yazarak öğren.</div>
 
     <label for="agent">Varsayılan Ajan</label>
-    <select id="agent"><option value="auto">Otomatik</option></select>
+    <select id="agent"></select>
 
     <label for="enabled">Etkin</label>
     <select id="enabled">
@@ -192,7 +192,8 @@ function renderStatus(s) {
   if (s.allowed_chat_ids && s.allowed_chat_ids.length) {
     $("allowed").value = s.allowed_chat_ids.join(", ");
   }
-  if (s.default_agent_id) $("agent").value = s.default_agent_id;
+  $("agent").value = (!s.default_agent_id || s.default_agent_id === "auto")
+    ? "main-manager" : s.default_agent_id;
   $("enabled").value = s.enabled ? "true" : "false";
 }
 
@@ -207,7 +208,7 @@ async function loadAgents() {
     const data = await res.json();
     const list = Array.isArray(data) ? data : (data.agents || []);
     const sel = $("agent");
-    sel.innerHTML = '<option value="auto">Otomatik</option>';
+    sel.innerHTML = '';
     list.forEach(a => {
       const o = document.createElement("option");
       o.value = a.id; o.textContent = (a.icon ? a.icon + " " : "") + (a.name || a.id);
@@ -225,7 +226,7 @@ $("btn-save").onclick = async () => {
   const body = {
     allowed_chat_ids: parseIds($("allowed").value),
     enabled: $("enabled").value === "true",
-    default_agent_id: $("agent").value || "auto"
+    default_agent_id: $("agent").value || "main-manager"
   };
   if ($("token").value.trim()) body.token = $("token").value.trim();
   try {

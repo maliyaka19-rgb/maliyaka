@@ -18,12 +18,12 @@ from memory import Message, Conversation, ConversationMemory, LearningMemory
 # ============================================================
 
 class TestModelCatalog:
-    def test_catalog_has_six_providers(self):
-        assert len(MODEL_CATALOG) >= 6
+    def test_catalog_has_only_openrouter(self):
+        assert set(MODEL_CATALOG) == {"openrouter"}
 
-    def test_required_providers_exist(self):
-        for p in ("groq", "openai", "anthropic", "gemini", "together", "openrouter"):
-            assert p in MODEL_CATALOG, f"Missing provider: {p}"
+    def test_removed_providers_are_absent(self):
+        for p in ("groq", "openai", "anthropic", "gemini", "together"):
+            assert p not in MODEL_CATALOG, f"Removed provider still present: {p}"
 
     def test_openrouter_has_deepseek_qwen_kimi(self):
         ids = [m["id"] for m in MODEL_CATALOG["openrouter"]["models"]]

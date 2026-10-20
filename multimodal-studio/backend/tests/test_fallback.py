@@ -119,20 +119,20 @@ class _FakeAsyncClient:
 
 @pytest.fixture(autouse=True)
 def _isolate_env(monkeypatch):
-    """Her testte LLM anahtarlarını sıfırla ve zincirin groq'tan başlasını sağla.
+    """Her testte LLM anahtarlarını sıfırla ve OpenRouter zincirini kur.
 
-    Testler 'groq' priority sırasının birinci olduğunu ve ilk modelin
-    'openai/gpt-oss-120b' olduğunu varsayar. Deterministik olması için
-    config'deki groq anahtarını geçerli, diğerlerini geçersiz yaparız.
+    Katalogda yalnızca OpenRouter kaldığı için geçerli anahtar OpenRouter'a
+    verilir. Testler katalogdaki model sırasına göre script'lenmiş yanıtları
+    kullanır.
     """
     import model_routes
     for var in ("GROQ_API_KEY", "OPENROUTER_API_KEY", "OPENAI_API_KEY",
                 "GEMINI_API_KEY", "GOOGLE_AI_KEY", "TOGETHER_API_KEY",
                 "ANTHROPIC_API_KEY"):
         monkeypatch.setenv(var, "")
-    # Zincir groq'tan başlasın (groq key geçerli, diğerleri yok)
+    # Zincir OpenRouter'dan başlasın (tek bulut sağlayıcısı)
     fake_cfg = {"active_provider": None, "active_model": None,
-                "api_keys": {"groq": "gsk_test_key"}}
+                "api_keys": {"openrouter": "sk-or-v1-test-key"}}
     monkeypatch.setattr(model_routes, "_load_config", lambda: fake_cfg)
     monkeypatch.setattr(model_routes, "_save_config", lambda cfg: None)
     # _fallback_chain 'from model_routes import _load_config' ile lokal import
@@ -160,22 +160,22 @@ class TestFallbackChain:
         """429 → bir sonraki modele geç (yeniden deneme değil, sıradaki model)."""
         _FakeAsyncClient.scripts = [
             ("openai/gpt-oss-120b", _mk_response(429, text="rate limited")),
-            ("openai/gpt-oss-20b", _mk_response(200, _good_response("fallback ok"))),
+            ("deepseek/deepseek-chat", _mk_response(200, _good_response("fallback ok"))),
         ]
         with patch.object(ai_agent.httpx, "AsyncClient", _FakeAsyncClient):
             result = _run(agent._fallback_chain([{"role": "user", "content": "hi"}]))
         assert result["success"] is True
         assert "fallback ok" in result["data"]["choices"][0]["message"]["content"]
-        # İlk model denenmiş, ikincisi başarılı
+        # İlk model 429 aldı, sonraki model başarılı oldu
         models = [c["model"] for c in _FakeAsyncClient.calls]
         assert "openai/gpt-oss-120b" in models
-        assert "openai/gpt-oss-20b" in models
+        assert "deepseek/deepseek-chat" in models
 
     def test_401_auth_error_moves_on(self, agent):
         """401 (yetki) → aynı modelde takılmaz, sıradaki denenir."""
         _FakeAsyncClient.scripts = [
             ("gpt-oss-120b", _mk_response(401, text='{"error":"User not found"}')),
-            ("gpt-oss-20b", _mk_response(200, _good_response("ikinci model çalıştı"))),
+            ("deepseek/deepseek-chat", _mk_response(200, _good_response("ikinci model çalıştı"))),
         ]
         with patch.object(ai_agent.httpx, "AsyncClient", _FakeAsyncClient):
             result = _run(agent._fallback_chain([{"role": "user", "content": "hi"}]))
@@ -185,7 +185,7 @@ class TestFallbackChain:
         """404 (model yok) → model katalogdan düşer, sonraki denenir."""
         _FakeAsyncClient.scripts = [
             ("gpt-oss-120b", _mk_response(404, text="model not found")),
-            ("gpt-oss-20b", _mk_response(200, _good_response("404 sonrası kurtardı"))),
+            ("deepseek/deepseek-chat", _mk_response(200, _good_response("404 sonrası kurtardı"))),
         ]
         with patch.object(ai_agent.httpx, "AsyncClient", _FakeAsyncClient):
             result = _run(agent._fallback_chain([{"role": "user", "content": "hi"}]))
@@ -195,7 +195,7 @@ class TestFallbackChain:
         """Timeout → sıradaki model/provider."""
         _FakeAsyncClient.scripts = [
             ("gpt-oss-120b", ai_agent.httpx.TimeoutException("timed out")),
-            ("gpt-oss-20b", _mk_response(200, _good_response("timeout sonrası"))),
+            ("deepseek/deepseek-chat", _mk_response(200, _good_response("timeout sonrası"))),
         ]
         with patch.object(ai_agent.httpx, "AsyncClient", _FakeAsyncClient):
             result = _run(agent._fallback_chain([{"role": "user", "content": "hi"}]))
@@ -206,7 +206,7 @@ class TestFallbackChain:
         bad = {"choices": [{"message": {"role": "tool", "content": 5}}]}
         _FakeAsyncClient.scripts = [
             ("gpt-oss-120b", _mk_response(200, bad)),
-            ("gpt-oss-20b", _mk_response(200, _good_response("geçerli şema"))),
+            ("deepseek/deepseek-chat", _mk_response(200, _good_response("geçerli şema"))),
         ]
         with patch.object(ai_agent.httpx, "AsyncClient", _FakeAsyncClient):
             result = _run(agent._fallback_chain([{"role": "user", "content": "hi"}]))
@@ -234,7 +234,7 @@ class TestFallbackChain:
         """Her istekte geçerli Authorization başlığı taşınır (key sızdırmadan)."""
         _FakeAsyncClient.scripts = [
             ("gpt-oss-120b", _mk_response(429, text="rl")),
-            ("gpt-oss-20b", _mk_response(200, _good_response("ok"))),
+            ("deepseek/deepseek-chat", _mk_response(200, _good_response("ok"))),
         ]
         with patch.object(ai_agent.httpx, "AsyncClient", _FakeAsyncClient):
             _run(agent._fallback_chain([{"role": "user", "content": "hi"}]))
@@ -260,6 +260,10 @@ class TestFallbackChain:
 class TestErrorClassification:
     """Ayrıştırma mantığını doğrular: hangi durumda zincir nasıl davranır."""
 
+    def setup_method(self):
+        _FakeAsyncClient.scripts = []
+        _FakeAsyncClient.calls = []
+
     def test_429_does_not_retry_same_model(self, agent):
         """429 aynı modelde tekrar denenmemeli (sınırlı yeniden deneme)."""
         _FakeAsyncClient.scripts = [
@@ -282,7 +286,7 @@ class TestErrorClassification:
         """
         _FakeAsyncClient.scripts = [
             ("gpt-oss-120b", _mk_response(401, text='{"error":"User not found"}')),
-            ("gpt-oss-20b", _mk_response(200, _good_response("başarılı yanıt"))),
+            ("deepseek/deepseek-chat", _mk_response(200, _good_response("başarılı yanıt"))),
         ]
         with patch.object(ai_agent.httpx, "AsyncClient", _FakeAsyncClient):
             result = _run(agent._fallback_chain([{"role": "user", "content": "hi"}]))

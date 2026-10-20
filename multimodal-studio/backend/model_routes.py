@@ -71,66 +71,8 @@ def _decrypt_key(encrypted_key: str) -> str:
 
 # Default model catalog
 MODEL_CATALOG = {
-    "groq": {
-        "name": "Groq",
-        "base_url": "https://api.groq.com/openai/v1",
-        "env_key": "GROQ_API_KEY",
-        "free": True,
-        "models": [
-            {"id": "openai/gpt-oss-120b", "name": "GPT-OSS 120B", "description": "Groq-fast large model", "context": "128K", "recommended": True},
-            {"id": "openai/gpt-oss-20b", "name": "GPT-OSS 20B", "description": "Groq-fast small model", "context": "128K"},
-            {"id": "llama-3.3-70b-versatile", "name": "Llama 3.3 70B", "description": "Meta Llama 3.3", "context": "128K"},
-            {"id": "llama-3.1-8b-instant", "name": "Llama 3.1 8B", "description": "Fast & lightweight", "context": "128K"},
-            {"id": "mixtral-8x7b-32768", "name": "Mixtral 8x7B", "description": "Mixture of Experts", "context": "32K"},
-        ]
-    },
-    "openai": {
-        "name": "OpenAI",
-        "base_url": "https://api.openai.com/v1",
-        "env_key": "OPENAI_API_KEY",
-        "free": False,
-        "models": [
-            {"id": "gpt-4o", "name": "GPT-4o", "description": "Most capable multimodal", "context": "128K", "recommended": True},
-            {"id": "gpt-4o-mini", "name": "GPT-4o Mini", "description": "Fast & affordable", "context": "128K"},
-            {"id": "gpt-4-turbo", "name": "GPT-4 Turbo", "description": "Fast GPT-4", "context": "128K"},
-            {"id": "gpt-4", "name": "GPT-4", "description": "Original GPT-4", "context": "8K"},
-            {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo", "description": "Fast & cheap", "context": "16K"},
-        ]
-    },
-    "anthropic": {
-        "name": "Anthropic",
-        "base_url": "https://api.anthropic.com/v1",
-        "env_key": "ANTHROPIC_API_KEY",
-        "free": False,
-        "models": [
-            {"id": "claude-sonnet-4-20250514", "name": "Claude Sonnet 4", "description": "Balanced performance", "context": "200K", "recommended": True},
-            {"id": "claude-opus-4-20250514", "name": "Claude Opus 4", "description": "Most capable", "context": "200K"},
-            {"id": "claude-3-5-haiku-20241022", "name": "Claude 3.5 Haiku", "description": "Fast & smart", "context": "200K"},
-        ]
-    },
-    "gemini": {
-        "name": "Google Gemini",
-        "base_url": "https://generativelanguage.googleapis.com/v1beta/openai/",
-        "env_key": "GEMINI_API_KEY",
-        "free": True,
-        "models": [
-            {"id": "gemini-2.5-flash", "name": "Gemini 2.5 Flash", "description": "Fast multimodal", "context": "1M", "recommended": True},
-            {"id": "gemini-2.5-pro", "name": "Gemini 2.5 Pro", "description": "Most capable", "context": "1M"},
-            {"id": "gemini-1.5-flash", "name": "Gemini 1.5 Flash", "description": "Fast & free", "context": "1M"},
-            {"id": "gemini-1.5-pro", "name": "Gemini 1.5 Pro", "description": "Balanced", "context": "2M"},
-        ]
-    },
-    "together": {
-        "name": "Together AI",
-        "base_url": "https://api.together.xyz/v1",
-        "env_key": "TOGETHER_API_KEY",
-        "free": True,
-        "models": [
-            {"id": "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", "name": "Llama 3.1 70B Turbo", "description": "Fast Llama", "context": "128K", "recommended": True},
-            {"id": "meta-llama/Meta-Llama-3.1-405B-Instruct-Turbo", "name": "Llama 3.1 405B", "description": "Largest Llama", "context": "128K"},
-            {"id": "mistralai/Mixtral-8x22B-Instruct-v0.1", "name": "Mixtral 8x22B", "description": "MoE model", "context": "64K"},
-        ]
-    },
+    # Yalnızca OpenRouter bulut sağlayıcısı kalır (kullanıcı talimatı).
+    # Groq, OpenAI, Anthropic, Google Gemini ve Together AI kaldırıldı.
     "openrouter": {
         "name": "OpenRouter",
         "base_url": "https://openrouter.ai/api/v1",

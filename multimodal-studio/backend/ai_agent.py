@@ -77,8 +77,8 @@ from tool_executor import ToolExecutor
 @dataclass
 class LLMConfig:
     """LLM provider configuration."""
-    provider: str = "openai"  # openai, anthropic, local
-    model: str = "gpt-4"
+    provider: str = "openrouter"  # openrouter, local
+    model: str = "inclusionai/ling-3.0-flash-fin"
     api_key: Optional[str] = None
     base_url: Optional[str] = None
     temperature: float = 0.7
@@ -114,7 +114,7 @@ def _validate_response(data: Dict) -> bool:
                 return False
             # tool_calls validation if present
             tool_calls = message.get("tool_calls")
-            # OpenAI-uyumlu sağlayıcılar (ör. Groq gpt-oss-120b), asistan yalnızca
+            # OpenAI-uyumlu sağlayıcılar, asistan yalnızca
             # araç çağrısı ürettiğinde "content" alanını tamamen atlar (null bile
             # göndermez). Bu GEÇERLİ bir yanıttır → content veya tool_calls'ten en
             # az biri bulunmalıdır. (Aksi halde geçerli araç çağrıları reddedilip
@@ -149,7 +149,7 @@ _MAX_RATE_LIMIT_WAIT = 5.0  # saniye - Retry-After uzun donse bile kisitla
 def _parse_retry_after(response, default: float = 20.0) -> float:
     """Extract a sane wait time (seconds) from a 429 response.
 
-    Prefers the ``Retry-After`` header; falls back to parsing Groq/OpenAI-style
+    Prefers the ``Retry-After`` header; falls back to parsing provider-style
     messages such as "Please try again in 12.5s" or "in 1m30s". Sleeps are
     capped so a bad value can never hang the request for minutes.
     """
@@ -182,29 +182,17 @@ class NexusAIAgent:
     """
     
     def __init__(self, llm_config: LLMConfig = None):
-        """Auto-detect best available FREE LLM provider."""
-        # Check all free providers in priority order
-        groq_key = os.getenv("GROQ_API_KEY", "")
-        gemini_key = os.getenv("GEMINI_API_KEY", "") or os.getenv("GOOGLE_AI_KEY", "")
+        """Bulut tarafında yalnızca OpenRouter'ı kullan."""
+        # Groq, OpenAI, Anthropic, Google Gemini ve Together AI kaldırıldı.
+        # Yerel model ayrıca NEXUS_LOCAL_LLM_* ile birincil/fallback çalışır.
         openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
-        together_key = os.getenv("TOGETHER_API_KEY", "")
-        openai_key = os.getenv("OPENAI_API_KEY", "")
         
-        # Validate keys (not placeholder)
+        # Validate key (not placeholder)
         def is_valid(key: str) -> bool:
             return key and not key.startswith("your-") and not key.startswith("sk-placeholder") and len(key) > 10
         
-        # Priority: Groq (free, fast) > Gemini (free tier) > Together > OpenRouter > OpenAI
-        if is_valid(groq_key):
-            api_key, base_url, model, provider = groq_key, "https://api.groq.com/openai/v1", "openai/gpt-oss-120b", "groq"
-        elif is_valid(gemini_key):
-            api_key, base_url, model, provider = gemini_key, "https://generativelanguage.googleapis.com/v1beta/openai/", "gemini-1.5-flash", "gemini"
-        elif is_valid(together_key):
-            api_key, base_url, model, provider = together_key, "https://api.together.xyz/v1", "meta-llama/Meta-Llama-3.1-70B-Instruct-Turbo", "together"
-        elif is_valid(openrouter_key):
+        if is_valid(openrouter_key):
             api_key, base_url, model, provider = openrouter_key, "https://openrouter.ai/api/v1", "meta-llama/llama-3.1-70b-instruct:free", "openrouter"
-        elif is_valid(openai_key):
-            api_key, base_url, model, provider = openai_key, None, "gpt-4o-mini", "openai"
         else:
             api_key, base_url, model, provider = "sk-placeholder", None, "fallback", "fallback"
         
@@ -381,13 +369,10 @@ When you need to use tools, call them. Work like a real coding assistant — rea
         self._active_tools = None  # reset per chat; set below if a custom agent is used
         self._active_model = None
 
+        # Otomatik ajan seçimi kaldırıldı. Eski istemcilerden 'auto' gelirse
+        # yalnızca Ana Yönetici kullanılır; istek bazlı uzman seçimi yapılmaz.
         if agent_id == "auto":
-            try:
-                from custom_agents import auto_select_agent
-                agent_id = auto_select_agent(user_message)
-            except Exception as e:
-                logger.debug(f"Auto-select agent error: {e}")
-                agent_id = None
+            agent_id = "main-manager"
 
         if agent_id:
             try:
@@ -898,8 +883,8 @@ Kurallar:
         cut point to a valid boundary (a user message or a plain assistant
         message) so we never start on an orphaned tool result — providers reject
         that. Also caps total characters so a few huge tool outputs cannot blow
-        past the provider's per-request token limit (Groq free TPM = 8000; the
-        tool specs alone already cost ~2.8k tokens).
+        past the provider's per-request token limit (the tool specs alone
+        already cost ~2.8k tokens).
         """
         if not messages:
             return messages
@@ -1042,37 +1027,25 @@ Kurallar:
         
         try:
             async with httpx.AsyncClient(timeout=90) as client:
-                # Handle different provider APIs
-                if provider == "gemini":
-                    payload = {
-                        "model": model,
-                        "messages": messages,
-                        "tools": self._tools_payload(),
-                        "tool_choice": "auto",
-                        "temperature": self.llm_config.temperature,
-                        "max_tokens": self.llm_config.max_tokens
-                    }
-                    url = f"{base_url}models/{model}:generateContent?key={api_key}"
-                    headers = {"Content-Type": "application/json"}
-                else:
-                    payload = {
-                        "model": model,
-                        "messages": messages,
-                        "tools": self._tools_payload(),
-                        "tool_choice": "auto",
-                        "temperature": self.llm_config.temperature,
-                        "max_tokens": self.llm_config.max_tokens
-                    }
-                    url = f"{base_url}/chat/completions"
-                    headers = {
-                        "Authorization": f"Bearer {api_key}",
-                        "Content-Type": "application/json"
-                    }
-                    if provider == "openrouter":
-                        headers["HTTP-Referer"] = "http://localhost:8080"
-                        headers["X-Title"] = "NEXUS-CORE"
+                # OpenAI-uyumlu sağlayıcı (yalnızca OpenRouter kalır).
+                payload = {
+                    "model": model,
+                    "messages": messages,
+                    "tools": self._tools_payload(),
+                    "tool_choice": "auto",
+                    "temperature": self.llm_config.temperature,
+                    "max_tokens": self.llm_config.max_tokens
+                }
+                url = f"{base_url}/chat/completions"
+                headers = {
+                    "Authorization": f"Bearer {api_key}",
+                    "Content-Type": "application/json"
+                }
+                if provider == "openrouter":
+                    headers["HTTP-Referer"] = "http://localhost:8080"
+                    headers["X-Title"] = "NEXUS-CORE"
                 
-                # Rate-limit aware retry: a 429 (e.g. Groq TPM limit) is TEMPORARY.
+                # Rate-limit aware retry: a 429 (provider TPM limit) is TEMPORARY.
                 # Bekleme sureini kisitla (_MAX_RATE_LIMIT_WAIT) ve cok deneme yapma;
                 # fallback zinciri (diger modeller/saglayicilar) calsin.
                 response = None
@@ -1091,8 +1064,6 @@ Kurallar:
                     data = response.json()
                     # HTTP 200 = saglayici ve anahtar saglikli; onceki olumsuz karari temizle.
                     health.note_success(provider, model)
-                    if provider == "gemini" and "candidates" in data:
-                        data = self._normalize_gemini_response(data)
                     
                     # Validate response structure
                     if not _validate_response(data):
@@ -1101,16 +1072,15 @@ Kurallar:
                     
                     return {"success": True, "data": data}
                 
-                # Some models (e.g. gpt-oss on Groq) occasionally emit a tool call
-                # for a tool that was NOT advertised in request.tools (e.g.
-                # `write_file`), and the provider rejects the whole turn with a 400
+                # Some models occasionally emit a tool call for a tool that was
+                # NOT advertised in request.tools (e.g. `write_file`), and the
+                # provider rejects the whole turn with a 400
                 # "Tool call validation failed". Retrying the SAME model once with
                 # tools disabled turns this into a normal text answer instead of
                 # burning the entire 20+ provider fallback chain.
                 if (
                     response is not None
                     and response.status_code == 400
-                    and provider != "gemini"
                     and "tool" in response.text.lower()
                     and ("validation failed" in response.text.lower()
                          or "not in request.tools" in response.text.lower())
@@ -1172,13 +1142,13 @@ Kurallar:
         """
         Comprehensive fallback chain:
         1. Try other models from SAME provider (priority order)
-        2. Try other providers in priority order (Groq > OpenRouter > Gemini > Together > OpenAI > Anthropic)
+        2. Try the remaining cloud provider (OpenRouter)
         3. Each provider tries its models in priority order
-        4. Final fallback: rule-based agent
+        4. Final fallback: local model, then rule-based agent
 
-        ``rate_limited=True`` means the original provider only hit a 429 (temporary
-        quota), so it is KEPT (and tried first): its other models have independent
-        per-model quota buckets and usually succeed immediately.
+        ``rate_limited`` is kept for backward compatibility. Both rate-limit and
+        hard failures try the failed provider's sibling models first: with only
+        one cloud provider left, dropping it entirely would skip all cloud models.
         """
         from model_routes import MODEL_CATALOG, _is_valid_key, _load_config
 
@@ -1188,16 +1158,16 @@ Kurallar:
         config = _load_config()
         api_keys = config.get("api_keys", {})
         
-        # Provider priority order (free first, then paid)
-        provider_priority = ["groq", "openrouter", "gemini", "together", "openai", "anthropic"]
-        
-        # A rate-limited provider is NOT removed from the chain: its sibling models
-        # have separate limits, so we try it first. Only a hard failure drops it.
-        if failed_provider:
-            if rate_limited:
-                provider_priority = [failed_provider] + [p for p in provider_priority if p != failed_provider]
-            else:
-                provider_priority = [p for p in provider_priority if p != failed_provider]
+        # Katalogda yalnızca OpenRouter bulut sağlayıcısı kalır (diğerleri kaldırıldı).
+        # Testler katalogu monkeypatch'lediğinde sıra yine katalogdan gelir.
+        provider_priority = list(MODEL_CATALOG.keys())
+
+        # Başarısız sağlayıcıyı tamamen düşürme: aynı sağlayıcının kardeş
+        # modellerini önce dene (özellikle tek bulut sağlayıcısı kaldığında).
+        # Geçersiz anahtar health tarafından ayrıca işaretlenir ve sonraki
+        # çağrılarda atlanır.
+        if failed_provider and failed_provider in provider_priority:
+            provider_priority = [failed_provider] + [p for p in provider_priority if p != failed_provider]
         
         for provider_id in provider_priority:
             provider_info = MODEL_CATALOG.get(provider_id)
@@ -1243,41 +1213,27 @@ Kurallar:
                     logger.info(f"Fallback trying: {provider_id}/{model_id}")
                     
                     async with httpx.AsyncClient(timeout=60) as client:
-                        if provider_id == "gemini":
-                            payload = {
-                                "model": model_id,
-                                "messages": messages,
-                                "tools": self._tools_payload(),
-                                "tool_choice": "auto",
-                                "temperature": 0.7,
-                                "max_tokens": 4096
-                            }
-                            url = f"{provider_info['base_url']}models/{model_id}:generateContent?key={api_key}"
-                            headers = {"Content-Type": "application/json"}
-                        else:
-                            payload = {
-                                "model": model_id,
-                                "messages": messages,
-                                "tools": self._tools_payload(),
-                                "tool_choice": "auto",
-                                "temperature": 0.7,
-                                "max_tokens": 4096
-                            }
-                            url = f"{provider_info['base_url']}/chat/completions"
-                            headers = {
-                                "Authorization": f"Bearer {api_key}",
-                                "Content-Type": "application/json"
-                            }
-                            if provider_id == "openrouter":
-                                headers["HTTP-Referer"] = "http://localhost:8080"
-                                headers["X-Title"] = "NEXUS-CORE"
+                        payload = {
+                            "model": model_id,
+                            "messages": messages,
+                            "tools": self._tools_payload(),
+                            "tool_choice": "auto",
+                            "temperature": 0.7,
+                            "max_tokens": 4096
+                        }
+                        url = f"{provider_info['base_url']}/chat/completions"
+                        headers = {
+                            "Authorization": f"Bearer {api_key}",
+                            "Content-Type": "application/json"
+                        }
+                        if provider_id == "openrouter":
+                            headers["HTTP-Referer"] = "http://localhost:8080"
+                            headers["X-Title"] = "NEXUS-CORE"
                         
                         response = await client.post(url, headers=headers, json=payload)
                         
                         if response.status_code == 200:
                             data = response.json()
-                            if provider_id == "gemini" and "candidates" in data:
-                                data = self._normalize_gemini_response(data)
                             
                             # Validate response structure
                             if not _validate_response(data):
@@ -1374,23 +1330,6 @@ Kurallar:
         logger.info("Yerel model yedegi kullanildi: %s", result.get("model"))
         return result
 
-    def _normalize_gemini_response(self, data: Dict) -> Dict:
-        """Convert Gemini response to OpenAI format."""
-        try:
-            candidate = data["candidates"][0]
-            content = candidate["content"]["parts"][0].get("text", "")
-            return {
-                "choices": [{
-                    "message": {
-                        "role": "assistant",
-                        "content": content,
-                        "tool_calls": None  # Gemini function calling format differs
-                    }
-                }]
-            }
-        except Exception:
-            return data
-    
     async def _fallback_response(self, messages: List[Dict]) -> Dict:
         """
         Fallback when no API key or LLM error.

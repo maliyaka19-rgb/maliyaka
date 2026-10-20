@@ -219,8 +219,8 @@ def test_fallback_keeps_rate_limited_provider(monkeypatch):
     assert "openai/gpt-oss-120b" not in tried, "the already rate-limited model is skipped"
 
 
-def test_fallback_drops_provider_on_hard_failure(monkeypatch):
-    """A non-rate-limit failure (e.g. bad auth) should still drop the provider."""
+def test_fallback_keeps_provider_on_hard_failure_to_try_siblings(monkeypatch):
+    """Tek bulut sağlayıcısı kalınca hard failure'da kardeş modeller denenir."""
     import model_routes
 
     catalog = {
@@ -269,5 +269,5 @@ def test_fallback_drops_provider_on_hard_failure(monkeypatch):
         rate_limited=False,
     ))
 
-    assert "gpt-4o" in tried, "next provider (openai) should be used"
-    assert "llama-3.3-70b-versatile" not in tried, "failed (dropped) provider's models are not retried"
+    assert "llama-3.3-70b-versatile" in tried, "sibling model should be tried after a hard failure"
+    assert "openai/gpt-oss-120b" not in tried, "the failed model itself is not retried"

@@ -971,3 +971,56 @@ kalacak; bu listede olmayan tüm ajanlar silinecek.
 
 
 
+
+---
+
+## Ek 14 - Auto/Ekip modu ve 5 bulut sağlayıcı temizliği (2026-10-21)
+
+**Kullanıcı talimatı:** Otomatik ajan seçimi ve Ekip modu arayüzden/akıştan kaldırılacak;
+Groq, OpenAI, Anthropic, Google Gemini ve Together AI sağlayıcıları tamamen çıkarılacak.
+Yalnızca OpenRouter bulut sağlayıcısı, birincil/fallback ise yerel model kalacak.
+
+**Yapılan:**
+- `sohbet.html`: `auto-agent-card`, `team-agent-card` ve ilgili açıklamalar silindi;
+  `app.js?v=74`.
+- `js/app.js`: `TEAM_API`, `useTeam`, ekip aşama render'ı, `selected_agent` rozeti,
+  auto/ekip tıklama ve başlık dalları kaldırıldı. Eski localStorage `auto`/`team`
+  değerleri `main-manager`'a normalize edilir. Varsayılan başlık Ana Yönetici.
+- `custom_agent_routes.py`: `/team/run` endpoint'i ve `TeamRunRequest` modeli silindi.
+- `custom_agents.py`: `auto_select_agent()` silindi; `keyword_select_agent()` yedek
+  yardımcı olarak kaldı. `ai_agent_routes` içinde `auto` -> `main-manager` takma adı
+  korunuyor; kodlama görevi yine Kodlama Yöneticisi zincirine devrediliyor.
+- `model_routes.py`: `MODEL_CATALOG` yalnızca `openrouter`; 5 sağlayıcı ve modelleri
+  kaldırıldı.
+- `ai_agent.py`: sağlayıcı başlangıcı yalnızca OpenRouter; fallback sırası katalogdan
+  gelir; başarısız sağlayıcının kardeş modelleri denenir; ölü Gemini dalları ve
+  normalizasyon kodu silindi. Yerel model yolu korunuyor.
+- `telegram_bot.py` / `telegram_routes.py` / `telegram.html`: varsayılan
+  `main-manager`; eski `auto` ayarı/komutu `main-manager`'a normalize edilir; seçenek
+  listesinde "Otomatik" yok.
+- Testler yeni davranışa göre güncellendi: OpenRouter-only katalog, kardeş model
+  fallback'i, takma ad davranışı, Telegram varsayılanı; kaldırılan ekip/auto testleri
+  çıkarıldı.
+
+**Kanıt:**
+| Kalem | Sonuç |
+|---|---|
+| pytest | **248 PASS**, 29 deselected, 0 fail |
+| ruff (`E9,F63,F7,F82`) | temiz |
+| `node --check js/app.js` | OK |
+| `/api/v1/agents` | **22** |
+| `/api/v1/agents/hierarchy` | **20 uzman**, `missing=[]`, 4/6/5/5 |
+| `/api/v1/models/catalog` | yalnızca **openrouter** |
+| `/api/v1/models/providers` | yalnızca **openrouter** |
+| `/api/v1/agents/team/run` | OpenAPI'de yok; POST 405 (rota kaldırıldı) |
+| Kaldırılan sağlayıcı `/api-key` / `/activate` | **400** |
+| Chromium DOM | **22 ajan kartı**, **1 sağlayıcı (OpenRouter)**, auto/ekip ve 5 sağlayıcı metni yok |
+| localStorage migrasyonu | `auto` -> `main-manager`, `team` -> `main-manager`; başlık doğru |
+| Telegram DOM | 22 ajan seçeneği; "Otomatik" yok |
+| Konsol | hata/uyarı yok |
+
+**Sınır / açık:**
+- OpenRouter anahtarı bu ortamda **401 User not found** döndürüyor; Ollama kapalı olduğu
+  için canlı sohbet kural-tabanlı yedeğe düşüyor. Anahtar düzeltilince bulut yolu hazır.
+- `/api/v1/coding/*` kimlik doğrulaması yok; `execute` `shell=True` (D-039).
+- Yemek sitesi (`Desktop\m`) bu temizlik kapsamında değiştirilmedi.

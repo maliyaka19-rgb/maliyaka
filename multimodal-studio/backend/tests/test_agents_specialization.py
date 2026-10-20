@@ -1,14 +1,14 @@
 """
-Tests for Agent Specialization, Dynamic Prompting, and Auto-Routing
-===================================================================
+Tests for Agent Specialization, Dynamic Prompting, and Legacy Routing
+=====================================================================
 AŞAMA 3, 4, 5, 6 ve 7 testleri:
 - 22 ajanlık resmî kadro (Ana Yönetici + Kodlama Yöneticisi + 20 uzman)
 - Uzmanların araç uyumu ve silinen ajanların geri gelmemesi
 - Eski anahtar kelimelerin resmî ajana yönlendirilmesi
 - ai_agent.chat() dinamik prompt oluşturma (araç uyumsuzluğu koruması)
-- ai_agent.chat() agent_id='auto' otomatik uzman seçimi
+- Eski 'auto' değerinin Ana Yönetici'ye eşlenmesi (otomatik seçim yok)
 - custom_agent_routes /tools/available tam araç kapsamı
-- Telegram botu /agents zengin liste ve auto yönlendirme
+- Telegram botu /agents zengin liste ve varsayılan Ana Yönetici
 """
 
 import pytest
@@ -112,8 +112,8 @@ async def test_ai_agent_dynamic_tool_prompting():
 
 
 @pytest.mark.asyncio
-async def test_ai_agent_auto_routing(monkeypatch):
-    """ai_agent.chat(agent_id='auto') çağrısının otomatik uzmana delege etmesi."""
+async def test_ai_agent_legacy_auto_alias_to_main_manager(monkeypatch):
+    """Eski agent_id='auto' değeri otomatik seçim yapmadan Ana Yönetici'ye gider."""
     import ai_agent
 
     captured = {}
@@ -143,8 +143,8 @@ async def test_ai_agent_auto_routing(monkeypatch):
     assert "ANA YÖNETİCİ AJANIsın" in captured["system"]
 
 
-def test_telegram_bot_agents_listing_and_auto():
-    """Telegram botunun zengin /agents listesi ve auto desteği."""
+def test_telegram_bot_agents_listing_and_default_agent():
+    """Telegram botunun zengin /agents listesi ve Ana Yönetici varsayılanı."""
     import telegram_bot
     from tests.test_telegram import Recorder, make_bot, run
 
@@ -156,10 +156,10 @@ def test_telegram_bot_agents_listing_and_auto():
     sends = recorder.sends()
     assert len(sends) == 1
     assert "Kullanılabilir Ajanlar" in sends[0]["text"]
-    assert "Otomatik seçim için: /agent auto" in sends[0]["text"]
+    assert "Varsayılan: /agent main-manager" in sends[0]["text"]
 
-    # /agent auto komutu
+    # Eski /agent auto komutu artık Ana Yönetici'ye eşlenir
     run(bot._dispatch(101, "/agent auto"))
-    assert bot._chats[101]["agent_id"] == "auto"
+    assert bot._chats[101]["agent_id"] == "main-manager"
 
     run(client.aclose())

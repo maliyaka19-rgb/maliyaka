@@ -52,7 +52,7 @@ def _status_payload() -> dict:
         "running": bool(bot.running) if bot is not None else False,
         "token_set": token_set,
         "allowed_chat_ids": list(cfg.get("allowed_chat_ids") or []),
-        "default_agent_id": cfg.get("default_agent_id") or "auto",
+        "default_agent_id": cfg.get("default_agent_id") or "main-manager",
         "bot_username": getattr(bot, "bot_username", None) if bot is not None else None,
     }
 
@@ -93,7 +93,7 @@ async def set_telegram_config(req: ConfigRequest) -> dict:
             cfg["enabled"] = bool(req.enabled)
 
         if req.default_agent_id is not None:
-            cfg["default_agent_id"] = req.default_agent_id.strip() or "auto"
+            cfg["default_agent_id"] = req.default_agent_id.strip() or "main-manager"
 
         saved = tb.save_config(cfg)
     except Exception as exc:

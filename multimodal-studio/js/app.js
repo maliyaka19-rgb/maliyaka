@@ -29,8 +29,6 @@
         ).replace(/\/+$/, '');
 
         const CHAT_API = `${API_BASE}/api/v1/ai/chat`;
-        // Ekip modu: uzman üretir -> denetçi doğrular -> ekip lideri birleştirir.
-        const TEAM_API = `${API_BASE}/api/v1/agents/team/run`;
         const AUTH_API = `${API_BASE}/api/v1/auth`;
         const MODELS_API = `${API_BASE}/api/v1/models`;
         // Görseller backend proxy'sinden (mutlak URL) yüklenir.
@@ -637,19 +635,17 @@
             addLiveStatus(txt);  // Show live progress indicator
 
             try {
-                const useTeam = currentAgentId === 'team';
-                const res = await fetch(useTeam ? TEAM_API : CHAT_API, {
+                const res = await fetch(CHAT_API, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
                         'Authorization': token ? `Bearer ${token}` : ''
                     },
-                    body: JSON.stringify(
-                        useTeam
-                            ? { message: txt, conversation_id: convId, refine: true }
-                            : { message: txt, conversation_id: convId,
-                                agent_id: currentAgentId === 'auto' ? 'auto' : currentAgentId }
-                    )
+                    body: JSON.stringify({
+                        message: txt,
+                        conversation_id: convId,
+                        agent_id: currentAgentId
+                    })
                 });
                 const data = await res.json();
                 removeLiveStatus();
@@ -660,28 +656,7 @@
                     
                     let html = '';
 
-                    // Ekip modu: uzman + denetçi + lider aşamalarını göster
-                    if (useTeam && data.stages) {
-                        const sp = data.specialist || {};
-                        const st = data.stages;
-                        const okm = (b) => b ? '✅' : '⚠️';
-                        const badge = (t) => `<span class="team-stage-badge">${t}</span>`;
-                        html += `<div class="team-stages">`
-                            + badge(`🧑‍🔬 Uzman: ${escapeHtml(sp.name || sp.id || '-')}`)
-                            + badge(`${okm(st.draft && st.draft.success)} Üretim`)
-                            + badge(`${okm(st.review && st.review.success)} Denetim`)
-                            + badge('✅ Sentez')
-                            + `</div>`;
-                    }
-                    
-                    // Show selected agent info if auto mode was used
-                    if (data.selected_agent) {
-                        html += `<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;font-size:0.75rem;color:var(--fg-muted);margin-bottom:8px;">
-                            ${data.selected_agent.icon} ${data.selected_agent.name} seçildi
-                        </div><br>`;
-                    }
-                    
-                    // Otomatik seçim kodlama görevini zincire devrettiyse göster
+                    // Ana Yönetici kodlama görevini zincire devrettiyse göster
                     if (data.coding && Array.isArray(data.coding.experts) && data.coding.experts.length) {
                         const experts = data.coding.experts.map(escapeHtml).join(' → ');
                         html += `<div style="display:block;padding:6px 10px;background:var(--bg-surface);border:1px solid var(--border);border-radius:12px;font-size:0.75rem;color:var(--fg-muted);margin-bottom:8px;">
@@ -844,10 +819,9 @@
                 const data = await res.json();
                 if (data.success) {
                     agents = data.agents;
-                    // Eski localStorage'da silinmis bir ajan ID'si kalmis olabilir.
-                    // Gecerli degilse resmi varsayilan olan Ana Yonetici'ye tasi.
-                    if (currentAgentId !== 'auto' && currentAgentId !== 'team'
-                        && !agents.some(a => a.id === currentAgentId)) {
+                    // Eski localStorage'da silinmis bir ajan veya kaldirilan
+                    // 'auto'/'team' modu kalmis olabilir; Ana Yonetici'ye tasi.
+                    if (!agents.some(a => a.id === currentAgentId)) {
                         currentAgentId = 'main-manager';
                         localStorage.setItem('current_agent_id', currentAgentId);
                     }
@@ -965,12 +939,6 @@
             const modelBtnText = document.getElementById('model-btn-text');
             const modelStatusDot = document.getElementById('model-status-dot');
             if (!modelBtnText) return;
-            
-            if (agentId === 'auto') {
-                modelBtnText.textContent = '🤖 Otomatik';
-                modelStatusDot?.classList.remove('disconnected');
-                return;
-            }
             
             const agent = agents.find(a => a.id === agentId);
             if (agent) {
@@ -1266,11 +1234,6 @@
             
             // Update API key section
             const urls = {
-                'groq': 'https://console.groq.com/keys',
-                'openai': 'https://platform.openai.com/api-keys',
-                'anthropic': 'https://console.anthropic.com/settings/keys',
-                'gemini': 'https://aistudio.google.com/app/apikey',
-                'together': 'https://api.together.xyz/settings/api-keys',
                 'openrouter': 'https://openrouter.ai/keys'
             };
             const agentApiKeyHelp = document.getElementById('api-key-help-agent');
@@ -1344,27 +1307,8 @@
             agentSelectorBtn.addEventListener('click', openAgentModal);
         }
         
-        // Load agents on startup
+        // Load agents on startup (also normalizes legacy 'auto'/'team' selections)
         loadAgents();
-        
-        // Update display for auto mode if selected
-        if (currentAgentId === 'auto') {
-            document.getElementById('current-agent-icon').textContent = '🤖';
-            const modelBtnText = document.getElementById('model-btn-text');
-            if (modelBtnText) modelBtnText.textContent = '🤖 Otomatik';
-        } else if (currentAgentId === 'team') {
-            document.getElementById('current-agent-icon').textContent = '🧭';
-            const modelBtnText = document.getElementById('model-btn-text');
-            if (modelBtnText) modelBtnText.textContent = '🧭 Ekip';
-        } else if (currentAgentId && currentAgentId !== 'assistant') {
-            // If a specific agent was previously selected, show it in header
-            const savedAgent = agents.find(a => a.id === currentAgentId);
-            if (savedAgent) {
-                document.getElementById('current-agent-icon').textContent = savedAgent.icon;
-                const modelBtnText = document.getElementById('model-btn-text');
-                if (modelBtnText) modelBtnText.textContent = savedAgent.icon + ' ' + savedAgent.name;
-            }
-        }
 
         // ===== START =====
         initSession();
@@ -2195,8 +2139,6 @@
         const AGENT_API_URL = `${API_BASE}/api/v1/agents`;
         const HIERARCHY_API_URL = `${API_BASE}/api/v1/agents/hierarchy`;
         const agentGridModal = document.getElementById('agent-grid-modal');
-        const autoAgentCard = document.getElementById('auto-agent-card');
-        const teamAgentCard = document.getElementById('team-agent-card');
         const agentCountLabel = document.getElementById('agent-count-label');
 
         // Load agents for modal display
@@ -2311,44 +2253,6 @@
                 });
             });
 
-            // Auto-select card click
-            autoAgentCard.onclick = () => {
-                currentAgentId = 'auto';
-                localStorage.setItem('current_agent_id', 'auto');
-                document.getElementById('current-agent-icon').textContent = '🤖';
-                renderAgentGridModal();
-                modelOverlay.classList.remove('active');
-                // Update header button
-                const modelBtnText = document.getElementById('model-btn-text');
-                if (modelBtnText) modelBtnText.textContent = '🤖 Otomatik';
-                showToast('🤖 Otomatik ajan seçimi aktif - sorunuza göre en uygun ajanı seçecek');
-            };
-
-            // Ekip modu kartı: uzman -> denetçi -> lider pipeline'ını tetikler
-            if (teamAgentCard) {
-                teamAgentCard.onclick = () => {
-                    currentAgentId = 'team';
-                    localStorage.setItem('current_agent_id', 'team');
-                    document.getElementById('current-agent-icon').textContent = '🧭';
-                    renderAgentGridModal();
-                    modelOverlay.classList.remove('active');
-                    if (modelBtnText) modelBtnText.textContent = '🧭 Ekip';
-                    showToast('🧭 Ekip modu aktif — uzman üretir, denetçi doğrular, lider birleştirir');
-                };
-                if (currentAgentId === 'team') {
-                    teamAgentCard.style.borderColor = 'var(--accent)';
-                    teamAgentCard.style.background = 'var(--accent-soft-strong)';
-                }
-            }
-
-            // Highlight auto card if selected
-            if (currentAgentId === 'auto') {
-                autoAgentCard.style.borderColor = 'var(--accent)';
-                autoAgentCard.style.background = 'var(--accent-soft-strong)';
-            } else {
-                autoAgentCard.style.borderColor = 'var(--accent)';
-                autoAgentCard.style.background = 'var(--accent-soft)';
-            }
         }
 
         // Show toast notification
@@ -2412,11 +2316,6 @@
 
             // Update API key section
             const urls = {
-                'groq': 'https://console.groq.com/keys',
-                'openai': 'https://platform.openai.com/api-keys',
-                'anthropic': 'https://console.anthropic.com/settings/keys',
-                'gemini': 'https://aistudio.google.com/app/apikey',
-                'together': 'https://api.together.xyz/settings/api-keys',
                 'openrouter': 'https://openrouter.ai/keys'
             };
             apiKeyHelp.innerHTML = `${provider.name} API key almak için: <a href="${urls[providerId] || '#'}" target="_blank">${urls[providerId] || 'Link'}</a>`;
@@ -2522,18 +2421,14 @@
         // Update model button on load
         async function updateModelButton() {
             try {
-                // Eski localStorage'daki 'assistant' ID'sini resmî varsayılana taşı.
-                if (currentAgentId === 'assistant') {
+                // Eski localStorage'daki 'assistant', 'auto' veya 'team'
+                // secimlerini resmî varsayilan olan Ana Yonetici'ye tasi.
+                if (currentAgentId === 'assistant' || currentAgentId === 'auto' || currentAgentId === 'team') {
                     currentAgentId = 'main-manager';
                     localStorage.setItem('current_agent_id', currentAgentId);
                 }
-                if (currentAgentId === 'team') {
-                    modelBtnText.textContent = '🧭 Ekip';
-                    modelStatusDot.classList.remove('disconnected');
-                    return;
-                }
-                // Check if a specific agent is selected (not default assistant, not auto)
-                if (currentAgentId && currentAgentId !== 'assistant' && currentAgentId !== 'auto') {
+                // Check if a specific agent is selected
+                if (currentAgentId) {
                     let agent = allAgents.find(a => a.id === currentAgentId) || agents.find(a => a.id === currentAgentId);
                     if (!agent) {
                         try {
@@ -2548,12 +2443,6 @@
                         return;
                     }
                 }
-                if (currentAgentId === 'auto') {
-                    modelBtnText.textContent = '🤖 Otomatik';
-                    modelStatusDot.classList.remove('disconnected');
-                    return;
-                }
-                
                 // Default: show model name
                 const res = await fetch(MODELS_API + '/active');
                 const data = await res.json();

@@ -31,7 +31,7 @@ class ChatRequest(BaseModel):
     message: str = Field(..., description="User message")
     conversation_id: Optional[str] = Field(None, description="Continue existing conversation")
     history: Optional[List[Dict]] = Field(None, description="Previous messages")
-    agent_id: Optional[str] = Field(None, description="Custom agent ID to use (use 'auto' for automatic selection)")
+    agent_id: Optional[str] = Field(None, description="Custom agent ID to use (for example 'main-manager')")
 
 
 class ChatResponse(BaseModel):
@@ -41,7 +41,6 @@ class ChatResponse(BaseModel):
     conversation_id: str
     tools_used: List[str] = []
     thinking_steps: List[Dict] = []
-    selected_agent: Optional[Dict] = None
     coding: Optional[Dict] = None
     error: Optional[str] = None
 
@@ -124,26 +123,16 @@ async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optiona
                 auth_service.create_chat(current_user.id, chat_id=conversation_id)
                 chat_id_for_persistence = conversation_id
         
-        # Handle auto agent selection
+        # Otomatik ajan seçimi kaldırıldı. Eski istemcilerden 'auto' gelirse
+        # Ana Yönetici kullanılır; istek bazlı uzman seçimi yapılmaz.
         agent_id = request.agent_id
-        auto_selected = agent_id == "auto"
-        selected_agent_info = None
-        if auto_selected:
-            from custom_agents import auto_select_agent, get_agent
-            agent_id = auto_select_agent(request.message)
-            selected_agent = get_agent(agent_id)
-            if selected_agent:
-                selected_agent_info = {
-                    "id": selected_agent["id"],
-                    "name": selected_agent["name"],
-                    "icon": selected_agent["icon"]
-                }
+        if agent_id == "auto":
+            agent_id = "main-manager"
 
-        # Otomatik seçim = Ana Yönetici. Kodlama görevini zincire devret
-        # (Ana Yönetici -> Kodlama Yöneticisi -> uzmanlar -> Ana Yönetici onayı).
+        # Ana Yönetici, kodlama görevini Kodlama Yöneticisi zincirine devreder.
         # Yazma yapılmaz: sohbetten gelen işler PLAN modundadır (D-024).
         result = None
-        if auto_selected and agent_id == "main-manager" and _is_coding_task(request.message):
+        if agent_id == "main-manager" and _is_coding_task(request.message):
             try:
                 from coding_manager import CodingTaskManager
 
@@ -170,14 +159,10 @@ async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optiona
                         },
                     }
             except Exception as exc:  # zincir çökerse normal sohbete düş
-                logger.warning("Otomatik kodlama devri basarisiz: %s", exc)
+                logger.warning("Kodlama devri basarisiz: %s", exc)
 
         if result is None:
             result = await chat(request.message, conversation_id, history=request.history, agent_id=agent_id)
-        
-        # Add selected agent info to result
-        if selected_agent_info:
-            result["selected_agent"] = selected_agent_info
         
         # Persist messages and update title if authenticated
         if current_user and chat_id_for_persistence and result.get("success"):
