@@ -16,6 +16,7 @@ import time
 import uuid
 import os
 import re
+import py_compile  # _self_review: Python dosyalarını derle-denetle
 import socket
 import urllib.parse
 from datetime import datetime
@@ -147,6 +148,1086 @@ _RATE_LIMIT_MAX_RETRIES = 1
 _MAX_RATE_LIMIT_WAIT = 5.0  # saniye - Retry-After uzun donse bile kisitla
 
 
+# ============================================================
+# YEREL MODEL ARAÇ ÇAĞRISI AYIKLAMA (birden çok JSON nesnesi)
+# ============================================================
+
+_JSON_DECODER = json.JSONDecoder()
+
+try:
+    import unicodedata as _unicodedata
+except Exception:  # pragma: no cover
+    _unicodedata = None
+
+
+def _norm_tr(text: str) -> str:
+    """Türkçe-dostu küçük harf normalizasyonu.
+
+    Python'un ``str.lower`` çıktısı "İ" için 'i̇' (i + birleştirici nokta)
+    üretir; This breaks ``"site" in q`` gibi düz metin eşleşmeleri. Burada
+    birleştirici noktalar soyulur.
+    """
+    s = (text or "").lower()
+    if _unicodedata is not None:
+        s = _unicodedata.normalize("NFKC", s)
+        s = "".join(c for c in s if not _unicodedata.combining(c))
+    return s.replace("i\u0307", "i")
+
+
+# Tam ASCII dönüşümü: şablon yönlendirici gibi TÜM diyalekt yazımları
+# ("öğrenci"/"ogrenci", "kahvaltı"/"kahvalti") tek çizgiye indirir.
+_ASCII_TR_TABLE = str.maketrans({
+    "ö": "o", "ğ": "g", "ü": "u", "ş": "s", "ç": "c", "ı": "i",
+    "â": "a", "î": "i", "û": "u",
+})
+
+
+def _ascii_tr(text: str) -> str:
+    """Diakritik tamamen soyulmuş (ö->o, ğ->g …) normalize metin."""
+    return _norm_tr(text).translate(_ASCII_TR_TABLE)
+
+
+def _extract_tool_json_calls(text: str, allowed_names):
+    """Metnin içindeki TÜM ``{"name": ..., "arguments": {...}}`` nesnelerini bul.
+
+    Yerel küçük modeller araç çağrısını ``tool_calls`` alanı yerine düz metne
+    basar; çoğunlukla da birden fazla çağrıyı arka arkaya (genellikle markdown
+    çitinde) dizer. Burada dengeli süslü-parantez taramasıyla tüm üst-düzey
+    JSON nesneleri çıkarılır:
+      * bilinen bir araç adı  -> tool_call formatına çevrilir,
+      * ``{"message"/"text"/...}`` -> düz yanıt metni sayılır.
+    """
+    if not text:
+        return [], None
+    allowed = set(allowed_names or [])
+
+    calls = []
+    final_text = None
+    s = text
+    n = len(s)
+    i = 0
+    while i < n:
+        pos = s.find("{", i)
+        if pos == -1:
+            break
+        try:
+            obj, end = _JSON_DECODER.raw_decode(s, pos)
+        except ValueError:
+            i = pos + 1
+            continue
+        if isinstance(obj, dict):
+            p_name = obj.get("name")
+            p_args = obj.get("arguments", {})
+            if isinstance(p_args, str):
+                try:
+                    p_args = json.loads(p_args)
+                except Exception:
+                    p_args = {}
+            if isinstance(p_name, str) and p_name in allowed:
+                calls.append({
+                    "id": f"call_{int(time.time() * 1000)}_{len(calls)}",
+                    "type": "function",
+                    "function": {
+                        "name": p_name,
+                        "arguments": json.dumps(
+                            p_args if isinstance(p_args, dict) else {},
+                            ensure_ascii=False,
+                        ),
+                    },
+                })
+            elif isinstance(p_args, dict):
+                for key in ("message", "text", "response", "content", "answer"):
+                    if isinstance(p_args.get(key), str) and p_args[key].strip():
+                        if final_text is None:
+                            final_text = p_args[key].strip()
+                        break
+        i = end if end > i else i + 1
+    return calls, final_text
+
+
+# ============================================================
+# PROJE ŞABLONLARI (LLM yanıt veremezse çalışan hazır proje)
+# ============================================================
+
+# Uygulamanın kendi kökü (backend/.. , ../) — edit akışı buraya DOKUNMAZ.
+_APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+
+_BUILD_TEMPLATE_HTML = """<!DOCTYPE html>
+<html lang="tr">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lezzet Durağı | Yemek Sitesi</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="nav">
+  <div class="nav-inner">
+    <a class="logo" href="#hero">🍽️ Lezzet Durağı</a>
+    <nav class="nav-links">
+      <a href="#menu">Menü</a>
+      <a href="#hakkimizda">Hakkımızda</a>
+      <a href="#iletisim">İletişim</a>
+    </nav>
+    <button class="nav-toggle" id="navToggle">☰</button>
+  </div>
+</header>
+
+<section class="hero" id="hero">
+  <div class="hero-content">
+    <h1>Günlük taze mutfak — Türk mutfağının klasikleri</h1>
+    <p>Evinizdeki kadar sıcak, restoranınız kadar keyifli.</p>
+    <a class="btn primary" href="#menu">Menüyü Gör</a>
+    <a class="btn ghost" href="#iletisim">Sipariş Ver</a>
+  </div>
+</section>
+
+<section id="menu" class="section">
+  <h2>Bugünün Menüsü</h2>
+  <div class="menu-grid" id="menuGrid"></div>
+</section>
+
+<section id="hakkimizda" class="section alt">
+  <h2>Hakkımızda</h2>
+  <p>2009'dan beri her sabah pazarından alınan malzemelerle klasik Türk
+  yemeklerini hazırlıyoruz. Fırında ramazan pide, taş fırında lahmacun ve
+  ev yapımı keşkek sarsılır mı? Bize misafir olun.</p>
+</section>
+
+<section id="iletisim" class="section">
+  <h2>İletişim</h2>
+  <form id="orderForm" class="order-form">
+    <input type="text" name="ad" placeholder="Adınız" required>
+    <input type="tel" name="telefon" placeholder="Telefon" required>
+    <textarea name="not" rows="3" placeholder="Siparişiniz"></textarea>
+    <button class="btn primary" type="submit">Gönder</button>
+    <p class="form-note" id="formNote"></p>
+  </form>
+</section>
+
+<footer class="footer">
+  <p>© <span id="year"></span> Lezzet Durağı · Tüm hakları saklıdır.</p>
+</footer>
+<script src="script.js"></script>
+</body>
+</html>
+"""
+
+_BUILD_TEMPLATE_CSS = """/* Lezzet Durağı — stiller */
+:root {
+  --bg: #fffaf5;
+  --ink: #2c2320;
+  --muted: #7a6a60;
+  --brand: #e2542f;
+  --brand-2: #f7a12c;
+  --card: #ffffff;
+  --border: #efe2d7;
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body {
+  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
+  background: var(--bg); color: var(--ink); line-height: 1.6;
+}
+h2 { text-align: center; font-size: 1.9rem; margin-bottom: 1.4rem; }
+.section { max-width: 1100px; margin: 0 auto; padding: 3.4rem 1.2rem; }
+.section.alt { background: #fdeee3; border-radius: 18px; }
+
+.nav { position: sticky; top: 0; background: var(--card); z-index: 10;
+  border-bottom: 1px solid var(--border); }
+.nav-inner { max-width: 1100px; margin: 0 auto; display: flex;
+  align-items: center; justify-content: space-between; padding: .8rem 1.2rem; }
+.logo { font-weight: 700; color: var(--brand); text-decoration: none; font-size: 1.15rem; }
+.nav-links a { margin-left: 1rem; color: var(--ink); text-decoration: none; }
+.nav-links a:hover { color: var(--brand); }
+.nav-toggle { display: none; font-size: 1.1rem; background: none; border: 1px solid var(--border);
+  border-radius: 8px; padding: .25rem .6rem; cursor: pointer; }
+
+.hero {
+  background: linear-gradient(120deg, #ff6b3d, #f7a12c 75%);
+  color: #fff; text-align: center; padding: 4.5rem 1.2rem;
+}
+.hero h1 { font-size: clamp(1.6rem, 4vw, 2.6rem); max-width: 760px; margin: 0 auto 1rem; }
+.hero p { font-size: 1.1rem; opacity: .95; margin-bottom: 1.4rem; }
+.btn { display: inline-block; padding: .7rem 1.4rem; border-radius: 999px;
+  text-decoration: none; font-weight: 600; margin: .25rem; transition: .2s; }
+.btn.primary { background: #fff; color: var(--brand); }
+.btn.primary:hover { transform: translateY(-2px); }
+.btn.ghost { border: 1.5px solid #fff; color: #fff; }
+
+.menu-grid { display: grid; gap: 1.1rem;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
+.dish {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 14px; padding: 1.1rem 1.2rem;
+  box-shadow: 0 6px 18px rgba(0,0,0,.05);
+}
+.dish h3 { color: var(--brand); margin-bottom: .35rem; font-size: 1.05rem; }
+.dish p { color: var(--muted); font-size: .95rem; }
+.dish .price { display: inline-block; margin-top: .6rem; font-weight: 700;
+  color: var(--ink); background: var(--bg); border-radius: 8px;
+  padding: .15rem .55rem; border: 1px solid var(--border); }
+
+.order-form { max-width: 560px; margin: 0 auto; display: grid; gap: .7rem; }
+.order-form input, .order-form textarea {
+  padding: .7rem .9rem; border: 1px solid var(--border);
+  border-radius: 10px; font: inherit; background: var(--card);
+}
+.form-note { color: var(--muted); font-size: .9rem; }
+
+.footer { text-align: center; color: var(--muted); padding: 1.6rem 1rem;
+  border-top: 1px solid var(--border); }
+
+@media (max-width: 720px) {
+  .nav-links {
+    display: none; position: absolute; right: 1.2rem; top: 3.4rem;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 12px; padding: .8rem 1rem; flex-direction: column;
+  }
+  .nav-links.open { display: flex; }
+  .nav-toggle { display: block; }
+}
+"""
+
+_BUILD_TEMPLATE_JS = """/* Lezzet Durağı — davranışlar */
+const MENU = [
+  { ad: "Ev Manti", aciklama: "El açması mantı, yoğurt ve kızarmış nane.", fiyat: "₺120" },
+  { ad: "Iskender Kebap", aciklama: "Döner, tereyağı ve domates soslu.", fiyat: "₺160" },
+  { ad: "Içli Köfte", aciklama: "Bulgur ve kıyma ile klasik içli köfte.", fiyat: "₺90" },
+  { ad: "Ramazan Pide", aciklama: "Taş fırında, sıcak servis.", fiyat: "₺45" },
+  { ad: "Lahmacun", aciklama: "İnce hamur, bol soğan ve limon.", fiyat: "₺38" },
+  { ad: "Baklava", aciklama: "Fistıklı ev yapımı baklava.", fiyat: "₺80" },
+  { ad: "Kuru Fasulye", aciklama: "Yanında pilav ve turşu.", fiyat: "₺70" },
+  { ad: "Künefe", aciklama: "Yaban fıstığı ile sıcak künefe.", fiyat: "₺95" },
+];
+
+function menuList() {
+  const grid = document.getElementById("menuGrid");
+  if (!grid) return;
+  grid.innerHTML = MENU.map((d) => {
+    return `<article class="dish">
+      <h3>${d.ad}</h3>
+      <p>${d.aciklama}</p>
+      <span class="price">${d.fiyat}</span>
+    </article>`;
+  }).join("");
+}
+
+function navToggle() {
+  const btn = document.getElementById("navToggle");
+  const links = document.querySelector(".nav-links");
+  if (!btn || !links) return;
+  btn.addEventListener("click", () => links.classList.toggle("open"));
+}
+
+function orderForm() {
+  const form = document.getElementById("orderForm");
+  const note = document.getElementById("formNote");
+  if (!form) return;
+  form.addEventListener("submit", (e) => {
+    e.preventDefault();
+    const data = new FormData(form);
+    note.textContent = `Teşekkürler ${data.get("ad") || "Misafir"}! Sipariş notun alınmıştır.`;
+    form.reset();
+  });
+}
+
+const yearEl = document.getElementById("year");
+if (yearEl) yearEl.textContent = new Date().getFullYear();
+
+menuList();
+navToggle();
+orderForm();
+"""
+
+
+# ------------------------------------------------------------------
+# ALAN ŞABLONU 1: GELİŞMİŞ YEMEK SİTESİ (arama, filtre, sepet, karanlık mod)
+# ------------------------------------------------------------------
+
+_FOOD_TEMPLATE_HTML = r"""<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lezzet Durağı — Gelişmiş Yemek Sitesi</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">🍽️ Lezzet Durağı</div>
+  <nav id="nav" class="nav">
+    <a href="#hero">Ana Sayfa</a>
+    <a href="#menu">Menü</a>
+    <a href="#oneriler">Öne Çıkanlar</a>
+    <a href="#iletisim">İletişim</a>
+  </nav>
+  <div class="tools">
+    <button id="themeBtn" class="icon-btn" title="Karanlık/Aydınlık mod">🌙</button>
+    <button id="cartBtn" class="icon-btn" title="Sepet">🛒<span id="cartBadge" class="badge">0</span></button>
+    <button id="navBtn" class="icon-btn" title="Menü (mobil)">☰</button>
+  </div>
+</header>
+
+<section id="hero" class="hero">
+  <h1>Lezzet bir <span class="mark">durak</span>, biz tam göbeğindeyiz</h1>
+  <p>Taze malzeme, usta elinde pişen gerçek lezzetler. 30 dakikada kapında.</p>
+  <div class="search">
+    <input id="q" type="search" placeholder="Ada göre ara: adana kebap, baklava...">
+    <button id="qBtn" class="btn">Ara</button>
+  </div>
+  <p><a class="btn ghost-light" href="#menu">Menüyü Göster</a></p>
+</section>
+
+<section class="chips" id="chips"></section>
+
+<section id="menu" class="block">
+  <h2>Menü</h2>
+  <div id="grid" class="grid"></div>
+  <p id="empty" class="empty" hidden>Sonuç bulunamadı 🤷</p>
+</section>
+
+<section id="oneriler" class="block">
+  <h2>Öne Çıkanlar</h2>
+  <div class="grid featured">
+    <article class="card feature">
+      <div class="thumb">🍢</div>
+      <h3>Şef Tabağı</h3>
+      <p>Günün en çok tercih edilen üçlüsü tek tabakta.</p>
+      <span class="price">₺185</span>
+    </article>
+    <article class="card feature">
+      <div class="thumb">🥗</div>
+      <h3>Fit Lezzet</h3>
+      <p>Düşük kalorili, bol salata, yanında sade yoğurt.</p>
+      <span class="price">₺120</span>
+    </article>
+    <article class="card feature">
+      <div class="thumb">🍕</div>
+      <h3>Taştekin Pizza</h3>
+      <p>Taş fırında, kenarları çıtır çekilmiş. Bol mozzarella.</p>
+      <span class="price">₺140</span>
+    </article>
+  </div>
+</section>
+
+<section id="yorumlar" class="block">
+  <h2>Müşteri Yorumları</h2>
+  <div class="quotes">
+    <blockquote>“Adana sıcaklığı tam iştah açıcı. Servis hızlı!” <cite>— Ayşe K.</cite></blockquote>
+    <blockquote>“Sabah kahvaltı için mükemmel. Poğaçalar sıcak sıcak gelir.” <cite>— Mehmet T.</cite></blockquote>
+  </div>
+</section>
+
+<section id="iletisim" class="block contact">
+  <h2>İletişim</h2>
+  <div class="contact-wrap">
+    <form id="contactForm" novalidate>
+      <label>Adınız <input id="cName" required></label>
+      <label>Telefon <input id="cPhone" type="tel" required></label>
+      <label>Mesaj <textarea id="cMsg" rows="4" required></textarea></label>
+      <button class="btn" type="submit">Gönder</button>
+      <p id="formMsg" class="form-msg"></p>
+    </form>
+    <div class="hours">
+      <h3>Çalışma Saatleri</h3>
+      <ul>
+        <li><b>Hafta içi:</b> 08:00 - 22:00</li>
+        <li><b>Hafta sonu:</b> 09:00 - 23:00</li>
+        <li><b>Sipariş:</b> 📞 (0212) 555 00 01</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<footer class="footer">
+  © <span id="year"></span> Lezzet Durağı · Sosyal: <a href="#">Instagram</a> · <a href="#">X</a>
+</footer>
+
+<aside id="drawer" class="drawer" aria-hidden="true">
+  <h3>🛒 Sepetim</h3>
+  <div id="cartList" class="cart-list"></div>
+  <div class="cart-total">Toplam: <b id="cartTotal">₺0</b></div>
+  <button id="orderBtn" class="btn wide">Siparişi Ver</button>
+  <button id="closeDrawer" class="btn ghost wide">Kapat</button>
+</aside>
+
+<div id="toast" class="toast" role="status"></div>
+<button id="topBtn" class="top-btn" title="Yukarı">↑</button>
+<script src="script.js"></script>
+</body>
+</html>
+"""
+
+_FOOD_TEMPLATE_CSS = r"""/* Lezzet Durağı — gelişmiş tema */
+:root{
+  --bg:#fff8f2; --panel:#fff; --ink:#2b2118; --muted:#7a6a5c;
+  --brand:#e2542f; --brand-2:#f7a12c; --ok:#2e7d32; --danger:#c62828;
+  --radius:14px; --shadow:0 8px 24px rgba(43,33,24,.08);
+}
+[data-theme="dark"]{
+  --bg:#17130f; --panel:#221c16; --ink:#f5ece2; --muted:#b9a893;
+  --shadow:0 10px 28px rgba(0,0,0,.4);
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:system-ui,'Segoe UI',Roboto,Arial;background:var(--bg);color:var(--ink);transition:background .3s,color .3s}
+img{max-width:100%}
+.topbar{display:flex;align-items:center;gap:1rem;padding:.7rem 1.2rem;background:var(--panel);position:sticky;top:0;z-index:50;box-shadow:var(--shadow)}
+.brand{font-weight:800;font-size:1.1rem}
+.nav{display:flex;gap:1rem;margin-left:auto}
+.nav a{color:var(--ink);text-decoration:none;font-weight:600}
+.nav a:hover{color:var(--brand)}
+.tools{display:flex;gap:.4rem;margin-left:auto}
+.nav + .tools{margin-left:1rem}
+.icon-btn{background:transparent;border:1px solid transparent;font-size:1.2rem;cursor:pointer;position:relative;border-radius:10px;padding:.35rem .5rem}
+.icon-btn:hover{background:rgba(226,84,47,.12)}
+.badge{position:absolute;top:-4px;right:-4px;background:var(--brand);color:#fff;font-size:.65rem;padding:1px 5px;border-radius:999px}
+.hero{padding:4.5rem 1.2rem;text-align:center;background:linear-gradient(135deg,var(--brand),var(--brand-2));color:#fff}
+.hero h1{margin:.2rem 0;font-size:clamp(1.6rem,4vw,2.6rem)}
+.hero .mark{background:rgba(255,255,255,.22);padding:0 .3rem;border-radius:8px}
+.search{display:flex;gap:.5rem;max-width:430px;margin:1.2rem auto 0}
+.search input{flex:1;padding:.8rem 1rem;border:0;border-radius:12px;font-size:1rem}
+.btn{background:var(--brand);color:#fff;border:0;padding:.7rem 1.1rem;border-radius:12px;font-weight:700;cursor:pointer;text-decoration:none;display:inline-block}
+.btn:hover{filter:brightness(1.07)}
+.btn.ghost{background:transparent;border:1px solid var(--muted);color:inherit}
+.btn.wide{width:100%;margin-top:.5rem}
+.chips{display:flex;flex-wrap:wrap;gap:.5rem;justify-content:center;padding:.8rem 1.2rem}
+.chip{border:1px solid var(--muted);background:transparent;color:var(--ink);border-radius:999px;padding:.4rem .9rem;cursor:pointer;font-weight:600}
+.chip.active{background:var(--brand);border-color:var(--brand);color:#fff}
+.block{padding:2.2rem 1.2rem;max-width:1100px;margin:0 auto}
+.block h2{text-align:center;margin-bottom:1.2rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(240px,1fr));gap:1rem}
+.card{background:var(--panel);border-radius:var(--radius);box-shadow:var(--shadow);padding:1rem;display:flex;flex-direction:column;gap:.4rem;transition:transform .15s}
+.card:hover{transform:translateY(-3px)}
+.thumb{font-size:2rem;text-align:center;background:rgba(247,161,44,.14);border-radius:10px;padding:.8rem}
+.price{font-weight:800;color:var(--brand)}
+.feature .price{font-size:1.05rem}
+.empty{text-align:center;color:var(--muted)}
+.quotes{display:grid;gap:1rem;max-width:760px;margin:0 auto}
+.quotes blockquote{background:var(--panel);border-left:4px solid var(--brand-2);margin:0;padding:1rem 1.2rem;border-radius:10px;box-shadow:var(--shadow)}
+.contact-wrap{display:grid;gap:1.2rem;grid-template-columns:1fr;max-width:820px;margin:0 auto}
+@media(min-width:820px){.contact-wrap{grid-template-columns:1.2fr .8fr}}
+form{display:grid;gap:.7rem;background:var(--panel);padding:1.2rem;border-radius:var(--radius);box-shadow:var(--shadow)}
+label{display:grid;gap:.3rem;font-weight:600;font-size:.9rem}
+input,textarea{padding:.7rem .9rem;border:1px solid rgba(0,0,0,.18);border-radius:10px;font:inherit;background:transparent;color:inherit}
+input:focus,textarea:focus{outline:2px solid var(--brand-2)}
+.hours{background:var(--panel);padding:1.2rem;border-radius:var(--radius);box-shadow:var(--shadow)}
+.hours ul{list-style:none;padding:0;margin:.6rem 0 0}
+.hours li{padding:.3rem 0;color:var(--muted)}
+.footer{border-top:1px solid rgba(0,0,0,.1);padding:1.2rem;text-align:center;color:var(--muted)}
+.drawer{position:fixed;top:0;right:-370px;width:340px;height:100vh;background:var(--panel);box-shadow:-12px 0 30px rgba(0,0,0,.18);transition:right .25s;padding:1.2rem;z-index:80;overflow:auto}
+.drawer.open{right:0}
+.cart-list{display:grid;gap:.6rem;margin:.8rem 0}
+.cart-row{display:flex;align-items:center;gap:.5rem;background:var(--bg);border-radius:10px;padding:.5rem .7rem}
+.cart-row b{flex:1}
+.cart-row .qty{display:flex;gap:.3rem;align-items:center}
+.cart-row button{border:0;background:var(--brand-2);color:#3a2c1e;font-weight:800;border-radius:8px;width:26px;cursor:pointer}
+.cart-total{text-align:right;margin:.6rem 0}
+.toast{position:fixed;left:50%;bottom:1.4rem;transform:translateX(-50%);background:var(--ink);color:var(--bg);padding:.7rem 1.2rem;border-radius:999px;opacity:0;pointer-events:none;transition:opacity .25s;z-index:99}
+.toast.show{opacity:1}
+.top-btn{position:fixed;right:1rem;bottom:1rem;width:42px;height:42px;border-radius:50%;border:0;background:var(--brand);color:#fff;font-size:1.2rem;cursor:pointer;opacity:0;pointer-events:none;transition:opacity .2s}
+.top-btn.show{opacity:1}
+@media(max-width:720px){
+  .nav{display:none;position:fixed;inset:56px 0 auto;background:var(--panel);flex-direction:column;padding:1rem;box-shadow:var(--shadow)}
+  .nav.open{display:flex}
+}
+"""
+
+_FOOD_TEMPLATE_JS = r"""/* Lezzet Durağı — gelişmiş davranışlar */
+const MENU = [
+  { id:1, ad:"Adana Kebap", kategori:"Kebaplar", fiyat:150, emoji:"🍢" },
+  { id:2, ad:"Kuzu Şiş", kategori:"Kebaplar", fiyat:185, emoji:"🥩" },
+  { id:3, ad:"Margherita", kategori:"Pizzalar", fiyat:110, emoji:"🍕" },
+  { id:4, ad:"Karışık Pizza", kategori:"Pizzalar", fiyat:140, emoji:"🍕" },
+  { id:5, ad:"Lazanya", kategori:"Ana Yemek", fiyat:130, emoji:"🍝" },
+  { id:6, ad:"Çorba", kategori:"İçecekler", fiyat:35, emoji:"🍲" },
+  { id:7, ad:"Baklava", kategori:"Tatlılar", fiyat:65, emoji:"🍰" },
+  { id:8, ad:"Sütlaç", kategori:"Tatlılar", fiyat:45, emoji:"🍮" },
+  { id:9, ad:"Ayran", kategori:"İçecekler", fiyat:25, emoji:"🥛" },
+  { id:10, ad:"Limonata", kategori:"İçecekler", fiyat:35, emoji:"🍋" },
+];
+
+const CATEGORIES = ["Tümü", ...new Set(MENU.map(m => m.kategori))];
+let aktifKategori = "Tümü";
+let cart = {};
+
+const gridEl = document.getElementById("grid");
+const chipsEl = document.getElementById("chips");
+
+function ilkSiparis() {
+  try { cart = JSON.parse(localStorage.getItem("ld_cart") || "{}"); }
+  catch (e) { cart = {}; }
+}
+
+function renderChips() {
+  chipsEl.innerHTML = "";
+  CATEGORIES.forEach(k => {
+    const b = document.createElement("button");
+    b.className = "chip" + (k === aktifKategori ? " active" : "");
+    b.textContent = k;
+    b.onclick = () => { aktifKategori = k; render(); };
+    chipsEl.appendChild(b);
+  });
+}
+
+function render(q) {
+  const term = (q || "").toLowerCase().trim();
+  const liste = MENU.filter(m =>
+    (aktifKategori === "Tümü" || m.kategori === aktifKategori) &&
+    (!term || m.ad.toLowerCase().includes(term))
+  );
+  gridEl.innerHTML = "";
+  liste.forEach(m => {
+    const card = document.createElement("article");
+    card.className = "card";
+    const icerik =
+      '<div class="thumb">' + m.emoji + '</div>' +
+      '<h3>' + m.ad + '</h3>' +
+      '<span class="price">₺' + m.fiyat + '</span>' +
+      '<button class="btn ekle">Sepete Ekle</button>';
+    card.innerHTML = icerik;
+    card.querySelector(".ekle").onclick = () => sep(m.id);
+    gridEl.appendChild(card);
+  });
+  document.getElementById("empty").hidden = liste.length > 0;
+}
+
+function sep(id) {
+  cart[id] = (cart[id] || 0) + 1;
+  cartKaydet();
+  toast(MENU.find(m => m.id === id).ad + " sepete eklendi ✅");
+}
+
+function cartKaydet() {
+  localStorage.setItem("ld_cart", JSON.stringify(cart));
+  renderCart();
+}
+
+function renderCart() {
+  const entries = Object.entries(cart);
+  const list = document.getElementById("cartList");
+  let toplam = 0;
+  list.innerHTML = "";
+  entries.forEach(([id, n]) => {
+    const m = MENU.find(x => x.id === Number(id));
+    if (!m) return;
+    toplam += m.fiyat * n;
+    const row = document.createElement("div");
+    row.className = "cart-row";
+    const html = '<b>' + m.emoji + ' ' + m.ad + '</b>' +
+      '<span class="qty"><button data-a="-">−</button><span>' + n + '</span>' +
+      '<button data-a="+">+</button></span>' +
+      '<span>₺' + (m.fiyat * n) + '</span>';
+    row.innerHTML = html;
+    row.querySelectorAll("button").forEach(btn => {
+      btn.onclick = () => {
+        const a = btn.dataset.a;
+        cart[id] = a === "+" ? cart[id] + 1 : cart[id] - 1;
+        if (cart[id] <= 0) delete cart[id];
+        cartKaydet();
+      };
+    });
+    list.appendChild(row);
+  });
+  if (!entries.length) list.innerHTML = BOS;
+  document.getElementById("cartTotal").textContent = "₺" + toplam;
+  const n = entries.reduce((s, [k, v]) => s + v, 0);
+  document.getElementById("cartBadge").textContent = n;
+}
+
+const toastEl = document.getElementById("toast");
+function toast(msg) {
+  toastEl.textContent = msg;
+  toastEl.classList.add("show");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => toastEl.classList.remove("show"), 2200);
+}
+
+// Sepet boş metni
+const BOS = '<p class="empty">Sepet boş · menüden bir şeyler ekle 🍽️</p>';
+
+// Tema
+const themeBtn = document.getElementById("themeBtn");
+themeBtn.onclick = () => {
+  const root = document.documentElement;
+  const dark = root.dataset.theme === "dark";
+  root.dataset.theme = dark ? "light" : "dark";
+  themeBtn.textContent = dark ? "🌙" : "☀️";
+  localStorage.setItem("ld_theme", root.dataset.theme);
+};
+const kayitTema = localStorage.getItem("ld_theme");
+if (kayitTema) {
+  document.documentElement.dataset.theme = kayitTema;
+  themeBtn.textContent = kayitTema === "dark" ? "☀️" : "🌙";
+}
+
+// Sepet / menü butonları
+const drawer = document.getElementById("drawer");
+document.getElementById("cartBtn").onclick = () => drawer.classList.add("open");
+document.getElementById("closeDrawer").onclick = () => drawer.classList.remove("open");
+document.getElementById("orderBtn").onclick = () => {
+  if (!Object.keys(cart).length) return toast("Sepet boş 🤔");
+  toast("Sipariş alındı! 30 dakikada kapında 🚀");
+  cart = {}; cartKaydet(); drawer.classList.remove("open");
+};
+
+// Mobil nav
+document.getElementById("navBtn").onclick = () =>
+  document.getElementById("nav").classList.toggle("open");
+
+// Arama
+const qEl = document.getElementById("q");
+qEl.addEventListener("input", () => render(qEl.value));
+document.getElementById("qBtn").onclick = () => render(qEl.value);
+
+// İletişim doğrulama
+const form = document.getElementById("contactForm");
+form.addEventListener("submit", e => {
+  e.preventDefault();
+  const msg = document.getElementById("formMsg");
+  if (!form.checkValidity()) {
+    msg.textContent = "Lütfen tüm alanları doldurun.";
+    msg.style.color = "var(--danger)";
+    return;
+  }
+  msg.textContent = "Mesajınız alındı, teşekkürler!";
+  msg.style.color = "var(--ok)";
+  form.reset();
+});
+
+// Scroll efektleri
+const topBtn = document.getElementById("topBtn");
+window.addEventListener("scroll", () => {
+  topBtn.classList.toggle("show", window.scrollY > 400);
+});
+topBtn.onclick = () => window.scrollTo({ top: 0 });
+
+document.getElementById("year").textContent = new Date().getFullYear();
+
+ilkSiparis();
+renderChips();
+render();
+renderCart();
+"""
+
+
+# ------------------------------------------------------------------
+# ALAN ŞABLONU 2: NAMAZ VAKİTLERİ — MOBİL UYGULAMA (PWA hissi)
+# ------------------------------------------------------------------
+
+_PRAYER_TEMPLATE_HTML = r"""<!DOCTYPE html>
+<html lang="tr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Namaz Vakitleri</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<div class="phone">
+  <header class="h">
+    <div>
+      <h1>Namaz Vakitleri</h1>
+      <p id="tarih">—</p>
+    </div>
+    <select id="city" aria-label="Şehir">
+      <option>İstanbul</option><option>Ankara</option><option>İzmir</option>
+      <option>Bursa</option><option>Adana</option><option>Konya</option>
+      <option>Antalya</option><option>Gaziantep</option>
+    </select>
+  </header>
+
+  <section class="next">
+    <p class="lbl">Sıradaki vakit</p>
+    <h2 id="nextName">—</h2>
+    <p id="nextTime" class="big">--:--</p>
+    <p id="kalan" class="kalan">kalan —:—:—</p>
+    <div class="bar"><div id="prog"></div></div>
+  </section>
+
+  <ul id="rows" class="rows"></ul>
+
+  <section class="actions">
+    <button id="notif" class="btn">🔔 Hatırlatıcıyı Aç</button>
+    <button id="theme" class="btn ghost">🌗 Tema</button>
+  </section>
+
+  <p class="note">Şehir değerleri istasyon örnek değerlerden hazırlanmıştır
+  (demo). Tutarlı takip için diyanetin resmi uygulamasını referans alın.</p>
+</div>
+<script src="script.js"></script>
+</body>
+</html>
+"""
+
+_PRAYER_TEMPLATE_CSS = r"""/* Namaz Vakitleri — mobil tema */
+:root{--bg:#0e2a25;--panel:#123a33;--ink:#eafff8;--muted:#9fd4c8;--brand:#34d399;--brand2:#0f766e}
+[data-theme="light"]{--bg:#f0fdf9;--panel:#ffffff;--ink:#123a33;--muted:#52796f;--brand:#0f766e;--brand2:#14b8a6}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,Segoe UI,Roboto,Arial;background:linear-gradient(160deg,var(--bg),#1a0d24 340%);color:var(--ink);min-height:100vh;display:flex;justify-content:center;transition:background .3s}
+.phone{width:100%;max-width:430px;padding:1.1rem 1rem 2.4rem}
+.h{display:flex;justify-content:space-between;align-items:flex-start;gap:.6rem}
+h1{font-size:1.35rem;margin:.1rem 0}
+.h p{margin:0;color:var(--muted);font-size:.85rem}
+select{background:var(--panel);color:var(--ink);border:1px solid var(--brand2);padding:.45rem .7rem;border-radius:12px;font-weight:600}
+.next{background:linear-gradient(135deg,var(--brand2),var(--brand));color:#023b34;border-radius:20px;padding:1.1rem;text-align:center;margin:1rem 0;box-shadow:0 12px 28px rgba(15,118,110,.35)}
+.next .lbl{opacity:.8;margin:0;font-weight:600;letter-spacing:.4px}
+.next h2{margin:.2rem 0;font-size:1.7rem;color:#fff}
+.next .big{font-size:2.4rem;font-weight:800;margin:.1rem 0;color:#fff}
+.kalan{font-weight:700;margin:0.2rem 0 .6rem}
+.bar{height:8px;background:rgba(255,255,255,.3);border-radius:999px;overflow:hidden}
+.bar div{height:100%;width:0;background:#fff;transition:width .4s}
+.rows{list-style:none;margin:0;padding:0}
+.rows li{display:flex;justify-content:space-between;align-items:center;background:var(--panel);padding:.85rem 1rem;border-radius:14px;margin-bottom:.55rem;font-weight:600}
+.rows li span:last-child{font-variant-numeric:tabular-nums;color:var(--muted)}
+.rows li.soon{border:2px solid var(--brand);transform:scale(1.02)}
+.rows li.done{opacity:.5;text-decoration:line-through}
+.actions{display:flex;gap:.6rem;margin-top:1rem}
+.btn{flex:1;background:var(--brand);color:#05231f;border:0;padding:.75rem;border-radius:14px;font-weight:800;cursor:pointer}
+.btn.ghost{background:transparent;border:1px solid var(--brand);color:var(--ink)}
+.note{color:var(--muted);font-size:.78rem;line-height:1.5;margin-top:1.2rem}
+"""
+
+_PRAYER_TEMPLATE_JS = r"""/* Namaz Vakitleri — mantık */
+const VAKITLER = ["İmsak", "Güneş", "Öğle", "İkindi", "Akşam", "Yatsı"];
+const TABELA = {
+  "İstanbul": ["05:23", "06:28", "12:08", "14:51", "17:02", "18:32"],
+  "Ankara": ["05:13", "06:22", "12:02", "14:46", "16:58", "18:30"],
+  "İzmir": ["05:38", "06:44", "12:18", "14:57", "17:04", "18:32"],
+  "Bursa": ["05:31", "06:36", "12:14", "14:57", "17:10", "18:40"],
+  "Adana": ["04:58", "06:16", "11:56", "14:37", "16:52", "18:16"],
+  "Konya": ["05:14", "06:26", "12:04", "14:44", "16:58", "18:22"],
+  "Antalya": ["05:32", "06:40", "12:06", "14:46", "16:56", "18:20"],
+  "Gaziantep": ["04:44", "05:58", "11:42", "14:22", "16:32", "17:52"],
+};
+
+let city = localStorage.getItem("nv_city") || "İstanbul";
+const cityEl = document.getElementById("city");
+cityEl.value = city;
+cityEl.onchange = () => { city = cityEl.value; localStorage.setItem("nv_city", city); render(); };
+
+const rowsEl = document.getElementById("rows");
+const TR = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
+
+function toMin(s) {
+  const [h, mi] = s.split(":").map(Number);
+  return h * 60 + mi;
+}
+
+function nowMin() {
+  const d = new Date();
+  return d.getHours() * 60 + d.getMinutes() + d.getSeconds() / 60;
+}
+
+function hicriTarih(d) {
+  try {
+    return new Intl.DateTimeFormat("tr-TR-u-ca-islamic", {
+      day: "numeric", month: "long", year: "numeric",
+    }).format(d) + " hicri";
+  } catch (e) { return ""; }
+}
+
+function render() {
+  const saatler = TABELA[city] || TABELA["İstanbul"];
+  const d = new Date();
+  document.getElementById("tarih").textContent =
+    TR[d.getDay()] + ", " + d.getDate() + " " +
+    d.toLocaleString("tr-TR", { month: "long" }) + " · " + hicriTarih(d);
+  rowsEl.innerHTML = "";
+  VAKITLER.forEach((ad, i) => {
+    const li = document.createElement("li");
+    li.innerHTML = '<span>' + ad + '</span><span>' + saatler[i] + '</span>';
+    li.dataset.min = toMin(saatler[i]);
+    rowsEl.appendChild(li);
+  });
+  tik();
+}
+
+function tik() {
+  const rows = [...rowsEl.children];
+  const n = nowMin();
+  let idx = rows.findIndex(li => Number(li.dataset.min) > n);
+  let endOfDay = false;
+  if (idx === -1) { idx = 0; endOfDay = true; }
+  rows.forEach((li, i) => {
+    li.classList.toggle("done", endOfDay ? false : Number(li.dataset.min) < n);
+    li.classList.toggle("soon", i === idx && !endOfDay);
+  });
+  document.getElementById("nextName").textContent =
+    endOfDay ? "İmsak (yarın)" : VAKITLER[idx];
+  document.getElementById("nextTime").textContent =
+    rows[idx].children[1].textContent;
+
+  let hedef = Number(rows[idx].dataset.min);
+  if (endOfDay) hedef += 24 * 60;
+  let start;
+  if (idx === 0) {
+    // İmsak öncesi/gecesi: başlangıç dünkü/bugünkü Yatsı
+    start = Number(rows[rows.length - 1].dataset.min);
+    if (!endOfDay) start -= 24 * 60;
+  } else {
+    start = Number(rows[idx - 1].dataset.min);
+  }
+  const span = Math.max(1, hedef - start);
+  const gecen = Math.min(Math.max(0, n - start), span);
+  document.getElementById("prog").style.width =
+    Math.round(100 * gecen / span) + "%";
+
+  const kalan = Math.max(0, hedef - n);
+  const hour = Math.floor(kalan / 60), min = Math.floor(kalan % 60), sec = Math.floor((kalan % 1) * 60);
+  document.getElementById("kalan").textContent =
+    "kalan " + String(hour).padStart(2, "0") + ":" +
+    String(min).padStart(2, "0") + ":" + String(sec).padStart(2, "0");
+}
+
+document.getElementById("theme").onclick = () => {
+  const root = document.documentElement;
+  root.dataset.theme = root.dataset.theme === "dark" ? "light" : "dark";
+  localStorage.setItem("nv_theme", root.dataset.theme);
+};
+const kayitTema = localStorage.getItem("nv_theme");
+if (kayitTema) document.documentElement.dataset.theme = kayitTema;
+
+const notifBtn = document.getElementById("notif");
+notifBtn.onclick = async () => {
+  if (!("Notification" in window)) return alert("Tarayıcı bildirim desteklemiyor.");
+  const perm = await Notification.requestPermission();
+  if (perm === "granted") {
+    new Notification("Namaz Vakitleri", { body: "Vakit uyarıları aktif ✅" });
+    notifBtn.textContent = "🔔 Hatırlatıcı Açık";
+  } else {
+    notifBtn.textContent = "🔕 İzin yok";
+  }
+};
+
+render();
+setInterval(tik, 1000);
+"""
+
+_PRAYER_TEMPLATE_MANIFEST = r"""{
+  "name": "Namaz Vakitleri",
+  "short_name": "Vakitler",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0e2a25",
+  "theme_color": "#0f766e",
+  "lang": "tr",
+  "description": "Namaz vakitlerini gösteren mobil uyumlu uygulama (demo veri)."
+}
+"""
+
+
+# ------------------------------------------------------------------
+# ALAN ŞABLONU 3: ÖĞRENCİ GİRİŞİ — MASAÜSTÜ UYGULAMASI (Tkinter)
+# ------------------------------------------------------------------
+
+_STUDENT_TEMPLATE_PY = r'''# Ogrenci Girisi - masaustu uygulama (Tkinter)
+# Calistirma: python main.py   |  penceresiz oz test: python main.py --check
+import json
+import os
+import sys
+
+VERI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "veri.json")
+DB = {}
+
+
+def veri_yukle():
+    if not os.path.exists(VERI):
+        demo = {
+            "kullanicilar": {
+                "2026001": {"sifre": "1234", "ad": "Ali Veli", "sinif": "9-A", "rol": "ogrenci"},
+                "2026002": {"sifre": "1234", "ad": "Zeynep Ay", "sinif": "10-B", "rol": "ogrenci"},
+                "2026003": {"sifre": "1234", "ad": "Admin K.", "sinif": "-", "rol": "yonetici"},
+            },
+            "dersler": {
+                "2026001": [["Matematik", 90], ["Fizik", 78], ["Turkce", 85], ["Biyoloji", 67], ["Kimya", 91], ["Tarih", 80]],
+                "2026002": [["Matematik", 88], ["Fizik", 92], ["Turkce", 76], ["Biyoloji", 81], ["Kimya", 95], ["Tarih", 89]],
+            },
+            "devamsizlik": {"2026001": 3, "2026002": 1, "2026003": 0},
+            "duyurular": [
+                "Fizik 1. sinav 12 Kasim'da!",
+                "Kutuphane yeni kitaplar geldi.",
+            ],
+        }
+        with open(VERI, "w", encoding="utf-8") as f:
+            json.dump(demo, f, ensure_ascii=False, indent=2)
+    with open(VERI, "r", encoding="utf-8") as f:
+        return json.load(f)
+
+
+def veri_kaydet():
+    with open(VERI, "w", encoding="utf-8") as f:
+        json.dump(DB, f, ensure_ascii=False, indent=2)
+
+
+def giris(no, sifre):
+    no = (no or "").strip()
+    sifre = (sifre or "").strip()
+    if not no or not sifre:
+        return None, "Numara ve sifre bos olamaz."
+    k = DB["kullanicilar"].get(no)
+    if not k:
+        return None, "Bu numaraya ait kayit yok."
+    if k["sifre"] != sifre:
+        return None, "Sifre hatali."
+    return no, "Hos geldin, " + k["ad"] + "!"
+
+
+def ortalama(no):
+    ders = DB["dersler"].get(no) or []
+    if not ders:
+        return 0.0
+    return round(sum(n for _, n in ders) / len(ders), 2)
+
+
+def harf_ort(ort):
+    if ort >= 85: return "A"
+    if ort >= 70: return "B"
+    if ort >= 55: return "C"
+    return "F"
+
+
+class PanelUI:
+    # Giris sonrasi yeni pencere: notlar + duyurular
+    def __init__(self, master, no):
+        import tkinter as tk
+        self.win = tk.Toplevel(master) if master else tk.Tk()
+        self.on_kapat = None
+        k = DB["kullanicilar"].get(no, {})
+        self.win.title("Panel - " + k.get("ad", "Ogrenci"))
+        self.win.geometry("560x460")
+        tk.Label(self.win, text="Ogrenci Paneli", font=("Segoe UI", 15, "bold")).grid(row=0, column=1, pady=(12, 2))
+        tk.Label(self.win, text=(k.get("ad", "") + "  |  sinif: " + str(k.get("sinif", "-"))),
+                 fg="#555").grid(row=1, column=1)
+        ort = ortalama(no)
+        tk.Label(self.win, text="Ortalama: " + str(ort) + "  (" + harf_ort(ort) + ")",
+                 font=("Segoe UI", 12, "bold"), fg="#2563eb").grid(row=2, column=1, pady=2)
+        tk.Label(self.win, text="Devamsizlik: " + str(DB["devamsizlik"].get(no, 0)) + " gun",
+                 fg="#a16207").grid(row=3, column=1, pady=2)
+
+        tk.Label(self.win, text="Ders Notlari", font=("Segoe UI", 12, "bold")).grid(row=4, column=0, sticky="w", padx=12, pady=(10, 2))
+        for i, (d, n) in enumerate(DB["dersler"].get(no, []), start=5):
+            tk.Label(self.win, text=d).grid(row=i, column=0, sticky="w", padx=12)
+            tk.Label(self.win, text=str(n), fg="#0f766e").grid(row=i, column=0, sticky="e", padx=120)
+
+        tk.Label(self.win, text="Duyurular", font=("Segoe UI", 12, "bold")).grid(row=4, column=2, sticky="w", padx=12, pady=(10, 2))
+        kutu = tk.Text(self.win, width=26, height=10, border=0, bg="#f8fafc")
+        kutu.insert("1.0", "\n".join("- " + d for d in DB["duyurular"]))
+        kutu.configure(state="disabled")
+        kutu.grid(row=5, column=2, rowspan=6, padx=12)
+
+        tk.Button(self.win, text="Cikis", width=12,
+                  command=lambda: self.kapat()).grid(row=14, column=1, pady=10)
+
+    def kapat(self):
+        self.win.destroy()
+        if self.on_kapat:
+            self.on_kapat()
+
+
+class GirisiUI:
+    # Ana pencere: numara + sifre ile giris
+    def __init__(self):
+        import tkinter as tk
+        self.win = tk.Tk()
+        self.win.title("Ogrenci Girisi")
+        self.win.geometry("360x380")
+        tk.Label(self.win, text="Ogrenci Girisi", font=("Segoe UI", 16, "bold")).pack(pady=(20, 4))
+        tk.Label(self.win, text="Numara ve sifre giriniz:").pack(pady=(0, 8))
+        self.fNO = tk.Entry(self.win, font=("Segoe UI", 12), width=22)
+        self.fNO.insert(0, DB.get("son_no", ""))
+        self.fNO.pack(pady=4, ipady=5)
+        self.fSifre = tk.Entry(self.win, show="*", font=("Segoe UI", 12), width=22)
+        self.fSifre.pack(pady=4, ipady=5)
+        tk.Button(self.win, text="Giris Yap", width=18, bg="#2563eb", fg="white",
+                  font=("Segoe UI", 12, "bold"), command=self.gir_ana).pack(pady=10)
+        tk.Label(self.win, text="Demo ogrenci: 2026001 / 1234", fg="#7a6a5c").pack()
+        tk.Label(self.win, text="Demo yonetici: 2026003 / 1234", fg="#7a6a5c").pack()
+        self.durum = tk.Label(self.win, text="", fg="#c62828")
+        self.durum.pack(pady=6)
+        self.win.bind("<Return>", lambda e: self.gir_ana())
+
+    def gir_ana(self):
+        no, mesaj = giris(self.fNO.get(), self.fSifre.get())
+        if not no:
+            self.durum.configure(text=mesaj, fg="#c62828")
+            return
+        DB["son_no"] = no
+        veri_kaydet()
+        self.win.withdraw()
+        self.panel = PanelUI(self.win, no)
+        self.panel.on_kapat = self.pana_kapat
+        self.panel.win.protocol("WM_DELETE_WINDOW", self.pana_kapat)
+
+    def pana_kapat(self):
+        self.win.destroy()
+
+
+def oztest():
+    global DB
+    DB = veri_yukle()
+    no, _msg = giris("2026001", "1234")
+    bozuk, hata = giris("2026001", "yanlis")
+    yok, _ = giris("9999999", "1234")
+    ort_b = harf_ort(ortalama("2026002"))
+    sonuc = (
+        no == "2026001"
+        and bozuk is None and hata == "Sifre hatali."
+        and yok is None
+        and ort_b == "A"
+    )
+    print("CHECK:", "OK" if sonuc else "FAIL", "| ortalama(2026002):", ortalama("2026002"), ort_b)
+    return 0 if sonuc else 1
+
+
+if __name__ == "__main__":
+    if "--check" in sys.argv:
+        sys.exit(oztest())
+    DB = veri_yukle()
+    try:
+        import tkinter as tk  # noqa: F401
+    except ImportError:
+        print("Bu uygulama tkinter gerektirir (standart Python kurulumunda vardir).")
+        sys.exit(1)
+    app = GirisiUI()
+    app.win.mainloop()
+'''
+
+_STUDENT_TEMPLATE_README = r"""# Öğrenci Girişi — Masaüstü Uygulaması
+
+Gerçek bir masaüstü uygulamasıdır (Python/Tkinter). Kurulum gerektirmez.
+
+## Çalıştırma
+```
+python main.py
+```
+## Öz test (pencere açmadan)
+```
+python main.py --check
+```
+
+## Demo hesaplar
+- Öğrenci: `2026001` / şifre `1234`
+- Diğer öğrenci: `2026002` / `1234`
+- Yönetici: `2026003` / `1234`
+
+## Neler var?
+- Giriş penceresi: numara/şifre doğrulama, Enter ile giriş, beni hatırla (son numara).
+- Panel penceresi: öğrenci adı, ortalama (harf notuyla), devamsızlık, ders notları, duyurular.
+- Veriler `veri.json` içinde; uygulama ilk çalışmada örnek veri üretir.
+
+İyi çalışmalar! 🎓
+"""
+
+_STUDENT_TEMPLATE_DATA = r"""{
+  "kullanicilar": {},
+  "dersler": {},
+  "devamsizlik": {},
+  "duyurular": []
+}
+"""
+
+
 def _parse_retry_after(response, default: float = 20.0) -> float:
     """Extract a sane wait time (seconds) from a 429 response.
 
@@ -183,22 +1264,14 @@ class NexusAIAgent:
     """
     
     def __init__(self, llm_config: LLMConfig = None):
-        """Bulut tarafında yalnızca OpenRouter'ı kullan."""
-        # Groq, OpenAI, Anthropic, Google Gemini ve Together AI kaldırıldı.
-        # Yerel model ayrıca NEXUS_LOCAL_LLM_* ile birincil/fallback çalışır.
-        openrouter_key = os.getenv("OPENROUTER_API_KEY", "")
-        
-        # Validate key (not placeholder)
-        def is_valid(key: str) -> bool:
-            return key and not key.startswith("your-") and not key.startswith("sk-placeholder") and len(key) > 10
-        
-        if is_valid(openrouter_key):
-            api_key, base_url, model, provider = openrouter_key, "https://openrouter.ai/api/v1", "meta-llama/llama-3.1-70b-instruct:free", "openrouter"
-        else:
-            api_key, base_url, model, provider = "sk-placeholder", None, "fallback", "fallback"
+        """Yalnızca yerel Ollama modelini kullan."""
+        import local_llm
+        base_url = local_llm.configured_url() or "http://127.0.0.1:11434/v1"
+        model = local_llm.model_name() or "qwen2.5:3b"
+        provider = "local"
         
         self.llm_config = llm_config or LLMConfig(
-            api_key=api_key, base_url=base_url, model=model
+            api_key="", base_url=base_url, model=model
         )
         self.provider = provider
         logger.info(f"LLM Provider: {provider} | Model: {model}")
@@ -235,23 +1308,30 @@ class NexusAIAgent:
         _ACTIVE_MODEL.set(value)
 
     def _refresh_llm_config(self):
-        """Refresh LLM config from model_config.json (latest active provider/model)."""
+        """Refresh LLM config from model_config.json (Yerel Ollama)."""
         try:
-            from model_routes import _load_config, MODEL_CATALOG
+            from model_routes import (
+                _load_config, LOCAL_PROVIDER_ID,
+                LOCAL_DEFAULT_BASE_URL, LOCAL_DEFAULT_MODEL,
+            )
+            import local_llm
+
             config = _load_config()
-            active_provider = config.get("active_provider")
             active_model = config.get("active_model")
-            if not active_provider or not active_model:
-                return
-            provider_info = MODEL_CATALOG.get(active_provider)
-            if not provider_info:
-                return
-            api_key = config.get("api_keys", {}).get(active_provider, "") or os.getenv(provider_info["env_key"], "")
-            if api_key and api_key not in ("sk-placeholder",):
-                self.llm_config.api_key = api_key
-                self.llm_config.base_url = provider_info["base_url"]
-                self.llm_config.model = active_model
-                self.provider = active_provider
+            base_url = (
+                local_llm.configured_url()
+                or os.getenv(local_llm.ENV_URL)
+                or LOCAL_DEFAULT_BASE_URL
+            ).rstrip("/")
+            model = (
+                active_model
+                or local_llm.model_name()
+                or LOCAL_DEFAULT_MODEL
+            )
+            self.llm_config.api_key = ""
+            self.llm_config.base_url = base_url
+            self.llm_config.model = model
+            self.provider = LOCAL_PROVIDER_ID
         except Exception as e:
             logger.warning(f"Could not refresh LLM config: {e}")
     
@@ -352,7 +1432,7 @@ After completing a task, ask yourself:
 
 When you need to use tools, call them. Work like a real coding assistant — read code before editing, test after changes."""
 
-    async def chat(self, user_message: str, conversation_id: str = None, history: List[Dict] = None, agent_id: str = None, tools_override: List[str] = None, system_prefix: str = None) -> Dict:
+    async def chat(self, user_message: str, conversation_id: str = None, history: List[Dict] = None, agent_id: str = None, tools_override: List[str] = None, system_prefix: str = None, current_user = None) -> Dict:
         """
         Main chat interface. Processes user message through LLM with tool use.
         Records experience in brain for continuous learning.
@@ -361,11 +1441,16 @@ When you need to use tools, call them. Work like a real coding assistant — rea
                          (Kodlama Yöneticisi kullanır; yazma adımında salt-okuma
                          araçlarına daraltılabilir).
         system_prefix  : sistem istemine eklenen kısa ön-ek (görev tanımı/rol).
+        current_user   : authenticated user for API key access
         """
         import time
         start_time = time.time()
         
-        # Resolve agent_id: auto selection or specific agent
+        # Store current user for LLM config refresh
+        self._current_user = current_user
+        
+        # Refresh LLM config with user's API keys
+        self._refresh_llm_config()
         custom_system_prompt = None
         self._active_tools = None  # reset per chat; set below if a custom agent is used
         self._active_model = None
@@ -509,6 +1594,7 @@ Kurallar:
             # Gerçekten DEĞİŞEN dosyalar (araç sonucunun `path` alanından).
             # Rapor "0 dosya değişti" yalanı söylemesin: kanıt araç sonucudur.
             files_changed: List[str] = []
+            tool_failures = 0
             full_response = ""
             thinking_steps = []  # Track thinking process
             
@@ -519,14 +1605,34 @@ Kurallar:
                 "icon": "🧠"
             })
             
-            max_iterations = 25
+            max_iterations = 5
             iteration = -1
+            llm_failure: Optional[str] = None
+            # Site/uygulama/proje inşa + mevcut proje düzenleme istekleri
+            # deterministik kanada gider: küçük yerel modeller araç döngüsünde
+            # gereksiz onlarca çağrı yapıp dakikaları harcarken dosya bile
+            # açmazdı. (Kodlama zinciri uzman adımları etkilenmez.)
+            _skip_agent_loop = (
+                system_prefix is None
+                and (bool(self._is_build_request(user_message))
+                     or bool(self._is_edit_request(user_message)))
+            )
             for iteration in range(max_iterations):
+                if _skip_agent_loop:
+                    logger.info("Build/Edit isteği: ajan araç döngüsü atlanıyor")
+                    break
                 llm_response = await self._call_llm(messages)
 
                 if not llm_response.get("success") or "data" not in llm_response:
-                    logger.warning(f"LLM call failed in iteration {iteration}: {llm_response.get('error', 'unknown')}")
-                    continue
+                    # _call_llm kendi fallback zincirini zaten çalıştırır.
+                    # Aynı hatayı 25 kez tekrarlamak (özellikle yavaş yerel
+                    # modelde) kaynak israfıdır; ilk kesin hatada durulur.
+                    llm_failure = llm_response.get("error") or "LLM yanıtı alınamadı"
+                    logger.warning(
+                        "LLM call failed in iteration %s: %s",
+                        iteration, llm_failure,
+                    )
+                    break
 
                 response_data = llm_response["data"] or {}
                 choices = response_data.get("choices", [])
@@ -538,6 +1644,22 @@ Kurallar:
                 message = choice.get("message", {})
                 tool_calls = message.get("tool_calls", [])
                 
+                # Yerel modeller bazen tool_calls yerine content içine JSON araç
+                # çağrısı basar; çoğu zaman da BİRDEN ÇOK çağrıyı arka arkaya
+                # (düz metin/çit içinde) dizer. Tümünü çıkarıp çalıştır.
+                if not tool_calls and message.get("content"):
+                    _allowed_names = [
+                        t.get("function", {}).get("name")
+                        for t in (self._tools_payload() or [])
+                    ]
+                    _found_calls, _found_final = _extract_tool_json_calls(
+                        message["content"], _allowed_names
+                    )
+                    if _found_final and not _found_calls:
+                        full_response = _found_final
+                    if _found_calls:
+                        tool_calls = _found_calls
+
                 # If there's content alongside tool calls, add as thinking
                 if message.get("content") and tool_calls:
                     thinking_steps.append({
@@ -547,13 +1669,15 @@ Kurallar:
                     })
                 
                 if not tool_calls:
-                    full_response = message.get("content", "")
+                    if not full_response:
+                        full_response = message.get("content", "")
                     break
                 
                 messages.append(message)
                 
                 # Derinlemesine savunma: executor'a etkin araç allow-list'ini ver.
                 _allowed_tools = self._allowed_tool_names()
+                _stop_after_tool = False
                 for tool_call in tool_calls:
                     if not isinstance(tool_call, dict):
                         logger.warning("Skipping malformed tool_call (not a dict)")
@@ -609,6 +1733,7 @@ Kurallar:
                     # silently continuing with a broken step (root cause of many
                     # half-finished multi-step tasks).
                     if isinstance(tool_result, dict) and tool_result.get("success") is False:
+                        tool_failures += 1
                         err = tool_result.get("error") or tool_result.get("message") or ""
                         messages.append({
                             "role": "user",
@@ -625,16 +1750,55 @@ Kurallar:
                     self.memory.add_message(conversation_id, Message(
                         role="tool", content=json.dumps(tool_result, ensure_ascii=False), tool_call_id=call_id
                     ))
+                    if (func_name in ("generate_code", "write_file", "edit_file")
+                            and isinstance(tool_result, dict)
+                            and tool_result.get("success")):
+                        if func_name == "generate_code":
+                            full_response = (
+                                "Iste istediginiz kod (" + str(tool_result.get("language", "python")) + " - "
+                                + str(tool_result.get("mode", "script")).upper() + " modu):\n\n"
+                                + "```" + str(tool_result.get("language", "python")) + "\n"
+                                + str(tool_result.get("code", "")) + "\n```\n\n"
+                                + "Bu kodu kopyalayip dogrudan kullanabilirsiniz. Degisiklik ister misiniz?"
+                            )
+                        elif func_name == "write_file":
+                            full_response = "Dosya yazildi: " + str(tool_result.get("path"))
+                        else:
+                            full_response = "Dosya duzenlendi: " + str(tool_result.get("path"))
+                        _stop_after_tool = True
+                        logger.info("STOP_AFTER_TOOL triggered: %s", func_name)
             
-            # If loop ended without a text response, make one final call WITHOUT tools
-            if not full_response:
+                if _stop_after_tool:
+                    logger.info("BREAKING outer loop")
+                    break
+
+            # BUILD/EDIT YETKİSİ: kullanıcı sohbette site/uygulama inşa veya
+            # mevcut proje düzenleme istedi ve araç döngüsü hiç dosya yazmadıysa
+            # deterministik üretici/düzenleyici devreye girer.
+            if _skip_agent_loop and not files_changed:
+                _bf = None
+                try:
+                    _bf = await self._smart_build_or_edit(user_message, full_response)
+                except Exception as _bf_err:
+                    logger.warning("Build/Edit fallback hatası: %s", _bf_err)
+                if _bf:
+                    files_changed = list(_bf.get("files") or [])
+                    full_response = _bf.get("response") or full_response
+                    for _n in (_bf.get("notes") or []):
+                        thinking_steps.append({
+                            "type": "reasoning", "content": _n, "icon": "🩹",
+                        })
+
+            # If loop ended without a text response, make one final call WITHOUT
+            # tools. Yerel model seçiliyken buluta sessizce geçilmez.
+            provider = getattr(self, 'provider', 'openrouter')
+            if not full_response and provider not in ("local", "opencode"):
                 try:
                     import httpx
                     # Get current config
                     api_key = self.llm_config.api_key
                     base_url = self.llm_config.base_url or "https://openrouter.ai/api/v1"
                     model = self.llm_config.model
-                    provider = getattr(self, 'provider', 'openrouter')
                     
                     if api_key and api_key not in ("sk-placeholder", ""):
                         # Trim messages to avoid token limits (same safe window as _call_llm).
@@ -681,12 +1845,34 @@ Kurallar:
                 except Exception as fe:
                     logger.warning(f"Final response generation failed: {fe}")
             
-            # If still empty, provide a helpful message
+            # Sağlayıcı hiç metin üretmediyse bu bir BAŞARIDIR denemez.
+            # Kullanıcıya yardımcı metin gösterilir ama `success=False` döner;
+            # aksi halde Kodlama Yöneticisi sahte bir "tamamlandı" üretir.
+            provider_failed = False
             if not full_response:
-                if tools_used:
-                    full_response = f"Analiz tamamlandı. {len(tools_used)} araç kullanıldı. Sonuçlar işlendi ancak metin yanıt oluşturulamadı. Lütfen tekrar deneyin."
+                if files_changed:
+                    # Yerel/küçük modeller araç çağrısından sonra kapanış metni
+                    # üretmeyebilir. Dosya gerçekten yazıldıysa bu bir sağlayıcı
+                    # arızası değildir; kanıta dayalı deterministik özet döner.
+                    full_response = (
+                        "Değişen dosyalar: " + ", ".join(files_changed)
+                        + f". {len(tools_used)} araç çalıştırıldı"
+                        + (f"; {tool_failures} araç çağrısı hata verdi." if tool_failures else ".")
+                    )
+                elif tools_used and not tool_failures:
+                    full_response = f"{len(tools_used)} araç başarıyla çalıştırıldı."
                 else:
-                    full_response = "Üzgünüm, bir yanıt üretemedim. Lütfen tekrar deneyin."
+                    provider_failed = True
+                    if provider == "local":
+                        full_response = (
+                            "Yerel model (`%s`) şu anda yanıt üretemedi. "
+                            "Ollama servisinin (http://127.0.0.1:11434) çalıştığını ve modelin yüklü olduğunu kontrol edin."
+                            % (getattr(self.llm_config, "model", "qwen2.5:3b") or "qwen2.5:3b")
+                        )
+                    elif tools_used:
+                        full_response = f"Analiz tamamlandı. {len(tools_used)} araç kullanıldı. Sonuçlar işlendi ancak metin yanıt oluşturulamadı. Lütfen tekrar deneyin."
+                    else:
+                        full_response = "Üzgünüm, bir yanıt üretemedim. Lütfen tekrar deneyin."
             
             # Add self-reflection step if we have a response
             if full_response and len(full_response) > 50:
@@ -728,13 +1914,18 @@ Kurallar:
             })
             
             return {
-                "success": True,
+                "success": not provider_failed,
                 "response": full_response,
                 "conversation_id": conversation_id,
                 "tools_used": tools_used,
                 "files_changed": files_changed,
                 "iterations": iteration + 1,
-                "thinking_steps": thinking_steps
+                "thinking_steps": thinking_steps,
+                "provider": provider,
+                "model": getattr(self.llm_config, "model", None),
+                "degraded": bool(llm_failure) or provider_failed,
+                "error": (llm_failure or "LLM boş yanıt döndürdü")
+                if provider_failed else None,
             }
             
         except Exception as e:
@@ -969,6 +2160,758 @@ Kurallar:
             window.pop(0)
         return ([system] if system is not None else []) + window
 
+    # ------------------------------------------------------------------
+    # PROJE İNŞA FALLBACK (deterministik dosya üretimi)
+    # ------------------------------------------------------------------
+
+    @staticmethod
+    def _is_build_request(message: str) -> bool:
+        """Kullanıcı bir site/uygulama/proje mi inşa etmemi istedi?"""
+        q = _norm_tr(message)
+        nouns = ("site", "web", "uygulama", "app", "proje", "dashboard",
+                 "landing", "oyun", "arayüz")
+        verbs = ("yap", "kaydet", "oluştur", "olustur", "tasarla", "geliştir",
+                 "gelistir", "üret", "uret", "kur", "başlat")
+        return any(k in q for k in nouns) and any(k in q for k in verbs)
+
+    def _detect_save_target(self, message: str):
+        """İstekte geçen kayıt hedefini belirle.
+
+        "masa üstünde M klasörüne kaydet" -> (C:\\Users\\<ad>\\Desktop\\M, True)
+        "ödev Klasörüne kaydet"           -> (<çalışma kökü>\\ödev, True)
+        kural yok                          -> (None, False)
+        """
+        q = re.sub(r"\s+", " ", _norm_tr(message))
+        desktop = os.path.join(os.path.expanduser("~"), "Desktop")
+        folder = ""
+        m = re.search(r"([\wçğıöşü.\-]{1,24}?)\s*klas", q)
+        if m:
+            folder = re.sub(r"^(?:ve|bir|adlı|adli|isimli)\s+", "", m.group(1))
+            folder = re.sub(r"[^\w\-.]", "", folder).strip(".")
+        on_desktop = any(k in q for k in (
+            "masaüst", "masaüstü", "masa üst", "masa ust", "masaust", "desktop"))
+        if on_desktop:
+            return os.path.join(desktop, folder or "nexus-proje"), True
+        if folder and folder not in (
+            "ve", "bir", "yap", "kaydet", "olustur", "oluştur", "site",
+            "proje", "uygulama", "web", "app",
+        ):
+            return os.path.join(self.tools.working_dir or os.getcwd(), folder), True
+        return None, False
+
+    def _persist_project(self, path: str) -> None:
+        """Proje kökünü araç + arayüz katmanlarına bildir (özet: dosya ağacı)."""
+        try:
+            os.environ["NEXUS_WORKING_DIR"] = path
+        except Exception:
+            pass
+        try:
+            import fs_routes as _fs
+            _fs._current_workdir = path
+            _fs._project_open = True
+        except Exception:
+            pass
+        try:
+            import project_routes as _pr
+            _pr.WORKING_DIR = path
+        except Exception:
+            pass
+        try:
+            self.tools.working_dir = path
+        except Exception:
+            pass
+
+    async def _local_oneshot(self, prompt: str, max_tokens: Optional[int] = None) -> str:
+        """Araçsız TEK atışlı yerel model çağrısı; ham metin döndürür.
+
+        Model yine araç JSON'u basarsa içinden düz yanıtı kurtarır;
+        başarısızlıkta boş metin döner (çağıran fallback karar verir).
+        """
+        import local_llm
+
+        base_url = (self.llm_config.base_url
+                    or local_llm.configured_url()
+                    or "http://127.0.0.1:11434/v1").rstrip("/")
+        mdl = (getattr(self, "_active_model", None) or self.llm_config.model
+               or local_llm.model_name() or "qwen2.5:3b")
+        if max_tokens is None:
+            try:
+                max_tokens = max(
+                    512, min(int(os.getenv("NEXUS_LOCAL_LLM_MAX_TOKENS", "2048")), 8192)
+                )
+            except ValueError:
+                max_tokens = 2048
+        try:
+            tout = max(120.0, float(os.getenv("NEXUS_LOCAL_LLM_TIMEOUT", "300")))
+        except ValueError:
+            tout = 300.0
+        try:
+            res = await local_llm.chat(
+                [{"role": "user", "content": prompt}],
+                model=mdl, base_url=base_url, temperature=0.2,
+                max_tokens=max_tokens, timeout=tout,
+                tools=None, tool_choice=None,
+            )
+            if isinstance(res, dict) and res.get("success"):
+                data = res.get("data") or {}
+                choices = data.get("choices") or []
+                if choices:
+                    content = ((choices[0] or {}).get("message") or {}).get("content") or ""
+                    _calls, final_text = _extract_tool_json_calls(content, set())
+                    return final_text or content
+        except Exception as exc:
+            logger.warning("Tek atışlı yerel çağrı başarısız: %s", exc)
+        return ""
+
+    async def _oneshot_project_text(self, user_message: str) -> str:
+        """Araçsız TEK atışlı proje üretimi: yalnız ``### DOSYA`` belirtimi döndür."""
+        spec = (
+            "SEN KOD ÜRETİCİSİN. Hiçbir araç çağırma, araç çağrısı JSON'u YAZMA, "
+            "açıklama yapma.\n"
+            "İsteğe göre ÇALIŞAN bir proje üret ve ÇIKTIYI TAM OLARAK şu biçimde ver:\n"
+            "### DOSYA: index.html\n```html\n(HTML kodu)\n```\n"
+            "### DOSYA: styles.css\n```css\n(CSS kodu)\n```\n"
+            "### DOSYA: script.js\n```js\n(JS kodu)\n```\n"
+            "Web sitesi isteklerinde index.html + styles.css + script.js üret.\n"
+            "Python isteklerinde main.py üret. Kod eksiksiz ve çalışır olsun.\n\n"
+            f"İSTEK: {user_message}\n"
+            "Yalnızca yukarıdaki biçimde dosyaları döndür, başka hiçbir metin yazma."
+        )
+        return await self._local_oneshot(spec)
+
+    _FILE_LABEL_RE = re.compile(
+        r"^[>\s*`#_-]*(?:###\s*)?(?:dosya|file|filename|dosya adı|dosya adi|path)"
+        r"\s*[:=]?\s*[`\"']?([\w.\- /\\]{1,100}?)[`\"']?\s*$",
+        re.IGNORECASE,
+    )
+    _FENCE_RE = re.compile(r"```([a-zA-Z0-9_+\-]*)\s*\n(.*?)```", re.DOTALL)
+
+    @classmethod
+    def _default_file_name(cls, lang: str, used: set) -> str:
+        l = (lang or "").lower()
+        if "html" in l:
+            cand = "index.html"
+        elif "css" in l:
+            cand = "styles.css"
+        elif "jsx" in l:
+            cand = "App.jsx"
+        elif "json" in l:
+            cand = "data.json"
+        elif "ts" in l:
+            cand = "app.ts"
+        elif "js" in l or "javascript" in l:
+            cand = "script.js"
+        elif "py" in l or "python" in l:
+            cand = "main.py"
+        elif "md" in l:
+            cand = "README.md"
+        elif "sql" in l:
+            cand = "schema.sql"
+        else:
+            cand = "main.txt"
+        base, ext = os.path.splitext(cand)
+        n = 2
+        while cand in used:
+            cand = f"{base}{n}{ext}"
+            n += 1
+        return cand
+
+    @classmethod
+    def _extract_fenced_files(cls, text: str):
+        """``### DOSYA: <yol>`` + kod çiti ikililerini ayıkla."""
+        if not text:
+            return []
+        pairs = []
+        for m in cls._FENCE_RE.finditer(text):
+            lang = (m.group(1) or "").strip()
+            code = (m.group(2) or "").replace("\r\n", "\n").strip()
+            if not code or len(code) > 120_000:
+                continue
+            before = text[: m.start()].rstrip()
+            lines = before.splitlines()
+            last_line = lines[-1].strip() if lines else ""
+            lm = cls._FILE_LABEL_RE.match(last_line)
+            rel = ""
+            if lm:
+                rel = re.sub(r"^\./", "", lm.group(1).strip().replace("\\", "/")).strip()
+            if not rel:
+                rel = cls._default_file_name(lang, {p[0] for p in pairs})
+            # Güvenlik: göreli yolu tabana hapsit (mutlak/üst-dizin yollarını soy)
+            rel = re.sub(r"^(/|[a-zA-Z]:)", "", rel).lstrip("/\\")
+            rel = os.path.normpath(rel).replace("\\", "/")
+            if rel.startswith("..") or rel in ("", ".", "/"):
+                continue
+            if len(pairs) >= 12:
+                break
+            rel = rel or cls._default_file_name(lang, {p[0] for p in pairs})
+            pairs.append((rel, code))
+        return pairs
+
+    @classmethod
+    def _template_router(cls, user_message: str):
+        """İsteği hazır şablon alanına eşler: food / prayer / student / None."""
+        q = _ascii_tr(user_message)
+        if any(k in q for k in ("namaz", "vakit", "ezan", "prayer",
+                                "imsak", "iftar", "teravih")):
+            return "prayer"
+        if "ogrenci" in q or "ogretmen" in q:
+            return "student"
+        if any(k in q for k in ("yemek", "restoran", "lokanta", "kebap",
+                                "pizza", "fast food", "kafe", "kahvalti")):
+            return "food"
+        return None
+
+    @classmethod
+    def _template_project(cls, user_message: str):
+        """LLM biçime uygun yanıt üretemezse: hazır, TAM ÇALIŞAN proje."""
+        domain = cls._template_router(user_message)
+        if domain == "prayer":
+            return [
+                ("index.html", _PRAYER_TEMPLATE_HTML),
+                ("styles.css", _PRAYER_TEMPLATE_CSS),
+                ("script.js", _PRAYER_TEMPLATE_JS),
+                ("manifest.json", _PRAYER_TEMPLATE_MANIFEST),
+            ]
+        if domain == "student":
+            return [
+                ("main.py", _STUDENT_TEMPLATE_PY),
+                ("README.md", _STUDENT_TEMPLATE_README),
+            ]
+        if domain == "food":
+            return [
+                ("index.html", _FOOD_TEMPLATE_HTML),
+                ("styles.css", _FOOD_TEMPLATE_CSS),
+                ("script.js", _FOOD_TEMPLATE_JS),
+            ]
+        return [
+            ("index.html", _BUILD_TEMPLATE_HTML),
+            ("styles.css", _BUILD_TEMPLATE_CSS),
+            ("script.js", _BUILD_TEMPLATE_JS),
+        ]
+
+    # ------------------------------------------------------------------
+    # MEVCUT PROJE ÜZERİNDE DÜZENLEME (ekle/sil/değiştir/güncelle)
+    # ------------------------------------------------------------------
+
+    _EDITABLE_EXTS = (".html", ".css", ".js", ".py", ".json", ".md")
+    _EDIT_KEYWORDS = (
+        "ekle", "ekli", "sil", "çık", "cik", "çıkar", "cikar",
+        "kaldır", "kaldir", "değiştir", "degistir", "güncelle", "guncelle",
+        "düzelt", "duzelt", "yenile", "büyüt", "buyut", "küçült", "kucult",
+    )
+    _EDIT_SOFT_KEYWORDS = ("renk", "başlık", "baslik", "font", "logo")
+
+    def _project_root_for(self, message: str, require_project: bool = False):
+        """Düzenlenecek proje kökü.
+
+        Öncelik: istekte adı geçen klasör > görev-yerel kök (kodlama
+        zinciri) > çalışma kökü (UI'nin açık projesi). ``require_project``
+        ise kökte ``index.html`` aranır; kök bir proje değilse None döner.
+        """
+        try:
+            target, promoted = self._detect_save_target(message)
+        except Exception:
+            target, promoted = None, False
+        if promoted and target and os.path.isdir(target):
+            root = target
+        else:
+            try:
+                from tool_executor import task_working_dir as _twd
+                ctx_root = _twd.get()
+            except Exception:
+                ctx_root = None
+            tools_dir = getattr(getattr(self, "tools", None), "working_dir", None)
+            root = ctx_root or tools_dir or os.getcwd()
+        root = os.path.abspath(str(root))
+        if not os.path.isdir(root):
+            return None
+        if require_project:
+            if root == _APP_ROOT:
+                # Uygulamanın KENDİ kökü bir kullanıcı projesi değildir;
+                # yanlışlıkla NEXUS arayüz dosyalarını düzenlemesin.
+                return None
+            if not os.path.exists(os.path.join(root, "index.html")):
+                return None
+        return root
+
+    def _is_edit_request(self, message: str) -> bool:
+        """Yeni site inşası değil, MEVCUT projeye küçük müdahale mi?
+
+        "menüye adana ekle" / "renkleri değiştir" tarzı istekler ve diskte
+        proje varsa True; "yemek sitesi yap..." tarzı taze inşa sinyali
+        (inşa ismi + fiili aynı anda) varsa False.
+        """
+        q = _norm_tr(message)
+        if not q:
+            return False
+        strong = any(k in q for k in self._EDIT_KEYWORDS)
+        soft = any(k in q for k in self._EDIT_SOFT_KEYWORDS)
+        if not (strong or soft):
+            return False
+        if not self._project_root_for(message, require_project=True):
+            return False
+        nouns = ("site", "web", "uygulama", "app", "proje", "dashboard",
+                 "landing", "oyun", "arayüz")
+        verbs = ("yap", "kaydet", "oluştur", "olustur", "tasarla",
+                 "geliştir", "gelistir", "üret", "uret", "kur")
+        fresh_build = any(n in q for n in nouns) and any(v in q for v in verbs)
+        return not fresh_build
+
+    # ------------------------------------------------------------------
+    # KENDİ KENDİNİ İYİLEŞTİRME: deterministik hızlı düzen + öz denetim
+    # ------------------------------------------------------------------
+
+    _COLOR_MAP = {
+        "yesil": "#2e7d32", "mavi": "#1565c0", "kirmizi": "#c62828",
+        "turuncu": "#ef6c00", "mor": "#6a1b9a", "pembe": "#ad1457",
+        "sari": "#f9a825", "gri": "#546e7a", "siyah": "#212121",
+        "kahverengi": "#5d4037",
+    }
+
+    _EDIT_TARGET_TOKENS = {
+        "klasorundeki", "klasorune", "klasorde", "klasore",
+        "siteye", "sitede", "site", "menuye", "menude", "menu",
+        "listeye", "listede", "sayfaya", "sayfada", "uygulamaya",
+        "uygulamada", "projeye", "dosyaya", "dosyada", "yap",
+        "liste", "icin", "bir", "tane", "yeni", "olsun", "olur",
+    }
+
+    def _deterministic_edits(self, message: str, root: str):
+        """Küçük yerel modele güvenmeden UYGULANABİLİR basit düzenleri
+        kodla yapar; ok (dosya-adı, içerik, not) listesi döner.
+
+        Desteklenenler:
+          * renk değişimi: styles.css içinde ``--brand`` CSS değişkeni.
+          * menüye ürün ekleme: script.js içinde ``const MENU = [...]``.
+        """
+        q = _ascii_tr(message)
+        out: list = []
+        notes: list = []
+        source = {}
+        for name in ("styles.css", "script.js"):
+            p = os.path.join(root, name)
+            if os.path.exists(p):
+                try:
+                    with open(p, "r", encoding="utf-8", errors="ignore") as fh:
+                        source[name] = fh.read()
+                except Exception:
+                    source[name] = ""
+
+        # --- 1) RENK DEĞİŞİMİ --------------------------------------------
+        color_word = next((w for w in self._COLOR_MAP if w in q), None)
+        wants_color = ("renk" in q or "tema" in q or color_word is not None)
+        if wants_color and color_word and "styles.css" in source:
+            css = source["styles.css"]
+            hexv = self._COLOR_MAP[color_word]
+            new_css = re.sub(r"(--brand\s*:\s*)#[0-9a-fA-F]{3,8};",
+                             r"\g<1>" + hexv + ";", css, count=1)
+            if new_css != css:
+                source["styles.css"] = new_css
+                out.append(("styles.css", new_css))
+                notes.append(f"🎨 {color_word} → ana marka rengi {hexv} yapıldı.")
+
+        # --- 2) MENÜYE ÜRÜN EKLEME ---------------------------------------
+        if "ekle" in q and "script.js" in source:
+            js = source["script.js"]
+            anchor = js.find("const MENU")
+            if anchor != -1:
+                stop = js.find("];", anchor)
+                if stop != -1:
+                    # "ekle"den ÖNCEKİ kelimelerden ürün adını topla
+                    # (sonraki kelimeler "renkleri yeşil olsun" gibi ikinci
+                    # isteğe ait olabilir).
+                    toks = re.findall(r"[\wçğıöşüÇĞİÖŞÜ]+", message)
+                    pos_ekle = next(
+                        (i for i, t in enumerate(toks)
+                         if _ascii_tr(t) == "ekle"), -1)
+                    toks = toks[:pos_ekle] if pos_ekle != -1 else toks
+                    stopwords = {
+                        _ascii_tr(w) for w in (
+                            "EKLE", "EKLEBILIR", "SİTEYE", "SİTEDE", "MENÜYE",
+                            "MENÜDE", "KLASÖRÜNDEKİ", "KLASÖRÜNE", "SİTENE",
+                            "UYGULAMAYA", "UYGULAMADA", "PROJEYE", "PROJEDE",
+                            "MASA", "ÜSTÜNDE", "MASAAÜSTÜ", "MASAÜSTÜ", "VE",
+                            "YAP", "OLSUN", "İSTİYORUM", "LÜTFEN", "BANA", "BENİ",
+                        )
+                    }
+                    picked = []
+                    for t in reversed(toks):
+                        tlow = _ascii_tr(t)
+                        if tlow in stopwords or tlow in self._EDIT_TARGET_TOKENS:
+                            if picked:      # hedef kelimeye ulaşıldı; ad bitti
+                                break
+                            continue
+                        if len(t) < 2 or (picked and len(" ".join(picked)) > 24):
+                            break
+                        picked.insert(0, t)
+                    ad = " ".join(picked).strip().title() or "Yeni Lezzet"
+                    ids = [int(m.group(1)) for m in
+                           re.finditer(r"id\s*:\s*(\d+)", js[anchor:stop])]
+                    yeni = {
+                        "id": (max(ids) + 1) if ids else 99,
+                        "ad": ad,
+                        "kategori": "Ana Yemek",
+                        "fiyat": 95,
+                        "emoji": "🍽️",
+                    }
+                    ek = ('  { id:%d, ad:"%s", kategori:"%s", fiyat:%d, emoji:"%s" },'
+                          % (yeni["id"], yeni["ad"], yeni["kategori"],
+                             yeni["fiyat"], yeni["emoji"]))
+                    yeni_js = js[:stop] + ek + "\n" + js[stop:]
+                    source["script.js"] = yeni_js
+                    out.append(("script.js", yeni_js))
+                    notes.append(f"🍽️ Menüye “{ad}” eklendi (₺{yeni['fiyat']}).")
+        return (out, notes) if out else None
+
+    @staticmethod
+    def _self_review(root: str):
+        """Üretilen projeyi hızlıca denetler: (temiz, sorunlar)."""
+        issues: list = []
+        idx = os.path.join(root, "index.html")
+        if os.path.exists(idx):
+            try:
+                html = open(idx, encoding="utf-8", errors="ignore").read()
+            except Exception as exc:
+                return False, [f"index.html okunamadı: {exc}"]
+            if "<body" not in html or "</html>" not in html:
+                issues.append("HTML iskeleti eksik")
+            for ref in re.findall(r'(?:src|href)="([^"\s]+\.(?:css|js))"', html):
+                if not os.path.exists(os.path.join(root, ref)):
+                    issues.append(f"eksik referans: {ref}")
+        for name in (os.listdir(root) if os.path.isdir(root) else []):
+            if name.endswith(".py"):
+                try:
+                    src = open(os.path.join(root, name), encoding="utf-8").read()
+                    compile(src, name, "exec")  # disk dokunmadan sözdizimi denetimi
+                except Exception as exc:
+                    issues.append(f"{name}: {exc}")
+        return (not issues), issues
+
+    def _edit_failure_response(self, user_message: str) -> Dict:
+        """Düzenleme uygulanamadı: dosyalar DEĞİŞMEDEN dürüst yanıt.
+
+        Yeniden şablon üretimi KULLANILMAZ — kullanıcının önceki
+        değişiklikleri silinmesin.
+        """
+        root = self._project_root_for(user_message)
+        target_line = f"\n📁 Klasör: {root}" if root else ""
+        return {
+            "files": [],
+            "mode": "edit-failed",
+            "response": (
+                "⚠️ Değişikliği uygulayamadım: yerel model bu isteği "
+                "uygulanabilir dosya biçimine çeviremedi ve mevcut dosyalarını "
+                "değiştirmedim." + target_line + "\nİsteği tek bir değişiklik "
+                "hâlinde yazarsan tekrar denerim (örn. \"menüye adana "
+                "kebap ekle\")."
+            ),
+            "notes": ["Model düzenleme çıktısı biçime uymadı; dosyalar değişmedi."],
+        }
+
+    @staticmethod
+    def _write_files_into(base_root: str, files):
+        """(rel, içerik) listesini ``base_root`` altına yaz; (abs, rel) döndür."""
+        written = []
+        for rel, content in files:
+            try:
+                abs_path = os.path.join(base_root, *rel.split("/"))
+                parent = os.path.dirname(abs_path) or base_root
+                os.makedirs(parent, exist_ok=True)
+                with open(abs_path, "w", encoding="utf-8", newline="") as fh:
+                    fh.write(content)
+                written.append((abs_path, rel))
+            except Exception as exc:
+                logger.warning("Dosya yazılamadı %s: %s", rel, exc)
+        return written
+
+    async def _edit_build_files(self, user_message: str, max_changed: int = 8):
+        """Mevcut projeyi oku, değişikliği modelle uygula, üzerine yaz.
+
+        Taze üretim YOK: model yalnızca değişen dosyaların tamamını döndürür;
+        başarısızsa None (çağıran dürüst mesaj verir), dosyalar korunur.
+        """
+        root = self._project_root_for(user_message, require_project=True)
+        if not root:
+            return None
+
+        # ---- ADIM 1: KENDİ KENDİNİ DÜZELTME (deterministik hızlı yol) -----
+        # Küçük yerel model bu işi dakikalar sonra bile biçimde yapamıyor;
+        # basit değişiklikler (renk, menü ekleme) kod ile SİNYELDE yapılır.
+        try:
+            det = self._deterministic_edits(user_message, root)
+        except Exception as exc:
+            logger.warning("Deterministik edit hatası: %s", exc)
+            det = None
+        if det:
+            files_det, det_notes = det
+            written = self._write_files_into(root, files_det)
+            if written:
+                ok, sorunlar = self._self_review(root)
+                detek = "" if ok else "\n⚠️ Öz denetim: " + "; ".join(sorunlar)
+                listing = "\n".join(f"- {rel}" for _, rel in written)
+                return {
+                    "files": [rel for _, rel in written],
+                    "response": (
+                        f"✏️ Güncellendi!\n📁 Klasör: {root}\n\n"
+                        f"Değişen dosyalar:\n{listing}\n\n"
+                        + "\n".join(det_notes)
+                        + (f"\n\n🧪 Kendi kontrol: temiz ✓" if ok else detek)
+                        + "\n\nBaşka bir değişiklik istersen söylemen yeterli."
+                    ),
+                    "notes": list(det_notes),
+                    "mode": "edit-deterministic",
+                    "base_root": root,
+                }
+
+        lang_by_ext = {
+            ".html": "html", ".css": "css", ".js": "javascript",
+            ".py": "python", ".json": "json", ".md": "markdown",
+        }
+        try:
+            names = sorted(
+                n for n in os.listdir(root)
+                if os.path.isfile(os.path.join(root, n))
+                and os.path.splitext(n)[1].lower() in self._EDITABLE_EXTS
+            )
+        except Exception:
+            return None
+        ctx_parts = []
+        original = {}
+        for n in names[:12]:
+            p = os.path.join(root, n)
+            try:
+                with open(p, "r", encoding="utf-8", errors="ignore") as fh:
+                    txt = fh.read()
+            except Exception:
+                continue
+            if len(txt) > 60_000:
+                txt = txt[:60_000] + "\n…(kesildi)"
+            original[n] = len(txt)
+            ext = os.path.splitext(n)[1].lower()
+            ctx_parts.append(
+                f"### DOSYA: {n}\n```{lang_by_ext.get(ext, '')}\n{txt}\n```"
+            )
+        if not ctx_parts:
+            return None
+
+        notes: List[str] = []
+        spec = (
+            "SEN KOD DÜZENLEYİCİSİN. Araç çağırma, araç çağrısı JSON'u YAZMA, "
+            "açıklama yapma.\n"
+            "Aşağıda mevcut proje dosyaları veriliyor. Değişiklik isteğini "
+            "dosyalara uygula ve SADECE değişen dosyaların TAM güncel içeriğini "
+            "şu biçimde döndür:\n"
+            "### DOSYA: index.html\n```html\n(dosyanın güncel TAM İÇERİĞİ)\n```\n"
+            "ÖNEMLİ: Siteyi SIFIRDAN KURMA. Var olan tüm bölümleri, özellikleri, "
+            "CSS sınıflarını, içerikleri ve tasarımı KORU; yalnızca istenen "
+            "değişiklikleri uygula. Değişmeyen dosyaları verme. Parça verme; "
+            "dosyanın tamamını yaz.\n\n"
+            f"DEĞİŞİKLİK İSTEĞİ: {user_message}\n\n"
+            "MEVCUT DOSYALAR:\n" + "\n\n".join(ctx_parts)
+        )
+        text = await self._local_oneshot(spec)
+        files = self._extract_fenced_files(text or "")
+
+        # ---- ADIM 2: KENDİ KENDİNİ DÜZELTME (LLM, 2. deneme) -------------
+        # İlk çıktı biçime uymadıysa model, önceki ÇÖP çıktısını görerek
+        # düzeltilmiş biçim üretmeye bir kez daha çalışır.
+        if not files:
+            retry_spec = (
+                "ÖNCEKİ DENEMEN GEÇERSİZDİ: biçim yerine açıklama/çöp yazdın.\n"
+                "SADECE şu biçimde yanıt ver; başka HİÇBİR metin yok:\n"
+                "### DOSYA: index.html\n```html\n(dosyanın güncel TAM İÇERİĞİ)\n```\n"
+                "Örnek çıktının biçimi yukarıdadır; değişen HER dosya için "
+                "bir blok yaz ve dosyanın tamamını ver.\n\n"
+                f"DEĞİŞİKLİK İSTEĞİ: {user_message}\n\n"
+                "MEVCUT DOSYALAR:\n" + "\n\n".join(ctx_parts)
+            )
+            text2 = await self._local_oneshot(retry_spec, max_tokens=2048)
+            files = self._extract_fenced_files(text2 or "")
+            if files:
+                notes.append("Model ilk denemede biçime uymadı; ikinci denemede düzeltti.")
+        if not files:
+            return None
+
+        # Kalite kapısı: ana HTML %40'tan fazla kısalmışsa kesilme say, iptal.
+        for rel, code in list(files):
+            base = os.path.basename(rel).lower()
+            old_len = original.get(base)
+            if (base.endswith(".html") and old_len
+                    and len(code.strip()) < int(old_len * 0.6)):
+                logger.warning(
+                    "Düzenleme şüpheli kısalma: %s %d -> %d (reddedildi)",
+                    rel, old_len, len(code.strip()),
+                )
+                return None
+        files = files[:max_changed]
+
+        written = self._write_files_into(root, files)
+        if not written:
+            return None
+
+        ok, sorunlar = self._self_review(root)
+        if ok:
+            notes.append("🧪 Kendi kontrol: temiz ✓ (referanslar ve iskelet sağlam)")
+        else:
+            notes.append("⚠️ Öz denetim sorunları: " + "; ".join(sorunlar))
+
+        listing = "\n".join(f"- {rel}" for _, rel in written)
+        response = (
+            f"✏️ Güncellendi!\n📁 Klasör: {root}\n\n"
+            f"Değişen dosyalar:\n{listing}\n\n"
+            "Başka bir değişiklik istersen söylemen yeterli."
+        )
+        return {
+            "files": [rel for _, rel in written],
+            "response": response,
+            "notes": notes,
+            "mode": "edit",
+            "base_root": root,
+        }
+
+    async def _smart_build_or_edit(self, user_message: str, draft_response: str = ""):
+        """Site/uygulama istekleri için tek giriş noktası.
+
+        * Düzenleme isteği + diskte proje -> mevcut dosyaları düzenle.
+        * Diğer inşa istekleri -> yeni proje/şablon üret.
+        * Düzenleme uygulanamazsa dosyalar DEĞİŞMEDEN dürüst yanıt.
+        """
+        try:
+            edit_like = bool(self._is_edit_request(user_message))
+        except Exception:
+            edit_like = False
+        if edit_like:
+            try:
+                ed = await self._edit_build_files(user_message)
+            except Exception as exc:
+                logger.warning("Düzenleme akışı hatası: %s", exc)
+                ed = None
+            if ed:
+                return ed
+            return self._edit_failure_response(user_message)
+        bf = await self._write_build_files(user_message, draft_response)
+        if bf:
+            bf.setdefault("mode", "build")
+        return bf
+
+    async def _write_build_files(self, user_message: str, draft_response: str = ""):
+        """Proje inşa isteğini GERÇEK dosyalara döker (deterministik kanat).
+
+        1) Draft yanıtta ``### DOSYA`` bloklarını dene.
+        2) Yoksa tek atışlı araçsız LLM üretimi dene.
+        3) O da olmazsa hazır şablonu yaz. Her durumda diskte dosya vardır.
+
+        Yazım ToolExecutor yerine DOĞRUDAN yapılır: hedef dizin
+        (kullanıcının açık isteği, örn. Masaüstü\\M) hangi bağlamdan
+        çağrılırsa çağrılsın birebir korunur.
+        """
+        target, promoted = self._detect_save_target(user_message)
+        try:
+            from tool_executor import task_working_dir as _twd
+            ctx_root = _twd.get()
+        except Exception:
+            ctx_root = None
+        base_root = (
+            target if promoted and target
+            else (ctx_root or self.tools.working_dir or os.getcwd())
+        )
+        base_root = os.path.abspath(str(base_root))
+        if base_root == _APP_ROOT:
+            # ŞablonN projeleri uygulamanın kendi klasörüne yazılmaz;
+            # Masaüstü/NexusProjeler altına gider.
+            base_root = os.path.join(
+                os.path.expanduser("~"), "Desktop", "NexusProjeler"
+            )
+
+        notes: List[str] = []
+        files = self._extract_fenced_files(draft_response or "")
+        # BİLİNEN ALAN (yemek / namaz / öğrenci-giriş): küçük yerel model
+        # zaten kalite kapısını geçemiyor ve dakikalar harcıyordu. Alan
+        # şablonu direkt yazılır: hem kaliteli hem hızlı (skndeler içinde).
+        if not files and os.getenv("NEXUS_DIRECT_TEMPLATES", "1") != "0":
+            domain = self._template_router(user_message)
+            if domain:
+                files = self._template_project(user_message)
+                notes.append(
+                    "Hızlı üretim: " + domain + " alanı için hazır gelişmiş "
+                    "şablon doğrudan yazıldı. Değişiklik istersen söylemen "
+                    "yeterli (örn. 'adana kebap ekle', 'renkleri yeşil yap')."
+                )
+        if not files:
+            text = await self._oneshot_project_text(user_message)
+            files = self._extract_fenced_files(text or "")
+        if not files:
+            files = self._template_project(user_message)
+            notes.append(
+                "Model biçime uygun dosya üretmeyi başaramadı; hazır şablon "
+                "ile proje oluşturuldu. İsteğin ayrıntısını (konu, renk, "
+                "bölümler) yazarsan model üretimini tekrar deneriz."
+            )
+        if not files:
+            return None
+
+        # ---- KALİTE KAPISI (deterministik) ---------------------------------
+        # Küçük yerel modeller bazen birkaç karakterlik taslak döndürür ve
+        # çöp .py/.js artıkları basar. Web projesinde ana HTML çok kısaysa
+        # üretim başarısız sayılır; hazır şablon devreye girer.
+        html_entries = [f for f in files if f[0].lower().endswith(".html")]
+        if html_entries:
+            files = [
+                (rel, code) for rel, code in files
+                if rel.lower().endswith((".html", ".css"))
+                or len(code.strip()) >= 200
+            ]
+            primary = max(html_entries, key=lambda f: len(f[1]))[1]
+            if len(primary.strip()) < 1500:
+                files = self._template_project(user_message)
+                notes.append(
+                    "Yerel modelin üretimi çok kısa ve bozuktu; kalite "
+                    "kapısı hazır şablonu devreye aldı."
+                )
+        if not files:
+            return None
+
+        if promoted and target:
+            try:
+                os.makedirs(target, exist_ok=True)
+                self._persist_project(target)
+            except Exception:
+                return None
+
+        written = self._write_files_into(base_root, files)
+        if not written:
+            return None
+
+        # ---- KENDİ KENDİNİ DENETLEME ---------------------------------------
+        try:
+            ok, sorunlar = self._self_review(base_root)
+            if ok:
+                notes.append("🧪 Kendi kontrol: temiz ✓ (referanslar/iskelet/derleme sağlam)")
+            else:
+                notes.append("⚠️ Öz denetim sorunları: " + "; ".join(sorunlar))
+        except Exception as exc:  # kontrol asla üretimi engellemesin
+            logger.warning("Öz denetim çalışamadı: %s", exc)
+
+        listing = "\n".join(f"- {rel}" for _, rel in written)
+        entry = next(
+            (rel for _, rel in written if os.path.basename(rel) == "index.html"),
+            written[0][1],
+        )
+        target_note = f"\n📁 Hedef klasör: {base_root}" if promoted else ""
+        response = (
+            "✅ Proje hazır! " + target_note
+            + "\n\nOluşturulan dosyalar:\n" + listing
+            + f"\n\nTarayıcıda açmak için \"{entry}\" dosyasına çift tıkla "
+            + "(veya adres çubuğuna dosya yolunu yapıştır). İstersen "
+            + "güncelleme söylemen yeterli: renkler, menü, bölümler..."
+        )
+        return {
+            "files": [rel for _, rel in written],
+            "response": response,
+            "notes": notes,
+            "base_root": base_root,
+        }
+
     async def _call_llm(self, messages: List[Dict]) -> Dict:
         """Call the LLM API with tools. Comprehensive multi-provider, multi-model fallback + response validation."""
         import httpx
@@ -1026,331 +2969,105 @@ Kurallar:
         # Always load latest config from model_config.json
         self._refresh_llm_config()
         
-        api_key = self.llm_config.api_key
-        base_url = self.llm_config.base_url or "https://api.openai.com/v1"
         model = getattr(self, '_active_model', None) or self.llm_config.model
-        provider = getattr(self, 'provider', 'openai')
-        
-        # Check for placeholder or missing key
-        if not api_key or api_key in ("sk-placeholder", "sk-your-openai-key-here") or provider == "fallback":
-            logger.warning(f"No valid API key for {provider}, initiating fallback chain")
-            return await self._fallback_chain(messages)
+        return await self._call_local_primary(messages, model)
 
-        # Devre kesici: anahtari gecersiz oldugu bilinen saglayiciya HIÇ istek atmadan
-        # dogrudan zincire gec. (Anahtar panelden degisirse model_routes bunu sifirlar.)
-        if health.provider_blocked(provider):
-            logger.info(
-                "Provider %s devre disi (gecersiz anahtar, %.0f sn kaldi); fallback zincirine geciliyor",
-                provider, health.cooldown_remaining(provider),
-            )
-            return await self._fallback_chain(
-                messages, failed_provider=provider, failed_model=model
-            )
-        
+    async def _call_local_primary(self, messages: List[Dict], model: str = None) -> Dict:
+        """Seçili yerel Ollama modelini birincil olarak çağırır."""
+        import local_llm
+
+        base_url = (self.llm_config.base_url
+                    or local_llm.configured_url()
+                    or "http://127.0.0.1:11434/v1").rstrip("/")
+        mdl = (model or self.llm_config.model or local_llm.model_name()
+               or "qwen2.5:3b").strip()
+
+        if not local_llm.is_loopback(base_url):
+            return {
+                "success": False,
+                "provider": "local",
+                "model": mdl,
+                "error": "Yerel model yalnızca localhost/127.0.0.1 adresinden çağrılabilir.",
+            }
+
         try:
-            async with httpx.AsyncClient(timeout=90) as client:
-                # OpenAI-uyumlu sağlayıcı (yalnızca OpenRouter kalır).
-                payload = {
-                    "model": model,
-                    "messages": messages,
-                    "tools": self._tools_payload(),
-                    "tool_choice": "auto",
-                    "temperature": self.llm_config.temperature,
-                    "max_tokens": self.llm_config.max_tokens
-                }
-                url = f"{base_url}/chat/completions"
-                headers = {
-                    "Authorization": f"Bearer {api_key}",
-                    "Content-Type": "application/json"
-                }
-                if provider == "openrouter":
-                    headers["HTTP-Referer"] = "http://localhost:8080"
-                    headers["X-Title"] = "NEXUS-CORE"
-                
-                # Rate-limit aware retry: a 429 (provider TPM limit) is TEMPORARY.
-                # Bekleme sureini kisitla (_MAX_RATE_LIMIT_WAIT) ve cok deneme yapma;
-                # fallback zinciri (diger modeller/saglayicilar) calsin.
-                response = None
-                for attempt in range(_RATE_LIMIT_MAX_RETRIES + 1):
-                    response = await client.post(url, headers=headers, json=payload)
-                    if response.status_code != 429 or attempt >= _RATE_LIMIT_MAX_RETRIES:
-                        break
-                    wait = min(_parse_retry_after(response), _MAX_RATE_LIMIT_WAIT)
-                    logger.warning(
-                        f"Rate limited (429) on {provider}/{model}; waiting "
-                        f"{wait:.1f}s before retry {attempt + 1}/{_RATE_LIMIT_MAX_RETRIES}"
-                    )
-                    await asyncio.sleep(wait)
+            local_max = int(os.getenv("NEXUS_LOCAL_LLM_MAX_TOKENS", "2048"))
+        except ValueError:
+            local_max = 2048
+        local_max = max(64, min(local_max, 8192))
+        try:
+            local_timeout = float(os.getenv("NEXUS_LOCAL_LLM_TIMEOUT", "900"))
+        except ValueError:
+            local_timeout = 900.0
+        tools = self._tools_payload()
+        has_write_tool = any(
+            t.get("function", {}).get("name") in ("write_file", "edit_file")
+            for t in tools
+        )
+        token_cap = local_max if has_write_tool else min(local_max, 512)
+        tool_names = {t.get("function", {}).get("name") for t in tools}
+        tool_choice = "required" if tool_names == {"write_file"} else "auto"
+        result = await local_llm.chat(
+            messages,
+            model=mdl,
+            base_url=base_url,
+            temperature=self.llm_config.temperature,
+            max_tokens=min(int(self.llm_config.max_tokens or token_cap), token_cap),
+            timeout=max(30.0, local_timeout),
+            tools=tools or None,
+            tool_choice=tool_choice,
+        )
+        result.setdefault("provider", "local")
+        result.setdefault("model", mdl)
+        if result.get("success"):
+            if result.get("model"):
+                self.llm_config.model = result["model"]
+            logger.info("Yerel model birincil çağrısı başarılı: %s", result.get("model"))
+            return result
+        else:
+            logger.warning("Yerel model çağrısı başarısız: %s", result.get("error", "bilinmeyen hata"))
+            # Sadece yerel alternatif modelleri dene
+            return await self._fallback_chain(messages, failed_provider="local", failed_model=mdl)
 
-                if response is not None and response.status_code == 200:
-                    data = response.json()
-                    # HTTP 200 = saglayici ve anahtar saglikli; onceki olumsuz karari temizle.
-                    health.note_success(provider, model)
-                    
-                    # Validate response structure
-                    if not _validate_response(data):
-                        logger.warning(f"Invalid response structure from {provider}/{model}, triggering fallback")
-                        return await self._fallback_chain(messages, failed_provider=provider, failed_model=model)
-                    
-                    return {"success": True, "data": data}
-                
-                # Some models occasionally emit a tool call for a tool that was
-                # NOT advertised in request.tools (e.g. `write_file`), and the
-                # provider rejects the whole turn with a 400
-                # "Tool call validation failed". Retrying the SAME model once with
-                # tools disabled turns this into a normal text answer instead of
-                # burning the entire 20+ provider fallback chain.
-                if (
-                    response is not None
-                    and response.status_code == 400
-                    and "tool" in response.text.lower()
-                    and ("validation failed" in response.text.lower()
-                         or "not in request.tools" in response.text.lower())
-                ):
-                    logger.info(
-                        f"Tool-call mismatch on {provider}/{model}; retrying same "
-                        f"model with tools disabled"
-                    )
-                    retry_payload = {k: v for k, v in payload.items() if k not in ("tools", "tool_choice")}
-                    try:
-                        retry_resp = await client.post(url, headers=headers, json=retry_payload)
-                        if retry_resp.status_code == 200:
-                            retry_data = retry_resp.json()
-                            if _validate_response(retry_data):
-                                logger.info("Tool-disabled retry succeeded")
-                                health.note_success(provider, model)
-                                return {"success": True, "data": retry_data, "tools_disabled": True}
-                        logger.warning(
-                            f"Tool-disabled retry failed {retry_resp.status_code}: {retry_resp.text[:150]}"
-                        )
-                    except Exception as e:
-                        logger.warning(f"Tool-disabled retry error: {e}")
-
-                # Any error -> trigger fallback chain. If the failure was a pure
-                # rate limit we keep this provider (its other models have separate
-                # quota buckets) instead of dropping the only working provider.
-                status = response.status_code if response is not None else "?"
-                rate_limited = response is not None and response.status_code == 429
-                # Devre kesici: durum koduna gore saglayici/model karari kaydet.
-                # (5xx/timeout bilincli olarak NOTR: gecici olabilir.)
-                if response is not None:
-                    if response.status_code in (401, 403):
-                        health.mark_invalid(provider, response.status_code)
-                        logger.warning(
-                            "Provider %s anahtari gecersiz (HTTP %d); 30 dk devre disi",
-                            provider, response.status_code,
-                        )
-                    elif response.status_code == 404:
-                        health.mark_model_missing(provider, model, response.status_code)
-                    elif response.status_code == 429:
-                        health.mark_rate_limited(provider, model, _parse_retry_after(response))
-                detail = response.text[:200] if response is not None else "no response"
-                logger.warning(f"LLM API error {status} from {provider}/{model}: {detail}")
-                return await self._fallback_chain(
-                    messages, failed_provider=provider, failed_model=model, rate_limited=rate_limited
-                )
-        
-        except httpx.TimeoutException:
-            logger.warning(f"Timeout calling {provider}/{model}")
-            return await self._fallback_chain(messages, failed_provider=provider, failed_model=model)
-        except httpx.ConnectError:
-            logger.warning(f"Connection error to {provider}")
-            return await self._fallback_chain(messages, failed_provider=provider, failed_model=model)
-        except Exception as e:
-            logger.warning(f"LLM call failed: {e}")
-            return await self._fallback_chain(messages, failed_provider=provider, failed_model=model)
-    
     async def _fallback_chain(self, messages: List[Dict], failed_provider: str = None, failed_model: str = None, rate_limited: bool = False) -> Dict:
         """
-        Comprehensive fallback chain:
-        1. Try other models from SAME provider (priority order)
-        2. Try the remaining cloud provider (OpenRouter)
-        3. Each provider tries its models in priority order
-        4. Final fallback: local model, then rule-based agent
-
-        ``rate_limited`` is kept for backward compatibility. Both rate-limit and
-        hard failures try the failed provider's sibling models first: with only
-        one cloud provider left, dropping it entirely would skip all cloud models.
+        Yerel fallback zinciri:
+        Yalnızca kurulu diğer yerel Ollama modellerini dener, bulut aranmaz.
         """
-        from model_routes import MODEL_CATALOG, _is_valid_key, _load_config
-
-        # Same token guard as the primary call: a 413 in fallback ends the task.
         messages = self._safe_window(messages)
-
-        config = _load_config()
-        api_keys = config.get("api_keys", {})
-        
-        # Katalogda yalnızca OpenRouter bulut sağlayıcısı kalır (diğerleri kaldırıldı).
-        # Testler katalogu monkeypatch'lediğinde sıra yine katalogdan gelir.
-        provider_priority = list(MODEL_CATALOG.keys())
-
-        # Başarısız sağlayıcıyı tamamen düşürme: aynı sağlayıcının kardeş
-        # modellerini önce dene (özellikle tek bulut sağlayıcısı kaldığında).
-        # Geçersiz anahtar health tarafından ayrıca işaretlenir ve sonraki
-        # çağrılarda atlanır.
-        if failed_provider and failed_provider in provider_priority:
-            provider_priority = [failed_provider] + [p for p in provider_priority if p != failed_provider]
-        
-        for provider_id in provider_priority:
-            provider_info = MODEL_CATALOG.get(provider_id)
-            if not provider_info:
-                continue
-
-            # Devre kesici: anahtari gecersiz oldugu bilinen saglayiciyi atla
-            # (17 modelli openrouter + 5 modelli openai = 22 bos istek onlenir).
-            if health.provider_blocked(provider_id):
-                logger.info(
-                    "Fallback: %s atlandi (gecersiz anahtar, %.0f sn kaldi)",
-                    provider_id, health.cooldown_remaining(provider_id),
-                )
-                continue
-            
-            # Get API key for this provider
-            env_key = provider_info["env_key"]
-            api_key = api_keys.get(provider_id) or os.getenv(env_key, "")
-            
-            if not _is_valid_key(api_key):
-                logger.debug(f"Fallback: No valid key for {provider_id}")
-                continue
-            
-            # Determine models to try for this provider
-            models_to_try = []
-            if provider_id == failed_provider and failed_model:
-                # Try other models from the same provider first
-                for m in provider_info["models"]:
-                    if m["id"] != failed_model:
-                        models_to_try.append(m["id"])
-            else:
-                # Try all models in provider priority order
-                models_to_try = [m["id"] for m in provider_info["models"]]
-            
-            for model_id in models_to_try:
-                if health.model_blocked(provider_id, model_id):
-                    logger.debug(
-                        "Fallback: %s/%s atlandi (gecici olarak devre disi)",
-                        provider_id, model_id,
-                    )
-                    continue
-                try:
-                    logger.info(f"Fallback trying: {provider_id}/{model_id}")
-                    
-                    async with httpx.AsyncClient(timeout=60) as client:
-                        payload = {
-                            "model": model_id,
-                            "messages": messages,
-                            "tools": self._tools_payload(),
-                            "tool_choice": "auto",
-                            "temperature": 0.7,
-                            "max_tokens": 4096
-                        }
-                        url = f"{provider_info['base_url']}/chat/completions"
-                        headers = {
-                            "Authorization": f"Bearer {api_key}",
-                            "Content-Type": "application/json"
-                        }
-                        if provider_id == "openrouter":
-                            headers["HTTP-Referer"] = "http://localhost:8080"
-                            headers["X-Title"] = "NEXUS-CORE"
-                        
-                        response = await client.post(url, headers=headers, json=payload)
-                        
-                        if response.status_code == 200:
-                            data = response.json()
-                            
-                            # Validate response structure
-                            if not _validate_response(data):
-                                logger.warning(f"Invalid response structure from fallback {provider_id}/{model_id}, trying next model")
-                                continue
-                            
-                            logger.info(f"Fallback SUCCESS: {provider_id}/{model_id}")
-                            health.note_success(provider_id, model_id)
-                            # Update active config for future calls
-                            self.llm_config.api_key = api_key
-                            self.llm_config.base_url = provider_info["base_url"]
-                            self.llm_config.model = model_id
-                            self.provider = provider_id
-                            # Persist active model + keys (re-encrypted via _save_config).
-                            # NOTE: _load_config() returns DECRYPTED keys, so we must
-                            # re-encrypt on save (previously wrote plaintext to disk).
-                            from model_routes import _save_config
-                            config = _load_config()
-                            config["active_provider"] = provider_id
-                            config["active_model"] = model_id
-                            _save_config(config)
-                            return {"success": True, "data": data}
-                        elif response.status_code in (401, 403):
-                            # Anahtar/hesap hatasi: saglayiciyi isaretle. KARDES modeller
-                            # yine denenir (bazi saglayicilarda yetki model bazli olabilir;
-                            # biri basarirsa note_success isareti temizler). Sonraki
-                            # cagrilarda saglayici tamamen atlanir.
-                            health.mark_invalid(provider_id, response.status_code)
-                            logger.warning(
-                                "Fallback: %s yetki hatasi (HTTP %d); sonraki cagrilarda atlanacak",
-                                provider_id, response.status_code,
-                            )
-                            continue
-                        elif response.status_code == 404:
-                            health.mark_model_missing(provider_id, model_id, 404)
-                            logger.warning(
-                                "Fallback: model yok %s/%s; diger model deneniyor",
-                                provider_id, model_id,
-                            )
-                            continue
-                        elif response.status_code == 429:
-                            health.mark_rate_limited(
-                                provider_id, model_id, _parse_retry_after(response)
-                            )
-                            logger.warning(f"Rate limited on {provider_id}/{model_id}, trying next model")
-                            continue  # Try next model
-                        else:
-                            logger.warning(f"Fallback failed {provider_id}/{model_id}: {response.status_code} - {response.text[:200]}")
-                            continue
-                            
-                except httpx.TimeoutException:
-                    logger.warning(f"Timeout on fallback {provider_id}/{model_id}")
-                    continue
-                except Exception as e:
-                    logger.warning(f"Fallback error on {provider_id}/{model_id}: {e}")
-                    continue
-        
-        # Yerel model yedegi (opt-in): bulut zinciri tukendikten sonra, kural-tabanli
-        # yanittan ONCE denenir. NEXUS_LOCAL_LLM_URL tanimli degilse hicbir sey yapmaz.
-        local_result = await self._try_local_llm(messages)
-        if local_result is not None:
-            return local_result
-
-        # All fallbacks exhausted -> rule-based agent
-        logger.warning("All LLM fallbacks exhausted, using rule-based fallback")
-        return await self._fallback_response(messages)
-
-    async def _try_local_llm(self, messages: List[Dict]) -> Optional[Dict]:
-        """Yerel OpenAI-uyumlu sunucu (Ollama/LM Studio/llama.cpp) yedegi.
-
-        Yalnizca ``NEXUS_LOCAL_LLM_URL`` (loopback) tanimliysa denenir; varsayilan
-        KAPALI. Basarisizlik ana akisi ETKILEMEZ (None doner). Yan etki yoktur:
-        bulut yapilandirmasi degistirilmez.
-        """
         try:
             import local_llm
-        except Exception as exc:  # pragma: no cover - modul yoksa sessiz gec
-            logger.debug("local_llm modulu yuklenemedi: %s", exc)
-            return None
 
-        if not local_llm.is_enabled():
-            return None
+            # Yerel model kapalıysa (loopback olmayan URL) hiç denemeden
+            # kural tabanlı yanıta geç; buluta asla sıçramaz.
+            if not local_llm.is_enabled():
+                logger.info("Yerel model kapalı; kural tabanlı yanıta geçiliyor")
+                return await self._fallback_response(messages)
 
-        try:
-            result = await local_llm.chat(messages)
-        except Exception as exc:
-            logger.warning("Yerel model cagrisi basarisiz: %s", exc)
-            return None
+            info = await local_llm.detect(timeout=2.0)
+            models = info.get("models") or []
+            alt_models = [m for m in models if isinstance(m, str) and m != failed_model]
+            for alt in alt_models:
+                logger.info("Yerel alternatif deneniyor: %s", alt)
+                base_url = (self.llm_config.base_url or local_llm.configured_url() or "http://127.0.0.1:11434/v1").rstrip("/")
+                res = await local_llm.chat(
+                    messages,
+                    model=alt,
+                    base_url=base_url,
+                    temperature=self.llm_config.temperature,
+                    max_tokens=512,
+                    timeout=60.0,
+                    tools=self._tools_payload() or None,
+                )
+                if res.get("success"):
+                    self.llm_config.model = alt
+                    return res
+        except Exception as e:
+            logger.warning(f"Yerel fallback hatası: {e}")
 
-        if not isinstance(result, dict) or not result.get("success"):
-            logger.warning("Yerel model yanit vermedi: %s", (result or {}).get("error"))
-            return None
+        logger.warning("Tüm yerel modeller tükendi, kural tabanlı yanıta geçiliyor")
+        return await self._fallback_response(messages)
 
-        logger.info("Yerel model yedegi kullanildi: %s", result.get("model"))
-        return result
 
     async def _fallback_response(self, messages: List[Dict]) -> Dict:
         """
@@ -1675,37 +3392,23 @@ Kurallar:
             self._refresh_llm_config()
         except Exception:
             pass
-        model = (getattr(self.llm_config, "model", "") or "bilinmiyor").strip()
-        provider = (getattr(self, "provider", "") or "openrouter").strip()
-        local_model = (os.getenv("NEXUS_LOCAL_LLM_MODEL") or "qwen2.5:3b").strip()
-        local_url = (os.getenv("NEXUS_LOCAL_LLM_URL") or "").strip()
-        if not local_url:
-            local_state = "kapalı"
-        elif self._local_server_reachable(local_url):
-            local_state = "çalışıyor"
-        else:
-            local_state = "yapılandırıldı (sunucu yanıt vermiyor)"
+        model = (getattr(self.llm_config, "model", "") or "qwen2.5:3b").strip()
+        provider = "local"
+        local_model = (os.getenv("NEXUS_LOCAL_LLM_MODEL") or model).strip()
+        local_url = (os.getenv("NEXUS_LOCAL_LLM_URL") or "http://127.0.0.1:11434/v1").strip()
+        local_state = "çalışıyor" if self._local_server_reachable(local_url) else "bağlantı bekleniyor"
 
-        cloud_line = (
-            f"OpenRouter / `{model}`"
-            if provider == "openrouter"
-            else f"`{provider}` / `{model}`"
-        )
         return (
-            "Ben **NEXUS-CORE v6.1** — çok modlu bir yapay zeka ajanıyım. "
-            "Ana Yönetici Ajan olarak çalışırım; kodlama görevlerini "
-            "Kodlama Yöneticisi ve 20 uzmanlık ajanına devrederim.\n\n"
+            "Ben **NEXUS-CORE v6.1** — çok modlu yerel bir yapay zeka ajanıyım. "
+            "Tüm işlemlerinizi doğrudan bilgisayarınızda yerel Ollama motoru ile çalıştırırım.\n\n"
             "**Çalışma yapılandırmam:**\n"
-            f"- ☁️ Bulut: {cloud_line}\n"
-            f"- 💻 Yerel: `{local_model}` (Ollama, {local_state})\n\n"
+            f"- 🎯 Yerel Sağlayıcı: Ollama (100% yerel, güvenli ve gizli)\n"
+            f"- 💻 Aktif Model: `{model}` ({local_state})\n\n"
             "**Neler yapabilirim?**\n"
             "1. 💻 Kod üretimi, dosya düzenleme, komut çalıştırma ve test\n"
             "2. 🎨 Görsel prompt ve gerçek görsel üretimi\n"
             "3. 🎬 Sinematik video promptu ve MP4 üretimi\n"
-            "4. 🌐 Web araması, soru-cevap ve öğrenme\n\n"
-            "Yerel model veya OpenRouter erişimi geçici olarak kesilse bile kimlik "
-            "sorularında hata mesajı vermem. OpenRouter'a geçmek için üstteki "
-            "model seçicisinden bir OpenRouter modeli seçebilirsiniz."
+            "4. 🌐 Web araması, soru-cevap ve öğrenme"
         )
 
     def _answer_question(self, query: str) -> str:
@@ -1717,8 +3420,7 @@ Kurallar:
         
         if any(kw in q for kw in ["merhaba", "selam", "hey", "naber", "nasılsın", "nasilsin"]):
             return ("Merhaba! Ben **NEXUS-CORE v6.1** yapay zeka ajanıyım. "
-                    "Kod üretebilir, görsel/video prompt hazırlayabilir ve sorularınızı "
-                    "yanıtlayabilirim. Nasıl yardımcı olabilirim?")
+                    "Yerel Ollama motoru üzerinden çalışıyorum. Nasıl yardımcı olabilirim?")
         
         if "yapay zeka" in q and ("nedir" in q or "ne demek" in q):
             return ("**Yapay Zeka (AI)**, insan zekasını taklit eden sistemlerin genel adıdır. "
@@ -1736,12 +3438,10 @@ Kurallar:
         
         # Bilinmeyen sorularda kimliği koru; ham API hatası gösterme.
         return (
-            "Ben **NEXUS-CORE v6.1** — kodlama ve çok modlu üretim yapan bir "
-            "yapay zeka ajanıyım. Bu soru için şu anda dil modeli yanıtı "
-            "üretemedim.\n\n"
-            "Yerel model (`qwen2.5:3b`) veya OpenRouter seçili modeliyle "
-            "yeniden deneyebilirsiniz. Kodlama, dosya işlemi, görsel/video "
-            "promptu veya genel bilgi sorularınızı yazmaya devam edebilirsiniz."
+            "Ben **NEXUS-CORE v6.1** — yerel çalışan yapay zeka ajanıyım. "
+            "Bu soru için yerel model şu anda yanıt üretemedi.\n\n"
+            "Ollama servisinin açık olduğunu ve modelin yüklü olduğunu kontrol ederek "
+            "yeniden deneyebilirsiniz."
         )
 
 
@@ -1765,17 +3465,26 @@ def reset_agent_v6():
     return get_agent_v6()
 
 
-async def chat(user_message: str, conversation_id: str = None, history=None, agent_id: str = None, tools_override: list = None, system_prefix: str = None) -> Dict:
+async def chat(user_message: str, conversation_id: str = None, history=None, agent_id: str = None, tools_override: list = None, system_prefix: str = None, current_user = None) -> Dict:
     """Quick chat function."""
     agent = get_agent_v6()
     return await agent.chat(
         user_message, conversation_id, history=history, agent_id=agent_id,
         tools_override=tools_override, system_prefix=system_prefix,
+        current_user=current_user,
     )
 
 
-def get_agent_info() -> Dict:
-    """Get agent information."""
+def get_agent_info(current_user = None) -> Dict:
+    """Get agent information (yerel Ollama modeli)."""
+    agent = get_agent_v6()
+    try:
+        agent._current_user = current_user
+        agent._refresh_llm_config()
+    except Exception:
+        pass
+    provider = "local"
+    model = getattr(agent.llm_config, "model", "") or "qwen2.5:3b"
     return {
         "name": "NEXUS-CORE v6.1",
         "type": "True AI Agent",
@@ -1788,5 +3497,7 @@ def get_agent_info() -> Dict:
             "Learning"
         ],
         "tools": [t["function"]["name"] for t in TOOLS],
-        "llm_model": "openrouter + local fallback"
+        "llm_model": f"{provider}/{model}",
+        "provider": provider,
+        "model": model,
     }

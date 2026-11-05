@@ -9,6 +9,7 @@ import json
 import re
 import time
 import subprocess
+import asyncio
 import logging
 from typing import Dict, List, Optional, Any
 from contextvars import ContextVar
@@ -67,6 +68,46 @@ class ToolExecutor:
             raise ValueError("Path traversal detected")
         return full_path
     
+    def _run_command_blocking(self, command: str, timeout: int, cwd: str) -> Dict:
+        """``execute_command`` aracının senkron kısım (worker thread'de çalışır).
+
+        Ayrı fonksiyon olmasının nedeni: doğrudan ``subprocess.communicate``
+        çağırmak olay döngüsünü (event loop) kilitliyor ve arayüz donuyordu.
+        """
+        try:
+            process = subprocess.Popen(
+                command,
+                shell=True,
+                cwd=cwd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True,
+                encoding='utf-8',
+                errors='replace'
+            )
+
+            try:
+                stdout, stderr = process.communicate(timeout=timeout)
+            except subprocess.TimeoutExpired:
+                process.kill()
+                stdout, stderr = process.communicate()
+                return {
+                    "success": False,
+                    "error": f"Command timed out after {timeout}s",
+                    "stdout": stdout[:2000],
+                    "stderr": stderr[:1000]
+                }
+
+            return {
+                "success": process.returncode == 0,
+                "exit_code": process.returncode,
+                "stdout": stdout[:5000],
+                "stderr": stderr[:2000],
+                "command": command
+            }
+        except Exception as e:
+            return {"success": False, "error": str(e)}
+
     async def execute(self, tool_name: str, arguments: Dict, allowed: Optional[set] = None) -> Dict:
         """Execute a tool and return result.
 
@@ -124,6 +165,13 @@ class ToolExecutor:
             elif tool_name == "write_file":
                 try:
                     full_path = self._resolve_path(arguments["path"])
+                    # Kök çözümlemesi görünür olsun (sunucu log'da): hangi
+                    # kökten yazıldığını teşhis için geçici iz.
+                    print(
+                        f"[write_file] root={self._root()!r} "
+                        f"arg={arguments['path']!r} resolved={full_path!r}",
+                        flush=True,
+                    )
                     os.makedirs(os.path.dirname(full_path), exist_ok=True)
                     
                     content = arguments["content"]
@@ -279,44 +327,40 @@ class ToolExecutor:
                 except Exception as e:
                     return {"success": False, "error": str(e)}
             
-            elif tool_name == "execute_command":
+            elif tool_name == "delete_file":
                 try:
-                    import subprocess
+                    full_path = self._resolve_path(arguments["path"])
+                    confirm = arguments.get("confirm", False)
                     
-                    command = arguments["command"]
-                    timeout = arguments.get("timeout", 30)
+                    if not confirm:
+                        return {"success": False, "error": "Deletion requires confirm=true"}
                     
-                    # Execute with subprocess
-                    process = subprocess.Popen(
-                        command,
-                        shell=True,
-                        cwd=self._root(),
-                        stdout=subprocess.PIPE,
-                        stderr=subprocess.PIPE,
-                        text=True,
-                        encoding='utf-8',
-                        errors='replace'
-                    )
+                    if not os.path.exists(full_path):
+                        return {"success": False, "error": f"File not found: {arguments['path']}"}
                     
-                    try:
-                        stdout, stderr = process.communicate(timeout=timeout)
-                    except subprocess.TimeoutExpired:
-                        process.kill()
-                        stdout, stderr = process.communicate()
-                        return {
-                            "success": False,
-                            "error": f"Command timed out after {timeout}s",
-                            "stdout": stdout[:2000],
-                            "stderr": stderr[:1000]
-                        }
+                    if os.path.isdir(full_path):
+                        return {"success": False, "error": "Cannot delete directory with delete_file. Use execute_command for directories."}
+                    
+                    os.remove(full_path)
                     
                     return {
-                        "success": process.returncode == 0,
-                        "exit_code": process.returncode,
-                        "stdout": stdout[:5000],
-                        "stderr": stderr[:2000],
-                        "command": command
+                        "success": True,
+                        "path": arguments["path"],
+                        "message": f"File deleted: {arguments['path']}"
                     }
+                except Exception as e:
+                    return {"success": False, "error": str(e)}
+            
+            elif tool_name == "execute_command":
+                # Senkron alt süreç olay döngüsünü KİLİTLEMESİN: komut
+                # çalıştığı süre boyunca tüm arayüz (login/sohbet) donuyordu.
+                try:
+                    return await asyncio.to_thread(
+                        self._run_command_blocking,
+                        arguments.get("command") or "",
+                        arguments.get("timeout", 30),
+                        self._root(),
+                    )
                 except Exception as e:
                     return {"success": False, "error": str(e)}
             
@@ -513,6 +557,14 @@ class ToolExecutor:
                         "araçsız olarak kullanıcıya metin yanıtı olarak ver."
                     )
                 }
+            
+            # ===== GIT TOOLS =====
+            elif tool_name.startswith("git_"):
+                from git_integration import GIT_TOOL_FUNCTIONS
+                func = GIT_TOOL_FUNCTIONS.get(tool_name)
+                if func:
+                    return await func(arguments)
+                return {"success": False, "error": f"Unknown git tool: {tool_name}"}
             
             else:
                 return {"success": False, "error": f"Unknown tool: {tool_name}"}

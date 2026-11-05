@@ -32,6 +32,10 @@ class ChatRequest(BaseModel):
     conversation_id: Optional[str] = Field(None, description="Continue existing conversation")
     history: Optional[List[Dict]] = Field(None, description="Previous messages")
     agent_id: Optional[str] = Field(None, description="Custom agent ID to use (for example 'main-manager')")
+    # Kodlama görevi modu. Varsayılan 'plan': dosya değiştirmez, yalnız rapor
+    # üretir. 'execute' + confirm=True: uzman adımları gerçekten dosya yazar.
+    mode: str = Field("plan", description="Kodlama modu: 'plan' | 'execute'")
+    confirm: bool = Field(False, description="Execute modu için kullanıcı onayı")
 
 
 class ChatResponse(BaseModel):
@@ -42,6 +46,7 @@ class ChatResponse(BaseModel):
     tools_used: List[str] = []
     thinking_steps: List[Dict] = []
     coding: Optional[Dict] = None
+    files_changed: List[str] = []
     error: Optional[str] = None
 
 
@@ -129,21 +134,71 @@ async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optiona
         if agent_id == "auto":
             agent_id = "main-manager"
 
-        # Ana Yönetici, kodlama görevini Kodlama Yöneticisi zincirine devreder.
-        # Yazma yapılmaz: sohbetten gelen işler PLAN modundadır (D-024).
+        # Kodlama görevi: Ana Yönetici (veya doğrudan Kodlama Yöneticisi) işi
+        # zincire devreder. Yazma yetkisi istemcidir: mode="execute" +
+        # confirm=True. Varsayılan 'plan' => dosya değiştirmez, yalnız rapor.
         result = None
-        if agent_id == "main-manager" and _is_coding_task(request.message):
+        is_coding_request = agent_id == "coding-manager" or (
+            agent_id == "main-manager" and _is_coding_task(request.message)
+        )
+        # ---- HIZLI ÜRETİM KANADI ------------------------------------------
+        # "Site/uygulama yap ve ... klasörüne kaydet" gibi proje inşa
+        # istekleri kodlama zincirine girmeden deterministik üreticiye gider:
+        # zincir küçük yerel modelde dakikalarca sürüklenip dosya bile
+        # açmıyordu. Üretim başarısızsa zincire/sohbete düşer.
+        if is_coding_request and (request.mode or "").lower() == "execute":
+            try:
+                from ai_agent import NexusAIAgent, get_agent_v6
+
+                _fast_agent = get_agent_v6()
+                _fast_candidate = (
+                    NexusAIAgent._is_build_request(request.message)
+                    or _fast_agent._is_edit_request(request.message)
+                )
+                if _fast_candidate:
+                    _fast_built = await _fast_agent._smart_build_or_edit(request.message, "")
+                    if _fast_built:
+                        _fast_notes = list(_fast_built.get("notes") or [])
+                        _steps = [{
+                            "type": "thinking",
+                            "content": "Proje inşa isteği algılandı; dosyalar üretiliyor",
+                            "icon": "🧠",
+                        }]
+                        _steps.extend(
+                            {"type": "reasoning", "content": n, "icon": "🩹"}
+                            for n in _fast_notes
+                        )
+                        _steps.append({
+                            "type": "complete",
+                            "content": "Dosyalar diske yazıldı",
+                            "icon": "✨",
+                        })
+                        result = {
+                            "success": True,
+                            "response": _fast_built.get("response") or "",
+                            "conversation_id": conversation_id or "",
+                            "tools_used": [],
+                            "thinking_steps": _steps,
+                            "files_changed": list(_fast_built.get("files") or []),
+                        }
+            except Exception as exc:  # üretim kanadı çökerse normal akışa düş
+                logger.warning("Hızlı üretim kanadı hatası: %s", exc)
+
+        # Zincir: yalnız hızlı kanat sonuç üretemediyse devreye girer.
+        # (Aksi halde zincir ~30 dakika sürüp hızlı kanadın sonucunu ezer.)
+        if is_coding_request and result is None:
             try:
                 from coding_manager import CodingTaskManager
 
                 coding_run = await CodingTaskManager().run(
                     request.message,
-                    mode="plan",
+                    mode=request.mode,
+                    confirm=request.confirm,
                     conversation_id=conversation_id,
-                    via_main_manager=True,
+                    via_main_manager=(agent_id == "main-manager"),
                 )
                 final_text = coding_run.get("final_answer") or ""
-                if coding_run.get("success") and final_text:
+                if final_text:
                     report = coding_run.get("report") or {}
                     result = {
                         "success": True,
@@ -155,14 +210,17 @@ async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optiona
                             "task_id": coding_run.get("task_id"),
                             "task_type": coding_run.get("task_type"),
                             "mode": coding_run.get("mode", "plan"),
+                            "status": coding_run.get("status"),
+                            "success": coding_run.get("success"),
                             "experts": report.get("3_kullanilan_uzmanlar") or [],
                         },
+                        "files_changed": coding_run.get("files_changed") or [],
                     }
             except Exception as exc:  # zincir çökerse normal sohbete düş
                 logger.warning("Kodlama devri basarisiz: %s", exc)
 
         if result is None:
-            result = await chat(request.message, conversation_id, history=request.history, agent_id=agent_id)
+            result = await chat(request.message, conversation_id, history=request.history, agent_id=agent_id, current_user=current_user)
         
         # Persist messages and update title if authenticated
         if current_user and chat_id_for_persistence and result.get("success"):
@@ -224,9 +282,9 @@ async def chat_stream_endpoint(request: ChatRequest):
 
 
 @router.get("/info", response_model=AgentInfoResponse, summary="Get Agent Info")
-async def agent_info():
+async def agent_info(current_user = Depends(get_optional_user)):
     """Get information about the AI agent."""
-    info = get_agent_info()
+    info = get_agent_info(current_user=current_user)
     return AgentInfoResponse(**info)
 
 

@@ -1,7 +1,20 @@
 """Kimlik soruları: model/anahtar arızasından bağımsız doğru tanıtım."""
 import asyncio
+import json
+import os
 
 import ai_agent
+
+
+def _active_model_name() -> str:
+    try:
+        cfg_path = os.path.join(
+            os.path.dirname(ai_agent.__file__), "model_config.json"
+        )
+        with open(cfg_path, encoding="utf-8") as fh:
+            return (json.load(fh).get("active_model") or "").strip()
+    except Exception:
+        return ""
 
 
 def _bare_agent():
@@ -25,7 +38,10 @@ def test_identity_chat_never_calls_llm(monkeypatch):
 
     assert result["success"] is True
     assert "NEXUS-CORE" in result["response"]
-    assert "qwen2.5:3b" in result["response"]
+    assert "Aktif Model" in result["response"]
+    active = _active_model_name()
+    if active:
+        assert f"`{active}`" in result["response"], (active, result["response"])
     assert "Üzgünüm" not in result["response"]
     assert calls["n"] == 0
 
