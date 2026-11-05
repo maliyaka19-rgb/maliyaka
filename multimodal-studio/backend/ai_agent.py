@@ -16,6 +16,8 @@ import time
 import uuid
 import os
 import re
+import subprocess
+import sys
 import py_compile  # _self_review: Python dosyalarını derle-denetle
 import socket
 import urllib.parse
@@ -2587,6 +2589,195 @@ Kurallar:
                     issues.append(f"{name}: {exc}")
         return (not issues), issues
 
+    # ------------------------------------------------------------------
+    # DERLEME / ÇALIŞTIRMA: NEXUS kendi yazdığı kodu derler, öz test
+    # eder ve isterse uygulamayı/siteyi çalıştırır.
+    # ------------------------------------------------------------------
+
+    _COMPILE_KEYWORDS = (
+        "derle", "derlemede", "derleyip", "calistir", "test et",
+        "kendini test", "kontrol et", "calisiyor mu", "deneme kosu",
+    )
+
+    _MODULE_ENDINGS = (".py", ".html", ".css", ".js", ".json", ".md")
+
+    @classmethod
+    def _is_compile_request(cls, user_message: str) -> bool:
+        """'derle / çalıştır / kontrol et' gibi çalışma-kanıt istekleri."""
+        q = _ascii_tr(user_message)
+        return any(k in q for k in cls._COMPILE_KEYWORDS)
+
+    @classmethod
+    def _code_project_root(cls, root: str):
+        """Kod dosyası barındıran (py/html/css/js) proje kökü, değilse None."""
+        root = os.path.abspath(str(root or ""))
+        if not os.path.isdir(root) or root == _APP_ROOT:
+            return None
+        files = os.listdir(root)
+        if not any(n.lower().endswith((".py", ".html", ".js", ".css"))
+                   for n in files):
+            return None
+        return root
+
+    def _compile_project(self, root: str, run_self_test: bool = True):
+        """NEXUS'un yazdığı kodu derleme/öz-test denetimi.
+
+        * Python: sözdizimi derlemesi + ``main.py --check`` öz testi (varsa)
+        * HTML:   iskelet + css/js referansları
+        * CSS/JS: parantez dengesi; JS için node varsa ``node --check``
+        Dönen: {"ok", "checks", "issues", "main"}
+        """
+        checks: List[str] = []
+        issues: List[str] = []
+        main_py = None
+        names = sorted(os.listdir(root))
+
+        # ---- PYTHON ------------------------------------------------------
+        for name in names:
+            if not name.lower().endswith(".py"):
+                continue
+            path = os.path.join(root, name)
+            try:
+                src = open(path, encoding="utf-8").read()
+                compile(src, name, "exec")
+                checks.append(f"🐍 {name}: derlendi ✓")
+                if main_py is None and name.lower() in (
+                        "main.py", "app.py", "run.py", "masaustu.py"):
+                    main_py = path
+            except Exception as exc:
+                issues.append(f"🐍 {name}: {exc}")
+
+        if run_self_test and main_py:
+            try:
+                if "--check" in open(main_py, encoding="utf-8").read():
+                    proc = subprocess.run(
+                        [sys.executable, main_py, "--check"],
+                        capture_output=True, text=True, timeout=120, cwd=root,
+                    )
+                    out = (proc.stdout or "").strip()
+                    if proc.returncode == 0 and out:
+                        checks.append("🧪 Öz test: " + out.splitlines()[-1])
+                    else:
+                        issues.append("🧪 Öz test başarısız: " +
+                                      (out or (proc.stderr or ""))[:200])
+            except Exception as exc:
+                issues.append(f"🧪 Öz test çalışamadı: {exc}")
+
+        # ---- HTML --------------------------------------------------------
+        for name in [n for n in names if n.lower().endswith(".html")]:
+            try:
+                html = open(os.path.join(root, name),
+                            encoding="utf-8", errors="ignore").read()
+            except Exception as exc:
+                issues.append(f"🌐 {name}: {exc}")
+                continue
+            if "<body" in html and "</html>" in html:
+                checks.append(f"🌐 {name}: iskelet ✓")
+            else:
+                issues.append(f"🌐 {name}: iskelet eksik")
+            for ref in re.findall(r'(?:src|href)="([^"\s]+\.(?:css|js))"', html):
+                if not os.path.exists(os.path.join(root, ref)):
+                    issues.append(f"🌐 {name}: eksik referans → {ref}")
+
+        # ---- CSS: kural dengesi -------------------------------------------
+        for name in [n for n in names if n.lower().endswith(".css")]:
+            try:
+                css = open(os.path.join(root, name),
+                           encoding="utf-8", errors="ignore").read()
+                if css.count("{") == css.count("}"):
+                    checks.append(f"🎨 {name}: şablon dengesi ✓")
+                else:
+                    issues.append(f"🎨 {name}: {{}} dengesi bozuk")
+            except Exception as exc:
+                issues.append(f"🎨 {name}: {exc}")
+
+        # ---- JS: node --check (varsa), yoksa parantez dengesi --------------
+        js_files = [n for n in names if n.lower().endswith(".js")]
+        if js_files:
+            node = self.__class__.__dict__.get("_node_cmd")
+            if node is None:
+                try:
+                    subprocess.run(["node", "--version"], capture_output=True,
+                                   timeout=10)
+                    node = "node"
+                except Exception:
+                    node = ""
+                type(self)._node_cmd = node
+            for name in js_files:
+                path = os.path.join(root, name)
+                if node:
+                    try:
+                        proc = subprocess.run(
+                            [node, "--check", path],
+                            capture_output=True, text=True, timeout=30)
+                        if proc.returncode == 0:
+                            checks.append(f"📜 {name}: sözdizimi ✓ (node)")
+                        else:
+                            issues.append("📜 " + name + ": " +
+                                          (proc.stderr or "")[:160])
+                        continue
+                    except Exception as exc:
+                        issues.append(f"📜 {name}: denetlenemedi {exc}")
+                        continue
+                try:
+                    js = open(path, encoding="utf-8", errors="ignore").read()
+                    if js.count("{") == js.count("}"):
+                        checks.append(f"📜 {name}: blok dengesi ✓")
+                    else:
+                        issues.append(f"📜 {name}: {{}} dengesi bozuk")
+                except Exception as exc:
+                    issues.append(f"📜 {name}: {exc}")
+        return {"ok": not issues, "checks": checks,
+                "issues": issues, "main": main_py}
+
+    def _compile_and_respond(self, user_message: str, root: str):
+        """Derleme/öz-test isteğini çalıştırıp insan-okur rapor döndürür."""
+        q = _ascii_tr(user_message)
+        wants_run = "calistir" in q or "calistirilabilir" in q
+        report = self._compile_project(root, run_self_test=True)
+
+        lines = ["🔧 Derleme denetimi:", "📁 Klasör: " + root, ""]
+        lines += ["✅ " + c for c in report["checks"]]
+        lines += ["⚠️ " + i for i in report["issues"]]
+        if report["ok"]:
+            lines.append("")
+            lines.append("Tamam: kod derleniyor, referanslar ve testler sağlam.")
+        else:
+            lines.append("")
+            lines.append("Sorunları düzeltmem için söylemen yeterli.")
+
+        # "çalıştır" devamında: Python uygulaması mı, site mi?
+        if wants_run and report.get("main"):
+            try:
+                flags = 0x00000008  # Windows DETACHED_PROCESS
+                subprocess.Popen(
+                    [sys.executable, report["main"]],
+                    cwd=root, creationflags=flags,
+                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+                lines.append("")
+                lines.append("🚀 Uygulama çalışmak üzere açıldı: " +
+                             os.path.basename(report["main"]) +
+                             " (pencereyi kapatabilirsin)")
+            except Exception as exc:
+                lines.append("")
+                lines.append(f"ⓘ Uygulama başlatılamadı: {exc}")
+        elif wants_run and os.path.exists(os.path.join(root, "index.html")):
+            try:
+                os.startfile(os.path.join(root, "index.html"))  # tarayıcı
+                lines.append("")
+                lines.append("🌐 Site tarayıcıda açıldı: index.html")
+            except Exception as exc:
+                lines.append("")
+                lines.append(f"ⓘ Tarayıcı açılamadı: {exc}")
+
+        return {
+            "files": [],
+            "response": "\n".join(lines),
+            "notes": list(report["checks"]) + list(report["issues"]),
+            "mode": "compile",
+            "base_root": root,
+        }
+
     def _edit_failure_response(self, user_message: str) -> Dict:
         """Düzenleme uygulanamadı: dosyalar DEĞİŞMEDEN dürüst yanıt.
 
@@ -2772,10 +2963,32 @@ Kurallar:
     async def _smart_build_or_edit(self, user_message: str, draft_response: str = ""):
         """Site/uygulama istekleri için tek giriş noktası.
 
+        * Derleme/çalıştırma isteği + projede kod -> derle, öz-test, bildir.
         * Düzenleme isteği + diskte proje -> mevcut dosyaları düzenle.
         * Diğer inşa istekleri -> yeni proje/şablon üret.
         * Düzenleme uygulanamazsa dosyalar DEĞİŞMEDEN dürüst yanıt.
         """
+        # ---- DERLEME / ÇALIŞTIRMA KANATI ---------------------------------
+        # Düzenleme anahtar kelimesi de varsa düzenleme önceliklidir;
+        # yalnız "derle/çalıştır/kontrol et" istekleri buradan akar.
+        if self._is_compile_request(user_message) and not self._is_edit_request(user_message):
+            try:
+                target, _promoted = self._detect_save_target(user_message)
+            except Exception:
+                target, _promoted = None, False
+            if _promoted and target:
+                root = self._code_project_root(target)
+            else:
+                try:
+                    from tool_executor import task_working_dir as _twd
+                    ctx_root = _twd.get()
+                except Exception:
+                    ctx_root = None
+                root = self._code_project_root(
+                    ctx_root or getattr(self.tools, "working_dir", None))
+            if root:
+                return self._compile_and_respond(user_message, root)
+            # proje yoksa normal akış devam eder (build/edit)
         try:
             edit_like = bool(self._is_edit_request(user_message))
         except Exception:

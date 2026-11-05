@@ -11,6 +11,7 @@ from pydantic import BaseModel, Field
 from typing import Optional, List, Dict
 import json
 import logging
+import os
 
 from ai_agent import chat, get_agent_v6, get_agent_info, reset_agent_v6
 from auth import auth_service, get_optional_user, get_current_user
@@ -141,6 +142,23 @@ async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optiona
         is_coding_request = agent_id == "coding-manager" or (
             agent_id == "main-manager" and _is_coding_task(request.message)
         )
+        # "derle / çalıştır / kontrol et" de hızlı kanada girsin:
+        # sınıflandırıcı bunu kodlama görevi saymasa bile NEXUS projenin
+        # çalışır durumunu kanıtlayabilmeli.
+        try:
+            from ai_agent import NexusAIAgent as _NAApply, get_agent_v6 as _gav6
+            if not is_coding_request and _NAApply._is_compile_request(
+                    request.message):
+                # yalnızca diskte kod projesi varsa hızlı kanat anlamlıdır
+                tools_dir = getattr(getattr(_gav6(), "tools", None),
+                                    "working_dir", None)
+                if tools_dir and os.path.isdir(str(tools_dir)):
+                    names = os.listdir(str(tools_dir))
+                    if any(n.lower().endswith((".py", ".html", ".js", ".css"))
+                           for n in names):
+                        is_coding_request = True
+        except Exception:
+            pass
         # ---- HIZLI ÜRETİM KANADI ------------------------------------------
         # "Site/uygulama yap ve ... klasörüne kaydet" gibi proje inşa
         # istekleri kodlama zincirine girmeden deterministik üreticiye gider:
@@ -154,14 +172,25 @@ async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optiona
                 _fast_candidate = (
                     NexusAIAgent._is_build_request(request.message)
                     or _fast_agent._is_edit_request(request.message)
+                    or NexusAIAgent._is_compile_request(request.message)
                 )
                 if _fast_candidate:
                     _fast_built = await _fast_agent._smart_build_or_edit(request.message, "")
                     if _fast_built:
+                        _fast_mode = _fast_built.get("mode") or "build"
+                        if _fast_mode == "compile":
+                            _t1, _t2 = ("Derleme/çalıştırma isteği algılandı; kod denetleniyor",
+                                        "Denetim tamamlandı")
+                        elif _fast_mode.startswith("edit"):
+                            _t1, _t2 = ("Düzenleme isteği algılandı; dosyalar güncelleniyor",
+                                        "Dosyalar diske yazıldı")
+                        else:
+                            _t1, _t2 = ("Proje inşa isteği algılandı; dosyalar üretiliyor",
+                                        "Dosyalar diske yazıldı")
                         _fast_notes = list(_fast_built.get("notes") or [])
                         _steps = [{
                             "type": "thinking",
-                            "content": "Proje inşa isteği algılandı; dosyalar üretiliyor",
+                            "content": _t1,
                             "icon": "🧠",
                         }]
                         _steps.extend(
@@ -170,7 +199,7 @@ async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optiona
                         )
                         _steps.append({
                             "type": "complete",
-                            "content": "Dosyalar diske yazıldı",
+                            "content": _t2,
                             "icon": "✨",
                         })
                         result = {
