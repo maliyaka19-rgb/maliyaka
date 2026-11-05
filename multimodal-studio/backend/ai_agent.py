@@ -441,6 +441,25 @@ navToggle();
 orderForm();
 """
 
+_BUILD_TEMPLATE_README = r"""# Modern Site — Hazır Başlangıç
+
+NEXUS tarafından üretilen genel amaçlı modern site iskeleti.
+`index.html` dosyasına çift tıklamak yeterli.
+
+## Özellikler
+- Yapışkan üst menü + mobil： hamburger menü
+- Hero bölümü, özellik kartları, menü/liste bölümü, iletişim formu
+- Karanlık/aydınlık tema (`--brand` CSS değişkeni ile marka rengini tek
+  satırdan değiştir)
+- Ana pencere: "CSS'i renk değiştirir" — NEXUS'a "renkleri mavi yap"
+  demen yeterli, kod senin yerine düzenlenir.
+
+## Özelleştirme
+- Metinler `index.html` içinde bölümlere ayrılmış başlıklarla işaretli
+- Renkler/styles `styles.css` içindeki `:root` değişkenlerinde
+- Davranışlar `script.js` içinde bölüm yorumlarıyla gruplu
+"""
+
 
 # ------------------------------------------------------------------
 # ALAN ŞABLONU 1: GELİŞMİŞ YEMEK SİTESİ (arama, filtre, sepet, karanlık mod)
@@ -812,6 +831,556 @@ render();
 renderCart();
 """
 
+_FOOD_TEMPLATE_MANIFEST = r"""{
+  "name": "Lezzet Durağı",
+  "short_name": "Lezzet",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#fff8f2",
+  "theme_color": "#e2542f",
+  "lang": "tr",
+  "description": "Sepet ve karanlık mod içinde gelişmiş restoran sitesi."
+}
+"""
+
+_FOOD_TEMPLATE_README = r"""# Lezzet Durağı — Gelişmiş Restoran Sitesi
+
+Arama, kategori filtreleri, kalıcı sepet ve karanlık mod içeren modern
+mobil uyumlu restoran sitesi. `index.html` dosyasına çift tıkla yeter.
+
+## Özellikler
+- Menü kartları + canlı arama (yazdıkça anında filtre)
+- Kategori çipleri: Tümü / Kebaplar / Pizzalar / Tatlılar / İçecekler
+- Sepet: adet artır/azalt, toplam hesap, `localStorage` ile kalıcı
+- Karanlık/aydınlık tema (seçim hatırlanır)
+- Öne çıkanlar, müşteri yorumları, çalışma saatleri, doğrulamalı form
+- Mobil üst menü + yukarı çık düğmesi + PWA manifesti
+
+## Kısayollar
+Sepet çekiç: sağ üst 🛒 · Görev: "menüye pizza ekle" gibi isteği
+NEXUS'a söyle — kod senin yerine düzenlenir.
+"""
+
+
+# ------------------------------------------------------------------
+# ALAN ŞABLONU 2: HAVA DURUMU — MOBİL UYUMLU PWA (cam efektli modern tema)
+# ------------------------------------------------------------------
+
+_WEATHER_TEMPLATE_HTML = r"""<!DOCTYPE html>
+<html lang="tr" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Hava Radar — Hava Durumu</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">🌤️ Hava Radar</div>
+  <div class="tools">
+    <select id="city" aria-label="Şehir seç">
+      <option>İstanbul</option><option>Ankara</option><option>İzmir</option>
+      <option>Bursa</option><option>Antalya</option><option>Erzurum</option>
+    </select>
+    <button id="theme" class="icon" title="Tema değiştir">🌗</button>
+  </div>
+</header>
+
+<main class="wrap">
+  <section class="now card">
+    <div class="now-main">
+      <div id="ikon" class="big-ikon">⛅</div>
+      <div>
+        <div id="sicaklik" class="temp">14°</div>
+        <div id="durum" class="desc">Parçalı Bulutlu</div>
+      </div>
+    </div>
+    <div class="now-meta">
+      <span id="yer">📍 İstanbul</span>
+      <span id="guncel">· güncellendi --:--</span>
+    </div>
+  </section>
+
+  <section class="stats">
+    <div class="card stat"><span>💧</span><div><b id="nem">--</b><small>Nem</small></div></div>
+    <div class="card stat"><span>💨</span><div><b id="ruzgar">--</b><small>Rüzgâr</small></div></div>
+    <div class="card stat"><span>🌫️</span><div><b id="basinc">--</b><small>Basınç</small></div></div>
+    <div class="card stat"><span>🌡️</span><div><b id="hissedilen">--</b><small>Hissedilen</small></div></div>
+  </section>
+
+  <section class="block">
+    <h2>Saatlik</h2>
+    <div id="saatlik" class="strip"></div>
+  </section>
+
+  <section class="block">
+    <h2>Sonraki 5 Gün</h2>
+    <div id="gunler" class="days"></div>
+  </section>
+
+  <p class="not">📚 Veriler örnek/demo amaçlıdır. Canlı tahmin için
+  <code>script.js</code> içindeki <b>VERI</b> sözlüğü bir hava API'siyle
+  değiştirilebilir. Arayüz değişmeden çalışır.</p>
+</main>
+
+<footer class="foot">Hava Radar · <span id="yil"></span></footer>
+<script src="script.js"></script>
+</body>
+</html>
+"""
+
+_WEATHER_TEMPLATE_CSS = r"""/* Hava Radar — cam efektli modern tema */
+:root{
+  --brand:#38bdf8; --ink:#f1f5f9; --muted:#94a3b8; --panel:rgba(255,255,255,.07);
+  --cizgi:rgba(255,255,255,.09); --danger:#f87171;
+}
+[data-theme="light"]{
+  --brand:#0284c7; --ink:#0f172a; --muted:#475569;
+  --panel:rgba(255,255,255,.65); --cizgi:rgba(15,23,42,.08);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,'Segoe UI',Roboto,Arial;color:var(--ink);
+  background:linear-gradient(160deg,#0b1120 0%,#111827 55%,#1e293b 100%);
+  min-height:100vh;transition:background .3s}
+[data-theme="light"] body{background:linear-gradient(160deg,#e0f2fe,#f8fafc)}
+.top{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.2rem;gap:.7rem}
+.brand{font-weight:800;font-size:1.05rem}
+.tools{display:flex;gap:.5rem}
+select{background:var(--panel);color:var(--ink);border:1px solid var(--cizgi);
+  padding:.5rem .7rem;border-radius:12px;font-weight:600;font-size:.9rem}
+.icon{background:var(--panel);border:1px solid var(--cizgi);border-radius:12px;
+  font-size:1.05rem;padding:.4rem .6rem;cursor:pointer;color:var(--ink)}
+.wrap{max-width:680px;margin:0 auto;padding:0 1rem 2rem}
+.card{background:var(--panel);border:1px solid var(--cizgi);border-radius:18px;
+  backdrop-filter:blur(14px);box-shadow:0 10px 30px rgba(2,8,23,.35)}
+.now{padding:1.4rem;margin-top:.6rem}
+.now-main{display:flex;align-items:center;gap:1.2rem}
+.big-ikon{font-size:4.2rem;filter:drop-shadow(0 6px 14px rgba(56,189,248,.45))}
+.temp{font-size:4rem;font-weight:800;line-height:1}
+.desc{color:var(--muted);font-weight:600;margin-top:.3rem}
+.now-meta{display:flex;gap:.4rem;color:var(--muted);font-size:.85rem;margin-top:1rem}
+.stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.7rem;margin-top:.8rem}
+.stat{display:flex;align-items:center;gap:.7rem;padding:.9rem 1rem}
+.stat span{font-size:1.6rem}
+.stat b{display:block;font-size:1.05rem}
+.stat small{color:var(--muted)}
+.block{margin-top:1.6rem}
+.block h2{font-size:1rem;letter-spacing:.4px;color:var(--muted);margin:0 0 .6rem;text-transform:uppercase}
+.strip{display:grid;grid-auto-flow:column;grid-auto-columns:96px;gap:.6rem;overflow-x:auto;padding-bottom:.4rem}
+.chip{background:var(--panel);border:1px solid var(--cizgi);border-radius:16px;
+  padding:.9rem .4rem;text-align:center}
+.chip b{display:block;font-size:.8rem;color:var(--muted)}
+.chip div{font-size:1.5rem;margin:.3rem 0}
+.chip small{font-weight:700;font-size:.95rem}
+.days{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:.6rem}
+.day{background:var(--panel);border:1px solid var(--cizgi);border-radius:16px;padding:.9rem}
+.day b{display:block;font-size:.85rem;color:var(--muted)}
+.day div{font-size:1.6rem;text-align:center;margin:.35rem 0}
+.day small{display:flex;justify-content:space-between;font-weight:700}
+.day small em{color:var(--muted);font-style:normal;font-weight:600}
+.not{color:var(--muted);font-size:.8rem;line-height:1.6;margin-top:1.6rem}
+.not code{background:var(--panel);padding:.1rem .35rem;border-radius:6px}
+.foot{text-align:center;color:var(--muted);font-size:.8rem;padding:1rem}
+"""
+
+_WEATHER_TEMPLATE_JS = r"""/* Hava Radar — demo atmosfer verisi + arayüz */
+/* Şehir kayıtları: anlık durum + sonraki 8 saatlik sıcaklık + 5 gün öngörü. */
+const VERI = {
+  "İstanbul": {
+    sicaklik: 14, durum: "Parçalı Bulutlu", ikon: "⛅", nem: 72,
+    ruzgar: 18, basinc: 1013, hissedilen: 12,
+    saatlik: [13, 14, 14, 15, 15, 14, 13, 12],
+    gunluk: [["🌧️", 10, 15], ["⛅", 9, 14], ["☀️", 8, 13], ["🌧️", 7, 12], ["❄️", 2, 5]],
+  },
+  "Ankara": {
+    sicaklik: 9, durum: "Açık", ikon: "☀️", nem: 55,
+    ruzgar: 12, basinc: 1018, hissedilen: 7,
+    saatlik: [8, 9, 10, 11, 12, 12, 11, 10],
+    gunluk: [["☀️", 6, 12], ["⛅", 5, 11], ["☁️", 4, 9], ["🌧️", 3, 8], ["🌨️", -1, 3]],
+  },
+  "İzmir": {
+    sicaklik: 17, durum: "Güneşli", ikon: "☀️", nem: 60,
+    ruzgar: 14, basinc: 1015, hissedilen: 16,
+    saatlik: [16, 17, 18, 18, 18, 17, 16, 15],
+    gunluk: [["☀️", 12, 19], ["☀️", 12, 19], ["⛅", 11, 18], ["🌧️", 10, 16], ["⛅", 9, 15]],
+  },
+  "Bursa": {
+    sicaklik: 11, durum: "Yağmurlu", ikon: "🌧️", nem: 83,
+    ruzgar: 16, basinc: 1010, hissedilen: 9,
+    saatlik: [10, 11, 11, 12, 12, 11, 10, 9],
+    gunluk: [["🌧️", 8, 13], ["🌧️", 7, 12], ["⛅", 6, 11], ["⛈️", 5, 9], ["☁️", 4, 8]],
+  },
+  "Antalya": {
+    sicaklik: 19, durum: "Güneşli", ikon: "☀️", nem: 64,
+    ruzgar: 10, basinc: 1014, hissedilen: 19,
+    saatlik: [18, 19, 20, 20, 20, 19, 18, 17],
+    gunluk: [["☀️", 14, 21], ["☀️", 14, 22], ["☀️", 13, 21], ["⛅", 12, 19], ["🌧️", 10, 16]],
+  },
+  "Erzurum": {
+    sicaklik: 2, durum: "Kar", ikon: "❄️", nem: 70,
+    ruzgar: 22, basinc: 1022, hissedilen: -2,
+    saatlik: [1, 2, 2, 3, 3, 2, 1, 0],
+    gunluk: [["❄️", -4, 3], ["🌨️", -5, 2], ["☁️", -6, 1], ["❄️", -7, 0], ["☀️", -5, 2]],
+  },
+};
+const IKON_ADLARI = {
+  "☀️": "Güneşli", "⛅": "Parçalı Bulutlu", "☁️": "Kapalı",
+  "🌧️": "Yağmurlu", "⛈️": "Gök Gürültülü", "❄️": "Kar", "🌫️": "Puslu",
+};
+const GUNLER = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
+
+let sehir = localStorage.getItem("hr_city") || "İstanbul";
+const cityEl = document.getElementById("city");
+cityEl.value = sehir;
+cityEl.onchange = () => {
+  sehir = cityEl.value;
+  localStorage.setItem("hr_city", sehir);
+  render();
+};
+
+function ikonSicaklik(t) {
+  if (t <= 0) return "❄️";
+  if (t < 10) return "☁️";
+  if (t < 18) return "⛅";
+  return "☀️";
+}
+function gunAdi(gunSayisi) {
+  const d = new Date();
+  d.setDate(d.getDate() + gunSayisi);
+  return GUNLER[(d.getDay() + 6) % 7];
+}
+
+function render() {
+  const v = VERI[sehir] || VERI["İstanbul"];
+  document.getElementById("ikon").textContent = v.ikon;
+  document.getElementById("sicaklik").textContent = v.sicaklik + "°";
+  document.getElementById("durum").textContent = v.durum;
+  document.getElementById("yer").textContent = "📍 " + sehir;
+  document.getElementById("guncel").textContent =
+    "· güncellendi " + new Date().toLocaleTimeString("tr-TR",
+      { hour: "2-digit", minute: "2-digit" });
+  document.getElementById("nem").textContent = v.nem + "%";
+  document.getElementById("ruzgar").textContent = v.ruzgar + " km/s";
+  document.getElementById("basinc").textContent = v.basinc + " hPa";
+  document.getElementById("hissedilen").textContent = v.hissedilen + "°";
+
+  const strip = document.getElementById("saatlik");
+  strip.innerHTML = "";
+  const base = new Date();
+  v.saatlik.forEach((t, i) => {
+    const dt = new Date(base.getTime() + (i + 1) * 3600000);
+    const hh = String(dt.getHours()).padStart(2, "0") + ":00";
+    const chip = document.createElement("div");
+    chip.className = "chip";
+    chip.innerHTML = "<b>" + hh + "</b><div>" +
+      (i === 0 ? v.ikon : ikonSicaklik(t)) + "</div><small>" + t + "°</small>";
+    strip.appendChild(chip);
+  });
+
+  const days = document.getElementById("gunler");
+  days.innerHTML = "";
+  v.gunluk.forEach((g, i) => {
+    const kart = document.createElement("div");
+    kart.className = "day";
+    kart.innerHTML = "<b>" + gunAdi(i + 1) + " · " + IKON_ADLARI[g[0]] + "</b>" +
+      "<div>" + g[0] + "</div><small>" + g[1] + "°<em>" + g[2] + "°</em></small>";
+    days.appendChild(kart);
+  });
+}
+
+document.getElementById("theme").onclick = () => {
+  const r = document.documentElement;
+  r.dataset.theme = r.dataset.theme === "dark" ? "light" : "dark";
+  localStorage.setItem("hr_theme", r.dataset.theme);
+};
+const kayitTema = localStorage.getItem("hr_theme");
+if (kayitTema) document.documentElement.dataset.theme = kayitTema;
+
+document.getElementById("yil").textContent = new Date().getFullYear();
+render();
+setInterval(render, 60000);
+"""
+
+_WEATHER_TEMPLATE_MANIFEST = r"""{
+  "name": "Hava Radar",
+  "short_name": "Hava",
+  "start_url": "./index.html",
+  "display": "standalone",
+  "background_color": "#0b1120",
+  "theme_color": "#0ea5e9",
+  "lang": "tr",
+  "description": "Mobil uyumlu hava durumu paneli (demo veri)."
+}
+"""
+
+_WEATHER_TEMPLATE_README = r"""# Hava Radar — Hava Durumu Uygulaması
+
+Modern cam efektli (glassmorphism) hava durumu paneli. 4 dosyada, çalıştırmak
+için `index.html` dosyasını çift tıklaman yeterli.
+
+## Neler var?
+- Anlık durum: sıcaklık, hissedilen, nem, rüzgâr, basınç
+- Sonraki 8 saatin sıcaklık şeridi (saatler sistem saatinden hesaplanır)
+- 5 günlük öngörü kartları (Pzt–Paz gün adları otomatik)
+- 6 şehir: İstanbul, Ankara, İzmir, Bursa, Antalya, Erzurum
+- Karanlık/aydınlık tema (kayıtlı) · PWA `manifest.json`
+
+## Veri
+`script.js` içindeki `VERI` sözlüğü örnek/demo değerlerdir. Canlı hava
+durumu için sözlüğü bir API yanıtına eşle Growing yeter — arayüz aynı kalır.
+"""
+
+
+# ------------------------------------------------------------------
+# ALAN ŞABLONU 2.5: GÖREV FLOW — YAPILACAKLAR WEB UYGULAMASI (CRUD)
+# ------------------------------------------------------------------
+
+_TODO_TEMPLATE_HTML = r"""<!DOCTYPE html>
+<html lang="tr" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Görev Flow — Yapılacaklar</title>
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<header class="top">
+  <div class="brand">🗂️ Görev Flow</div>
+  <button id="themeBtn" class="icon" title="Tema değiştir">🌙</button>
+</header>
+
+<main class="wrap">
+  <form id="form" class="add card">
+    <input id="giris" placeholder="Yeni görev yaz, Enter'a bas..."
+           autocomplete="off" required>
+    <select id="kat" title="Kategori">
+      <option>Genel</option><option>İş</option>
+      <option>Kişisel</option><option>Alışveriş</option>
+    </select>
+    <select id="oncelik" title="Öncelik">
+      <option value="normal">Normal</option>
+      <option value="yuksek">Yüksek</option>
+    </select>
+    <button class="btn" type="submit">Ekle ➕</button>
+  </form>
+
+  <div class="filters">
+    <button class="filtre active" data-f="all">Tümü <span id="cAll">0</span></button>
+    <button class="filtre" data-f="bekleyen">Bekleyen <span id="cBek">0</span></button>
+    <button class="filtre" data-f="bitti">Tamamlanan <span id="cBit">0</span></button>
+    <span id="katlar" class="katlar"></span>
+  </div>
+
+  <div class="progress"><div id="prog"></div></div>
+
+  <ul id="liste" class="liste"></ul>
+  <p id="bos" class="bos" hidden>🎉 Görev yok — yeni bir tane ekle!</p>
+</main>
+
+<footer class="foot">Görev Flow · veriler tarayıcında saklanır (localStorage)</footer>
+<script src="script.js"></script>
+</body>
+</html>
+"""
+
+_TODO_TEMPLATE_CSS = r"""/* Görev Flow — temiz modern tema */
+:root{
+  --brand:#0f766e; --ink:#1e293b; --muted:#64748b; --panel:#ffffff;
+  --bg:#f1f5f9; --cizgi:#e2e8f0; --danger:#dc2626; --radius:14px;
+  --shadow:0 8px 24px rgba(15,23,42,.07);
+}
+[data-theme="dark"]{
+  --brand:#2dd4bf; --ink:#e2e8f0; --muted:#94a3b8; --panel:#1e293b;
+  --bg:#0f172a; --cizgi:rgba(148,163,184,.18);
+  --shadow:0 10px 30px rgba(2,8,23,.45);
+}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,'Segoe UI',Roboto,Arial;background:var(--bg);color:var(--ink);transition:background .3s}
+.top{display:flex;justify-content:space-between;align-items:center;padding:1rem 1.2rem}
+.brand{font-weight:800;font-size:1.1rem}
+.icon{background:var(--panel);border:1px solid var(--cizgi);border-radius:10px;padding:.35rem .55rem;font-size:1.05rem;cursor:pointer;color:var(--ink)}
+.wrap{max-width:640px;margin:0 auto;padding:0 1rem 2rem}
+.card{background:var(--panel);border:1px solid var(--cizgi);border-radius:var(--radius);box-shadow:var(--shadow)}
+.add{display:flex;gap:.5rem;padding:.7rem;flex-wrap:wrap}
+.add input{flex:1;min-width:180px;border:1px solid var(--cizgi);border-radius:10px;padding:.7rem .8rem;font:inherit;background:transparent;color:var(--ink)}
+.add input:focus{outline:2px solid var(--brand);border-color:transparent}
+.add select{border:1px solid var(--cizgi);border-radius:10px;padding:.6rem .5rem;font:inherit;background:transparent;color:var(--ink)}
+.btn{background:var(--brand);color:#fff;border:0;border-radius:10px;padding:.7rem 1rem;font-weight:700;cursor:pointer}
+.btn:hover{filter:brightness(1.08)}
+.filters{display:flex;gap:.5rem;align-items:center;margin:1rem 0;flex-wrap:wrap}
+.filtre{background:transparent;border:1px solid var(--cizgi);color:var(--muted);border-radius:999px;padding:.45rem .9rem;font-weight:600;cursor:pointer}
+.filtre.active{background:var(--brand);border-color:var(--brand);color:#fff}
+.filtre span{background:rgba(0,0,0,.08);border-radius:999px;padding:1px 7px;font-size:.8rem}
+.filtre.active span{background:rgba(255,255,255,.25)}
+.katlar{display:flex;gap:.35rem;margin-left:auto;flex-wrap:wrap}
+.kat{font-size:.75rem;border:1px solid var(--cizgi);color:var(--muted);padding:.25rem .6rem;border-radius:999px;cursor:pointer}
+.kat.active{border-color:var(--brand);color:var(--brand);font-weight:700}
+.progress{height:8px;background:var(--cizgi);border-radius:999px;overflow:hidden;margin:.4rem 0 .6rem}
+.progress div{height:100%;width:0;background:var(--brand);transition:width .35s}
+.liste{list-style:none;margin:0;padding:0;display:grid;gap:.5rem}
+.liste li{display:flex;align-items:center;gap:.7rem;background:var(--panel);border:1px solid var(--cizgi);border-radius:var(--radius);padding:.75rem .9rem;box-shadow:var(--shadow)}
+.liste li.yuksek{border-left:4px solid var(--danger)}
+.dzn{width:32px;height:32px;border-radius:50%;border:2px solid var(--brand);background:transparent;color:var(--brand);font-size:.95rem;cursor:pointer;flex:none}
+.dzn.ok{background:var(--brand);color:#fff}
+.metin{flex:1;min-width:0}
+.metin b{display:block;overflow-wrap:anywhere}
+.metin small{color:var(--muted)}
+li.done .metin b{text-decoration:line-through;opacity:.55}
+.pill{font-size:.72rem;border:1px solid var(--cizgi);color:var(--muted);border-radius:999px;padding:.2rem .55rem;flex:none}
+.sil{border:0;background:transparent;color:var(--muted);font-size:1rem;cursor:pointer;border-radius:8px;padding:.3rem .45rem}
+.sil:hover{color:var(--danger);background:rgba(220,38,38,.1)}
+.bos{text-align:center;color:var(--muted);padding:2rem 0}
+.foot{text-align:center;color:var(--muted);font-size:.78rem;padding:1rem}
+"""
+
+_TODO_TEMPLATE_JS = r"""/* Görev Flow — CRUD + filtre + kalıcılık */
+const KATEGORILER = ["Tümü", "Genel", "İş", "Kişisel", "Alışveriş"];
+const state = { tasks: [], filt: "all", kat: "Tümü" };
+
+function yukle() {
+  try {
+    state.tasks = JSON.parse(localStorage.getItem("gf_tasks") || "[]");
+  } catch (e) {
+    state.tasks = [];
+  }
+  if (!localStorage.getItem("gf_seed")) {
+    const bugun = new Date().toISOString().slice(0, 10);
+    state.tasks = [
+      { id: "t1", text: "Haftalık alışveriş listesi hazırla", kat: "Alışveriş", prio: "normal", done: false, ts: bugun },
+      { id: "t2", text: "Proje sunumunu bitir", kat: "İş", prio: "yuksek", done: false, ts: bugun },
+      { id: "t3", text: "Sabah yürüyüşü 30 dk", kat: "Kişisel", prio: "normal", done: true, ts: bugun },
+    ];
+    localStorage.setItem("gf_seed", "1");
+    kaydet();
+  }
+}
+function kaydet() {
+  localStorage.setItem("gf_tasks", JSON.stringify(state.tasks));
+}
+
+function ekle(text, kat, prio) {
+  state.tasks.unshift({
+    id: "t" + Date.now() + Math.floor(Math.random() * 100),
+    text: text, kat: kat, prio: prio, done: false,
+    ts: new Date().toISOString().slice(0, 10),
+  });
+  kaydet();
+  render();
+}
+function cevir(id) {
+  const t = state.tasks.find(x => x.id === id);
+  if (t) { t.done = !t.done; kaydet(); render(); }
+}
+function sil(id) {
+  state.tasks = state.tasks.filter(x => x.id !== id);
+  kaydet(); render();
+}
+
+function render() {
+  const liste = document.getElementById("liste");
+  const gorunen = state.tasks.filter(t =>
+    (state.cat === "Tümü" || t.kat === state.cat) &&
+    (state.filt === "all" ||
+      (state.filt === "bekleyen" && !t.done) ||
+      (state.filt === "bitti" && t.done))
+  );
+  liste.innerHTML = "";
+  gorunen.forEach(t => {
+    const li = document.createElement("li");
+    li.className = (t.done ? "done " : "") + (t.prio === "yuksek" ? "yuksek" : "");
+    li.innerHTML =
+      '<button class="dzn' + (t.done ? " ok" : "") + '" data-a="cevir">✓</button>' +
+      '<div class="metin"><b>' + escapeHtml(t.text) + "</b>" +
+      "<small>" + t.ts + "</small></div>" +
+      '<span class="pill">' + t.kat + "</span>" +
+      '<button class="sil" data-a="sil" title="Sil">🗑</button>';
+    li.querySelectorAll("[data-a]").forEach(btn => {
+      btn.onclick = () => (btn.dataset.a === "sil" ? sil(t.id) : cevir(t.id));
+    });
+    liste.appendChild(li);
+  });
+  document.getElementById("bos").hidden = gorunen.length > 0;
+
+  const bek = state.tasks.filter(t => !t.done).length;
+  const bit = state.tasks.length - bek;
+  document.getElementById("cAll").textContent = state.tasks.length;
+  document.getElementById("cBek").textContent = bek;
+  document.getElementById("cBit").textContent = bit;
+  const yuzde = state.tasks.length ? Math.round(100 * bit / state.tasks.length) : 0;
+  document.getElementById("prog").style.width = yuzde + "%";
+
+  const katlar = document.getElementById("katlar");
+  katlar.innerHTML = "";
+  KATEGORILER.forEach(k => {
+    const b = document.createElement("button");
+    b.className = "kat" + (state.cat === k ? " active" : "");
+    b.textContent = k;
+    b.onclick = () => { state.cat = k; render(); };
+    katlar.appendChild(b);
+  });
+}
+
+function escapeHtml(s) {
+  return s.replace(/[&<>"']/g, c => ({
+    "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;",
+  }[c]));
+}
+
+document.getElementById("form").addEventListener("submit", e => {
+  e.preventDefault();
+  const g = document.getElementById("giris");
+  const kat = document.getElementById("kat").value;
+  const prio = document.getElementById("oncelik").value;
+  if (g.value.trim()) {
+    ekle(g.value.trim(), kat, prio);
+    g.value = "";
+    g.focus();
+  }
+});
+document.querySelectorAll(".filtre").forEach(b => {
+  b.onclick = () => {
+    document.querySelectorAll(".filtre").forEach(x => x.classList.remove("active"));
+    b.classList.add("active");
+    state.filt = b.dataset.f;
+    render();
+  };
+});
+
+document.getElementById("themeBtn").onclick = () => {
+  const r = document.documentElement;
+  r.dataset.theme = r.dataset.theme === "dark" ? "light" : "dark";
+  document.getElementById("themeBtn").textContent = r.dataset.theme === "dark" ? "☀️" : "🌙";
+  localStorage.setItem("gf_theme", r.dataset.theme);
+};
+const kayitTema = localStorage.getItem("gf_theme");
+if (kayitTema) {
+  document.documentElement.dataset.theme = kayitTema;
+  document.getElementById("themeBtn").textContent = kayitTema === "dark" ? "☀️" : "🌙";
+}
+
+yukle();
+render();
+"""
+
+_TODO_TEMPLATE_README = r"""# Görev Flow — Yapılacaklar Web Uygulaması
+
+Kategori + öncelik destekli, tam CRUD özellikli modern görev uygulaması.
+Çalıştırmak için `index.html` dosyasını çift tıkla; veriler tarayıcıda
+(localStorage `gf_tasks`) güvenle saklanır.
+
+## Özellikler
+- Görev ekle / tamamla / sil — Enter kısayolu
+- Kategoriler: Genel, İş, Kişisel, Alışveriş (çip filtreleri)
+- Öncelik: High öncelikli görevler kırmızı kenarla vurgulanır
+- Filtre: Tümü / Bekleyen / Tamamlanan + canlı sayaçlar
+- İlerleme çubuğu (% tamamlandı)
+- Karanlık/aydınlık tema, XSS'e karşı escapeHtml koruması
+
+## Veri
+İlk açılışta 3 örnek görev gelir (`gf_seed` anahtarı ile tek seferlik);
+hepsini silebilirsin — uygulama örnek veriyi yeniden yüklemez.
+"""
+
 
 # ------------------------------------------------------------------
 # ALAN ŞABLONU 2: NAMAZ VAKİTLERİ — MOBİL UYGULAMA (PWA hissi)
@@ -1016,6 +1585,25 @@ _PRAYER_TEMPLATE_MANIFEST = r"""{
   "lang": "tr",
   "description": "Namaz vakitlerini gösteren mobil uyumlu uygulama (demo veri)."
 }
+"""
+
+_PRAYER_TEMPLATE_README = r"""# Namaz Vakitleri — Mobil Uygulama (PWA)
+
+Namaz vakitlerini canlı geri sayımla gösteren, telefon hissiyatındaki
+mobil uyumlu uygulama. `index.html` çift tıkla; telefondayken "Ana ekrana
+ekle" ile gerçek uygulama gibi kurulur (manifest.json PWA uyumlu).
+
+## Özellikler
+- 6 vakit: İmsak, Güneş, Öğle, İkindi, Akşam, Yatsı
+- Sıradaki vaka + canlı saat:dakika:saniye geri sayım + ilerleme çubuğu
+- 8 şehir (İstanbul, Ankara, İzmir, Bursa, Adana, Konya, Antalya, Gaziantep)
+- Geçmiş vakitler yarı saydam gösterilir; sonraki vakit vurgulu
+- Bildirim izniyle hatırlatıcı, karanlık/aydınlık tema, Hicri tarih
+
+## Veri
+`script.js` içindeki TABELA sözlüğü örnek/demo değerlerdir (şehir başına
+6 vakit). Canlı verilere bağlamak istersen bu sözlüğü bir vakit API
+yanıtıyla güncellemen yeter — arayüz aynı şekilde çalışır.
 """
 
 
@@ -1227,6 +1815,506 @@ _STUDENT_TEMPLATE_DATA = r"""{
   "devamsizlik": {},
   "duyurular": []
 }
+"""
+
+
+# ------------------------------------------------------------------
+# ALAN ŞABLONU 4: HESAP MAKİNESİ PRO — MASAÜSTÜ (Tkinter, koyu tema)
+# ------------------------------------------------------------------
+
+_CALC_TEMPLATE_PY = r'''# Hesap Makinesi Pro - masaustu (Tkinter, koyu tema)
+# Calistirma: python main.py   |  penceresiz oz test: python main.py --check
+import ast
+import sys
+import operator as op
+
+try:
+    import tkinter as tk
+except ImportError:  # oz test headless ortamda da calisir
+    tk = None
+
+# ---- guvenli degerlendirici (eval YOK) ------------------------------
+OPS = {
+    ast.Add: op.add, ast.Sub: op.sub, ast.Mult: op.mul,
+    ast.Div: op.truediv, ast.Mod: op.mod, ast.Pow: op.pow,
+}
+
+
+def degerlendir(ifade):
+    """Yalniz + - * / % ** ve parantez kabul eden guvenli hesaplayici."""
+    agac = ast.parse(str(ifade).replace(",", "."), mode="eval")
+    return _dugum(agac.body)
+
+
+def _dugum(node):
+    if isinstance(node, ast.Constant) and isinstance(node.value, (int, float)):
+        return float(node.value)
+    if isinstance(node, ast.BinOp) and type(node.op) in OPS:
+        return float(OPS[type(node.op)](_dugum(node.left), _dugum(node.right)))
+    if isinstance(node, ast.UnaryOp):
+        deger = _dugum(node.operand)
+        if isinstance(node.op, ast.USub):
+            return -deger
+        if isinstance(node.op, ast.UAdd):
+            return deger
+    raise ValueError("desteklenmeyen ifade")
+
+
+def bicim(deger):
+    metin = ("%g" % deger) if abs(deger) < 1e12 else ("%.4e" % deger)
+    return metin.replace(".", ",")
+
+
+# ---- arayuz ----------------------------------------------------------
+BG, BTN, BTN_OP, BTN_AKTIF = "#111827", "#1f2937", "#0ea5e9", "#0284c7"
+INK, MUTED = "#f9fafb", "#94a3b8"
+
+MAKINE = []
+
+
+class HesapMakinesi:
+    def __init__(self, root):
+        self.win = root
+        root.title("Hesap Makinesi Pro")
+        root.configure(bg=BG)
+        root.resizable(False, False)
+        self.ifade = ""
+
+        self.ekran = tk.Entry(root, readonlybackground=BG, fg=INK, bg=BG,
+                              font=("Consolas", 26), justify="right",
+                              relief="flat", state="readonly")
+        self.ekran.pack(fill="x", padx=16, pady=(18, 6), ipady=10)
+
+        self.durum = tk.Label(root, text="guvenli AST hesabi • klavye destekli",
+                              bg=BG, fg=MUTED, font=("Segoe UI", 9))
+        self.durum.pack(fill="x", padx=18)
+
+        tuslar = [
+            ("C", "%", "⌫", "÷"),
+            ("7", "8", "9", "×"),
+            ("4", "5", "6", "−"),
+            ("1", "2", "3", "+"),
+            ("±", "0", ",", "="),
+        ]
+        izgara = tk.Frame(root, bg=BG)
+        izgara.pack(padx=14, pady=14)
+        for satir in tuslar:
+            satir_kapsayici = tk.Frame(izgara, bg=BG)
+            satir_kapsayici.pack()
+            for tus in satir:
+                op_mu = tus in ("÷", "×", "−", "+", "=")
+                btn = tk.Button(
+                    satir_kapsayici, text=tus, width=5,
+                    padx=6, pady=12, relief="flat", bd=0,
+                    cursor="hand2", font=("Segoe UI", 13, "bold"),
+                    fg="#f8fafc",
+                    bg=(BTN_AKTIF if tus == "=" else BTN_OP) if op_mu else BTN,
+                    activebackground="#334155",
+                    command=lambda t=tus: self.tus(t))
+                btn.pack(side="left", padx=4, pady=4)
+
+        tk.Label(izgara, text="gecmis", bg=BG, fg=MUTED,
+                 font=("Segoe UI", 9)).pack(pady=(12, 2))
+        self.gecmis = tk.Listbox(izgara, height=5, width=26, bg=BG,
+                                 fg=MUTED, relief="flat", bd=0,
+                                 font=("Consolas", 10), activestyle="none")
+        self.gecmis.pack()
+        self.gecmis.bind("<Double-Button-1>", self.gecmis_tik)
+
+        for tus in "0123456789+*-/%.(),":
+            root.bind(tus, lambda e, c=tus: self.tus(c))
+        root.bind("<Return>", lambda e: self.tus("="))
+        root.bind("<Backspace>", lambda e: self.tus("⌫"))
+        root.bind("<Escape>", lambda e: self.tus("C"))
+
+    # --- davranis -----------------------------------------------------
+    def tus(self, tus):
+        if tus == "C":
+            self.ifade = ""
+            self._goster("0")
+        elif tus == "⌫":
+            self.ifade = self.ifade[:-1]
+            self._goster(self.ifade or "0")
+        elif tus == "=":
+            self.esitle()
+        elif tus == "%":
+            self.ifade += "/100"
+            self._goster(self.ifade)
+        elif tus == "±":
+            try:
+                self.ifade = str(int(-int(self.ifade))) if self.ifade \
+                    else ""
+            except ValueError:
+                pass
+            self._goster(self.ifade or "0")
+        else:
+            sembol = {"÷": "/", "×": "*", "−": "-"}.get(tus, tus)
+            self.ifade += sembol
+            self._goster(self.ifade)
+
+    def esitle(self):
+        if not self.ifade:
+            return
+        try:
+            sonuc = degerlendir(self.ifade)
+            metin = bicim(sonuc)
+            MAKINE.insert(0, self.ifade.replace(".", ",") + " = " + metin)
+            del MAKINE[6:]
+            self._gecmis_yaz()
+            self.ifade = metin.replace(",", ".")
+            self._goster(metin)
+        except Exception:
+            self._goster("Hata")
+
+    def gecmis_tik(self, _e):
+        sec = self.gecmis.get(self.gecmis.curselection())
+        if "=" in sec:
+            self.ifade = sec.split("=", 1)[1].strip().replace(",", ".")
+            self._goster(self.ifade)
+
+    def _goster(self, metin):
+        self.ekran.configure(state="normal")
+        self.ekran.delete(0, "end")
+        self.ekran.insert(0, metin)
+        self.ekran.configure(state="readonly")
+
+    def _gecmis_yaz(self):
+        self.gecmis.delete(0, "end")
+        for kayit in MAKINE:
+            self.gecmis.insert("end", kayit)
+
+
+def oztest():
+    assert abs(degerlendir("2+3*4") - 14) < 1e-9
+    assert abs(degerlendir("(2+3)*4") - 20) < 1e-9
+    assert abs(degerlendir("10/4") - 2.5) < 1e-9
+    assert abs(degerlendir("2**3") - 8) < 1e-9
+    assert abs(degerlendir("-5+2") + 3) < 1e-9
+    try:
+        degerlendir("__import__('os')")
+        return 1  # guvenlik deligi! etkisiz must
+    except Exception:
+        pass
+    try:
+        degerlendir("1+")
+        return 1
+    except Exception:
+        pass
+    print("CHECK: OK | guvenli hesap: 2+3*4 =" + bicim(degerlendir("2+3*4")))
+    return 0
+
+
+if __name__ == "__main__":
+    if "--check" in sys.argv:
+        sys.exit(oztest())
+    HesapMakinesi(tk.Tk()).win.mainloop()
+'''
+
+_CALC_TEMPLATE_README = r"""# Hesap Makinesi Pro — Masaüstü Uygulaması
+
+Koyu temalı, klavye destekli profesyonel hesap makinesi (Tkinter ile
+hazırlanmış; kök dizin, kurulum gerektirmez).
+
+## Çalıştırma
+```
+python main.py
+```
+## Pencere olmadan öz test
+```
+python main.py --check
+```
+
+## Özellikler
+- Klavye tam desteği: rakamlar, + - * / % . , , Enter, Backspace, Esc
+- Güvenli hesap: değerlendirme `eval` DEĞİL — AST beyaz listesiyle
+  (yalnız sayılar ve + - * / % ** : tırnak içinde komut çalıştırmaz)
+- Geçmiş panel (son 6 işlem) — geçmişte çift tıklayıp sonucu ekrana al
+- Türkçe ondalık (virgülle yazsan da dot ile eşleşir)
+- Yüzde tuşu (% → /100) ve ± işaret değiştirme
+"""
+
+# ------------------------------------------------------------------
+# ALAN ŞABLONU 5: GÖREV TAKİBİ — MASAÜSTÜ (Tkinter, JSON kalıcılık)
+# ------------------------------------------------------------------
+
+_DTASK_TEMPLATE_PY = r'''# Gorev Takibi - masaustu (Tkinter + JSON kalicilik)
+# python main.py   |   penceresiz oz test: python main.py --check
+import json
+import os
+import sys
+import time
+
+VERI = os.path.join(os.path.dirname(os.path.abspath(__file__)), "tasks.json")
+GOREVLER = []
+_SAYAC = 0
+
+BG, PANEL, INK, MUTED = "#f1f5f9", "#ffffff", "#1e293b", "#64748b"
+MARKA, TEHLIKE = "#0f766e", "#dc2626"
+
+# ---- mantik (arayuzden bagimsiz; --check bunu test eder) -------------
+def ekle(text, prio="normal"):
+    global _SAYAC
+    text = (text or "").strip()
+    if not text:
+        raise ValueError("gorev metni bos")
+    _SAYAC += 1
+    GOREVLER.insert(0, {
+        "id": "t%d-%d" % (int(time.time() * 1000), _SAYAC),
+        "text": text, "prio": prio, "done": False,
+    })
+    return GOREVLER[0]
+
+
+def cevir(gorev_id):
+    g = next((g for g in GOREVLER if g["id"] == gorev_id), None)
+    if g:
+        g["done"] = not g["done"]
+    return g
+
+
+def sil(gorev_id):
+    temiz = [g for g in GOREVLER if g["id"] != gorev_id]
+    fark = len(GOREVLER) - len(temiz)
+    GOREVLER[:] = temiz
+    return fark
+
+
+def filtrele(mod):
+    if mod == "bekleyen":
+        return [g for g in GOREVLER if not g["done"]]
+    if mod == "bitti":
+        return [g for g in GOREVLER if g["done"]]
+    return list(GOREVLER)
+
+
+def yukle():
+    global GOREVLER
+    if os.path.exists(VERI):
+        try:
+            with open(VERI, encoding="utf-8") as f:
+                GOREVLER[:] = json.load(f)
+        except Exception:
+            GOREVLER[:] = []
+
+
+def kaydet():
+    with open(VERI, "w", encoding="utf-8") as f:
+        json.dump(GOREVLER, f, ensure_ascii=False, indent=2)
+
+
+try:
+    import tkinter as tk
+except ImportError:
+    tk = None
+
+
+if tk is not None:
+    class Uygulama:
+        """Gorev listesi arayuzu — mantik fonksiyonlarini kullanir."""
+
+        FONK = ("Segoe UI", 10)
+        FONK_B = ("Segoe UI", 10, "bold")
+
+        def __init__(self, root):
+            self.win = root
+            root.title("Gorev Takibi")
+            root.geometry("460x560")
+            root.configure(bg=BG)
+
+            baslik = tk.Frame(root, bg=BG)
+            baslik.pack(fill="x", padx=16, pady=(16, 4))
+            tk.Label(baslik, text="🗂 Gorev Takibi", bg=BG, fg=INK,
+                     font=("Segoe UI", 15, "bold")).pack(side="left")
+            self.sayaclar = tk.Label(baslik, text="", bg=BG, fg=MUTED,
+                                     font=self.FONK)
+            self.sayaclar.pack(side="right")
+
+            ekle_satiri = tk.Frame(root, bg=PANEL)
+            ekle_satiri.pack(fill="x", padx=16, pady=8)
+            self.giris = tk.Entry(ekle_satiri, font=self.FONK, relief="flat",
+                                  highlightthickness=1,
+                                  highlightbackground="#cbd5e1")
+            self.giris.pack(side="left", fill="x", expand=True,
+                            ipady=8, padx=(10, 6), pady=8)
+            self.oncelik = tk.StringVar(value="normal")
+            tk.OptionMenu(ekle_satiri, self.oncelik, "normal",
+                          "yuksek").pack(side="left", padx=3)
+            tk.Button(ekle_satiri, text="Ekle ➕", bg=MARKA, fg="white",
+                      relief="flat", bd=0, cursor="hand2",
+                      font=self.FONK_B, padx=14,
+                      command=self.ekle_tik).pack(side="left",
+                                                  padx=(3, 10), pady=6)
+            self.giris.bind("<Return>", lambda e: self.ekle_tik())
+
+            filtre = tk.Frame(root, bg=BG)
+            filtre.pack(fill="x", padx=16)
+            self.filtre_dugmeleri = {}
+            for mod in ("all", "bekleyen", "bitti"):
+                ad = {"all": "Tumu", "bekleyen": "Bekleyen",
+                      "bitti": "Bitti"}[mod]
+                b = tk.Button(filtre, text=ad, relief="flat", bd=0,
+                              cursor="hand2", font=self.FONK,
+                              fg=MUTED, bg=PANEL, padx=12, pady=5,
+                              command=lambda m=mod: self.filtre_tik(m))
+                b.pack(side="left", padx=3)
+                self.filtre_dugmeleri[mod] = b
+
+            liste_kapsayici = tk.Frame(root, bg="#cbd5e1")
+            liste_kapsayici.pack(fill="both", expand=True, padx=16, pady=10)
+            self.canvas = tk.Canvas(liste_kapsayici, bg=BG, bd=0,
+                                    highlightthickness=0)
+            kaydirak = tk.Scrollbar(liste_kapsayici, orient="vertical",
+                                    command=self.canvas.yview)
+            self.icerik = tk.Frame(self.canvas, bg=PANEL)
+            self.icerik.bind("<Configure>", lambda e: self.canvas.configure(
+                scrollregion=self.canvas.bbox("all")))
+            self.canvas.create_window((0, 0), window=self.icerik,
+                                      anchor="nw")
+            self.canvas.configure(yscrollcommand=kaydirak.set)
+            self.canvas.pack(side="left", fill="both", expand=True)
+            kaydirak.pack(side="right", fill="y")
+            self.filtre = "all"
+            self.render()
+
+        # --- etkinlikler ----------------------------------------------
+        def ekle_tik(self):
+            try:
+                ekle(self.giris.get(), self.oncelik.get())
+            except ValueError:
+                pass
+            self.giris.delete(0, "end")
+            kaydet()
+            self.render()
+
+        def filtre_tik(self, mod):
+            self.filtre = mod
+            self.render()
+
+        def cevir_tik(self, gorev_id):
+            cevir(gorev_id)
+            kaydet()
+            self.render()
+
+        def sil_tik(self, gorev_id):
+            sil(gorev_id)
+            kaydet()
+            self.render()
+
+        # --- cizim ------------------------------------------------------
+        def render(self):
+            gorunen = filtrele(self.filtre)
+            for c in self.icerik.winfo_children():
+                c.destroy()
+            if not gorunen:
+                tk.Label(self.icerik, text="✨ gorev yok — ekle!", bg=PANEL,
+                         fg=MUTED, font=self.FONK, padx=18, pady=18).pack()
+            for i, g in enumerate(gorunen):
+                satir = tk.Frame(self.icerik, bg=PANEL,
+                                 highlightthickness=1,
+                                 highlightbackground="#e2e8f0")
+                satir.pack(fill="x", padx=6, pady=4)
+                isaret = "✓" if g["done"] else "○"
+                tk.Button(satir, text=isaret, width=2, relief="flat", bd=0,
+                          cursor="hand2",
+                          fg=(MARKA if g["done"] else MUTED),
+                          bg=PANEL, font=("Segoe UI", 12),
+                          command=lambda i=g["id"]: self.cevir_tik(i)
+                          ).pack(side="left", padx=(10, 4), pady=8)
+                label = tk.Label(
+                    satir,
+                    text=g["text"],
+                    font=("Segoe UI", 10,
+                          "overstrike 1" if g["done"] else "normal"),
+                    bg=PANEL,
+                    fg=MUTED if g["done"] else
+                      (TEHLIKE if g["prio"] == "yuksek" else INK),
+                    anchor="w")
+                label.pack(side="left", fill="x", expand=True, padx=2)
+                if g["prio"] == "yuksek" and not g["done"]:
+                    tk.Label(satir, text="YÜKSEK", bg=PANEL, fg=TEHLIKE,
+                             font=("Segoe UI", 8, "bold")).pack(side="right",
+                                                                padx=(0, 6))
+                tk.Button(satir, text="✕", relief="flat", bd=0,
+                          cursor="hand2", fg=MUTED, bg=PANEL,
+                          command=lambda i=g["id"]: self.sil_tik(i)
+                          ).pack(side="right", padx=(0, 10))
+
+            bek = len(filtrele("bekleyen"))
+            bit = len(GOREVLER) - bek
+            toplam = len(GOREVLER)
+            yuzde = int(100 * bit / toplam) if toplam else 0
+            self.sayaclar.configure(
+                text=f"{bek} bekleyen · % {yuzde} tamam")
+            for mod, b in self.filtre_dugmeleri.items():
+                secti = mod == self.filtre
+                b.configure(fg=MARKA if secti else MUTED,
+                            font=self.FONK_B if secti else self.FONK)
+            self.canvas.yview_moveto(0)
+
+
+def oztest():
+    global GOREVLER
+    GOREVLER[:] = []
+    a = ekle("Test gorev A", "normal")
+    b = ekle("Test gorev B", "yuksek")
+    assert b["prio"] == "yuksek" and not b["done"]
+    cevir(b["id"])
+    assert filtrele("bekleyen") == [a]
+    assert filtrele("bitti") == [b]
+    assert cevir(b["id"])["done"] is False
+    sil(a["id"])
+    assert len(GOREVLER) == 1
+    # JSON dongu: kaydet + temiz yukle
+    kaydet()
+    GOREVLER[:] = []
+    yukle()
+    assert len(GOREVLER) == 1 and GOREVLER[0]["id"] == b["id"]
+    try:
+        ekle("   ")
+        return 1
+    except ValueError:
+        pass
+    GOREVLER[:] = []
+    kaydet()
+    print("CHECK: OK | ekle/cevir/sil/filtre + JSON dongu gecti")
+    return 0
+
+
+if __name__ == "__main__":
+    if "--check" in sys.argv:
+        sys.exit(oztest())
+    yukle()
+    if tk is None:
+        print("Bu uygulama tkinter gerektirir (standart Python kurulumunda vardir).")
+        sys.exit(1)
+    Uygulama(tk.Tk()).win.mainloop()
+'''
+
+_DTASK_TEMPLATE_README = r"""# Görev Takibi — Masaüstü Uygulaması (Tkinter)
+
+Kategorisiz ama öncelik destekli, JSON ile kalıcı görev listesi.
+Kurulum gerektirmez: standart Python ile çalışır.
+
+## Çalıştırma
+```
+python main.py
+```
+## Pencere olmadan öz test
+```
+python main.py --check
+```
+
+## Özellikler
+- Görev ekle / tamamla / sil (Enter kısayolu ile ekleme)
+- Öncelik: "yuksek" görevler kırmızı metin + YÜKSEK etiketiyle vurgulanır
+- Filtreler: Tümü / Bekleyen / Bitti — altım etkin filtre maviye döner
+- Sayaç: "X bekleyen · %Y tamam" canlı güncellenir
+- Kaydırılabilir liste; veriler `tasks.json` dosyasında kalır
+
+## Mimari
+Mantık (ekle/cevir/sil/filtrele/yukle/kaydet) arayüzden tamamen bağımsız
+saf fonksiyonlardır — `--check` bu fonksiyonları test eder. UI sınıfı
+yalnızca çizim yapar. Böylece test edilebilirlik ve bakım kolaydır.
 """
 
 
@@ -2351,13 +3439,36 @@ Kurallar:
 
     @classmethod
     def _template_router(cls, user_message: str):
-        """İsteği hazır şablon alanına eşler: food / prayer / student / None."""
+        """İsteği hazır şablon alanına eşler (öncelik sıralı)."""
         q = _ascii_tr(user_message)
+        # Baştaki YER BİLDİREN önek ("masa üstünde X klasörüne…") platform
+        # sayılmaz; kaldırıldıktan sonra hâlâ "masaüstü" geçiyorsa talep
+        # gerçekten MASAÜSTÜ uygulamasıdır.
+        sansurlu = q
+        for konum_oneki in ("masa ustunde ", "masaustunde ", "masa ustune ",
+                            "masaustune "):
+            if q.startswith(konum_oneki):
+                sansurlu = q[len(konum_oneki):]
+                break
+        masaustu = ("tkinter" in q or "masaustu" in sansurlu or
+                    "masa ustunde" in sansurlu)
         if any(k in q for k in ("namaz", "vakit", "ezan", "prayer",
                                 "imsak", "iftar", "teravih")):
             return "prayer"
         if "ogrenci" in q or "ogretmen" in q:
             return "student"
+        if "hesap makinesi" in q or "hesapmakinesi" in q or \
+                ("hesap" in q and ("makines" in q or "hesaplayici" in q)):
+            return "calc"
+        todo_hit = any(k in q for k in (
+            "yapilacak", "yapilacaklar", "gorev", "gorevler",
+            "todo", "to-do", "ajanda", "gorevi", "gorevleri"))
+        if todo_hit:
+            return "todot" if masaustu else "todo"
+        if "hava" in q and any(k in q for k in (
+                "durumu", "durum", "sicaklik", "uygulama", "site", "app",
+                "panel")):
+            return "weather"
         if any(k in q for k in ("yemek", "restoran", "lokanta", "kebap",
                                 "pizza", "fast food", "kafe", "kahvalti")):
             return "food"
@@ -2373,22 +3484,51 @@ Kurallar:
                 ("styles.css", _PRAYER_TEMPLATE_CSS),
                 ("script.js", _PRAYER_TEMPLATE_JS),
                 ("manifest.json", _PRAYER_TEMPLATE_MANIFEST),
+                ("README.md", _PRAYER_TEMPLATE_README),
             ]
         if domain == "student":
             return [
                 ("main.py", _STUDENT_TEMPLATE_PY),
                 ("README.md", _STUDENT_TEMPLATE_README),
             ]
+        if domain == "calc":
+            return [
+                ("main.py", _CALC_TEMPLATE_PY),
+                ("README.md", _CALC_TEMPLATE_README),
+            ]
+        if domain == "todot":
+            return [
+                ("main.py", _DTASK_TEMPLATE_PY),
+                ("README.md", _DTASK_TEMPLATE_README),
+            ]
+        if domain == "todo":
+            return [
+                ("index.html", _TODO_TEMPLATE_HTML),
+                ("styles.css", _TODO_TEMPLATE_CSS),
+                ("script.js", _TODO_TEMPLATE_JS),
+                ("README.md", _TODO_TEMPLATE_README),
+            ]
+        if domain == "weather":
+            return [
+                ("index.html", _WEATHER_TEMPLATE_HTML),
+                ("styles.css", _WEATHER_TEMPLATE_CSS),
+                ("script.js", _WEATHER_TEMPLATE_JS),
+                ("manifest.json", _WEATHER_TEMPLATE_MANIFEST),
+                ("README.md", _WEATHER_TEMPLATE_README),
+            ]
         if domain == "food":
             return [
                 ("index.html", _FOOD_TEMPLATE_HTML),
                 ("styles.css", _FOOD_TEMPLATE_CSS),
                 ("script.js", _FOOD_TEMPLATE_JS),
+                ("manifest.json", _FOOD_TEMPLATE_MANIFEST),
+                ("README.md", _FOOD_TEMPLATE_README),
             ]
         return [
             ("index.html", _BUILD_TEMPLATE_HTML),
             ("styles.css", _BUILD_TEMPLATE_CSS),
             ("script.js", _BUILD_TEMPLATE_JS),
+            ("README.md", _BUILD_TEMPLATE_README),
         ]
 
     # ------------------------------------------------------------------

@@ -24,13 +24,14 @@ def test_router_domains():
     assert r("MASA ÜSTÜNDE NAMAZ VAKİTLERİ MOBİL UYGULAMASI YAP") == "prayer"
     assert r("masaüstü öğrenci girişi uygulaması yap") == "student"
     assert r("gelişmiş bir yemek sitesi yap") == "food"
-    assert r("hava durumu uygulaması yap") is None
+    assert r("veri tabanı raporu hazırla") is None
 
 
 def test_prayer_template_files(tmp_path):
     files = ai_agent.NexusAIAgent._template_project("namaz vakitleri uygulama")
     rels = [rel for rel, _ in files]
-    assert rels == ["index.html", "styles.css", "script.js", "manifest.json"]
+    assert rels == ["index.html", "styles.css", "script.js",
+                    "manifest.json", "README.md"]
     dummy = dict(files)
     html = dummy["index.html"]
     js = dummy["script.js"]
@@ -85,3 +86,87 @@ def test_direct_template_build_writes_into_working_dir(tmp_path):
     assert {"index.html", "styles.css", "script.js"} <= names
     for f in result["files"]:
         assert os.path.exists(os.path.join(str(tmp_path), f))
+
+
+# ------------------------------------------------------------------
+# 2026-11-05: modern şablon ailesi v2 testleri
+# ------------------------------------------------------------------
+
+
+def test_router_v2_domains():
+    r = ai_agent.NexusAIAgent._template_router
+    assert r("MASA ÜSTÜNDE HAVADURUMU KLASÖRÜNE HAVA DURUMU PANELİ YAP") == "weather"
+    assert r("yapilacaklar listesi uygulaması yap") == "todo"
+    # "MASA ÜSTÜNDE X KLASÖRÜNE" yalnızca KONUM belirtir → web todo
+    assert r("MASA ÜSTÜNDE TODO KLASÖRÜNE MODERN BİR YAPILACAKLAR UYGULAMASI YAP") == "todo"
+    # platform talebi bitişikse → masaüstü todo
+    assert r("MASA ÜSTÜNDE TODO TASKS KLASÖRÜNE MASAÜSTÜ YAPILACAKLAR UYGULAMASI YAP") == "todot"
+    assert r("MASA ÜSTÜNDE CALC KLASÖRÜNE HESAP MAKİNESİ UYGULAMASI YAP") == "calc"
+    assert r("masaüstü öğrenci girişi uygulaması yap") == "student"
+
+
+def _write_all(tmp_path, files):
+    written = {}
+    for rel, content in files:
+        p = os.path.join(str(tmp_path), rel)
+        os.makedirs(os.path.dirname(p) or str(tmp_path), exist_ok=True)
+        with open(p, "w", encoding="utf-8") as fh:
+            fh.write(content)
+        written[rel] = content
+    return written
+
+
+def test_weather_template_quality(tmp_path):
+    import re as _re
+    files = ai_agent.NexusAIAgent._template_project("hava durumu paneli yap")
+    dummy = _write_all(tmp_path, files)
+    assert "VERI" in dummy["script.js"]
+    assert "--brand" in dummy["styles.css"]          # deterministik renk uyumlu
+    manifest = json.loads(dummy["manifest.json"])
+    assert manifest["name"] == "Hava Radar"
+    sehir_sayisi = len(_re.findall(
+        r'"[A-ZÇĞİÖŞÜ][a-zçğıöşü]+": \{', dummy["script.js"]))
+    assert sehir_sayisi >= 6   # 6 şehrin verisi tam olmalı
+
+
+def test_todo_web_template_quality():
+    files = ai_agent.NexusAIAgent._template_project("yapilacaklar uygulaması yap")
+    dummy = dict(files)
+    js = dummy["script.js"]
+    assert "localStorage" in js and "escapeHtml" in js  # kalıcılık + güvenlik
+    assert 'data-f="bekleyen"' in dummy["index.html"]   # filtreler
+    assert "--brand" in dummy["styles.css"]
+
+
+def test_calc_template_runs_selftest(tmp_path):
+    import subprocess
+    files = ai_agent.NexusAIAgent._template_project("hesap makinesi uygulaması yap")
+    dummy = _write_all(tmp_path, files)
+    proc = subprocess.run(
+        ["python", os.path.join(str(tmp_path), "main.py"), "--check"],
+        capture_output=True, text=True, timeout=60, cwd=str(tmp_path))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "CHECK: OK" in proc.stdout
+    py_compile.compile(os.path.join(str(tmp_path), "main.py"), doraise=True)
+
+
+def test_dtask_template_runs_selftest(tmp_path):
+    import subprocess
+    files = ai_agent.NexusAIAgent._template_project(
+        "masaüstü yapılacaklar uygulaması yap")
+    dummy = _write_all(tmp_path, files)
+    proc = subprocess.run(
+        ["python", os.path.join(str(tmp_path), "main.py"), "--check"],
+        capture_output=True, text=True, timeout=60, cwd=str(tmp_path))
+    assert proc.returncode == 0, proc.stdout + proc.stderr
+    assert "CHECK: OK" in proc.stdout
+    assert os.path.exists(os.path.join(str(tmp_path), "tasks.json"))
+
+
+def test_all_web_templates_have_brand_var():
+    """Deterministik renk düzenlemesi tüm web şablonlarında çalışmalı."""
+    agent = ai_agent.NexusAIAgent
+    for msg in ("namaz uygulama", "hava durumu", "todo uygulama",
+                "yemek sitesi"):
+        files = dict(agent._template_project(msg))
+        assert "--brand" in files["styles.css"], msg
