@@ -4570,8 +4570,36 @@ Kurallar:
         return await self._call_local_primary(messages, model)
 
     async def _call_local_primary(self, messages: List[Dict], model: str = None) -> Dict:
-        """Seçili yerel Ollama modelini birincil olarak çağırır."""
+        """Seçili yerel Ollama modelini birincil olarak çağırır.
+
+        BYOK: İsteğin göndericisi X-Nexus-Llm-Key başlığıyla KENDİ bulut
+        anahtarını verdiyse önce bulut model denenir (anahtar yalnız o
+        isteğe özgüdür, saklanmaz); bulut geçemezse yerel zincirde kaldığ
+        yere devam eder — yanıt KESİNLİKLE boş kalmaz.
+        """
+        import cloud_llm
         import local_llm
+
+        cred = getattr(self, "_cloud_credential", None)
+        if cred and (cred.get("key") or "").strip():
+            bulut_icerik = await cloud_llm.chat(
+                messages,
+                key=cred["key"],
+                base_url=cred.get("base_url"),
+                model=cred.get("model"),
+                temperature=self.llm_config.temperature,
+                max_tokens=min(
+                    max(256,
+                        int(self.llm_config.max_tokens or 2048)), 8192),
+            )
+            if bulut_icerik.get("success"):
+                logger.info(
+                    "Bulut model (kullanıcı anahtarı) başarılı: %s",
+                    bulut_icerik.get("model"))
+                return bulut_icerik
+            logger.warning("Bulut model (kullanıcı anahtarı) başarısız, "
+                           "yerel zincire düşüyor: %s",
+                           bulut_icerik.get("error", "?"))
 
         base_url = (self.llm_config.base_url
                     or local_llm.configured_url()
@@ -5062,14 +5090,28 @@ def reset_agent_v6():
     return get_agent_v6()
 
 
-async def chat(user_message: str, conversation_id: str = None, history=None, agent_id: str = None, tools_override: list = None, system_prefix: str = None, current_user = None) -> Dict:
-    """Quick chat function."""
+async def chat(user_message: str, conversation_id: str = None, history=None, agent_id: str = None, tools_override: list = None, system_prefix: str = None, current_user = None, llm_credential: dict = None) -> Dict:
+    """Quick chat function.
+
+    ``llm_credential``: {"key": ..., "model": ..., "base_url": ...} —
+    isteği gönderen kullanıcının KENDİ bulut anahtarı (BYOK). Return içinde
+    anahtar asla yer almaz; çağrı sonunda instance'tan silinir.
+    """
     agent = get_agent_v6()
-    return await agent.chat(
-        user_message, conversation_id, history=history, agent_id=agent_id,
-        tools_override=tools_override, system_prefix=system_prefix,
-        current_user=current_user,
-    )
+    if llm_credential:
+        agent._cloud_credential = llm_credential
+    try:
+        return await agent.chat(
+            user_message, conversation_id, history=history, agent_id=agent_id,
+            tools_override=tools_override, system_prefix=system_prefix,
+            current_user=current_user,
+        )
+    finally:
+        if llm_credential:
+            try:
+                del agent._cloud_credential
+            except AttributeError:
+                pass
 
 
 def get_agent_info(current_user = None) -> Dict:

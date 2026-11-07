@@ -4,7 +4,7 @@ AI Agent API Routes - NEXUS-CORE v6.1
 Chat interface for the AI agent with user chat persistence.
 """
 
-from fastapi import APIRouter, HTTPException, Depends
+from fastapi import APIRouter, HTTPException, Depends, Request
 from fastapi.responses import StreamingResponse
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel, Field
@@ -81,8 +81,46 @@ def _is_coding_task(message: str) -> bool:
         return False
 
 
+# ============================================================
+# BYOK (Kendi API Anahtarın) Yardımcıları
+# ============================================================
+
+def _byok_credential(raw_request: Request) -> Optional[Dict[str, str]]:
+    """İstek başlıklarından kullanıcının KENDİ bulut anahtarını taşır.
+
+    Anahtar yanıtlarda döndürülmez; agent'a parametre gider ve
+    o tek çağrı sonunda silinir. Başlık yoksa None döner → yerel model.
+    """
+    anahtar = (raw_request.headers.get("X-Nexus-Llm-Key") or "").strip()
+    if not anahtar:
+        return None
+    return {
+        "key": anahtar,
+        "model": (raw_request.headers.get("X-Nexus-Llm-Model") or "").strip() or None,
+        "base_url": (raw_request.headers.get("X-Nexus-Llm-Base") or "").strip() or None,
+    }
+
+
+@router.get("/cloud/models", summary="Bulut (BYOK) ücretsiz modeller")
+async def cloud_models(raw_request: Request):
+    """Ücretsiz bulut modellerini CANLI listeler (anahtar gerektirmez).
+
+    Ücretsiz katalog sağlayıcıda sürekli değiştiği için (ör. GLM 5.2:free
+    Eylül 2026'da kaldırılmıştı) liste her seferinde günceldir.
+    Yanıt anahtar içermez.
+    """
+    from cloud_llm import free_models as _ucretsiz_modeller
+    from cloud_llm import glm_models as _glm_modeller
+
+    temel = raw_request.headers.get("X-Nexus-Llm-Base") or None
+    modeller = await _ucretsiz_modeller(temel)
+    glm = await _glm_modeller(temel)
+    return {"success": True, "models": modeller, "glm": glm,
+            "count": len(modeller), "glm_count": len(glm)}
+
+
 @router.post("/chat", response_model=ChatResponse, summary="Chat with AI Agent")
-async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optional_user)):
+async def chat_endpoint(request: ChatRequest, raw_request: Request, current_user = Depends(get_optional_user)):
     """
     Chat with the AI agent.
     
@@ -248,8 +286,9 @@ async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optiona
             except Exception as exc:  # zincir çökerse normal sohbete düş
                 logger.warning("Kodlama devri basarisiz: %s", exc)
 
+        cred = _byok_credential(raw_request)
         if result is None:
-            result = await chat(request.message, conversation_id, history=request.history, agent_id=agent_id, current_user=current_user)
+            result = await chat(request.message, conversation_id, history=request.history, agent_id=agent_id, current_user=current_user, llm_credential=cred)
         
         # Persist messages and update title if authenticated
         if current_user and chat_id_for_persistence and result.get("success"):
@@ -277,7 +316,7 @@ async def chat_endpoint(request: ChatRequest, current_user = Depends(get_optiona
 
 
 @router.post("/chat/stream", summary="Stream Chat Response")
-async def chat_stream_endpoint(request: ChatRequest):
+async def chat_stream_endpoint(request: ChatRequest, raw_request: Request):
     """
     Stream chat response (SSE format).
     For real-time streaming responses.
@@ -286,7 +325,8 @@ async def chat_stream_endpoint(request: ChatRequest):
     
     async def generate():
         # Simplified streaming - in production, use real streaming
-        result = await chat(request.message, request.conversation_id)
+        result = await chat(request.message, request.conversation_id,
+                            llm_credential=_byok_credential(raw_request))
         
         # Persist messages if authenticated
         if hasattr(request, 'user') and request.user and result.get("success"):

@@ -29,6 +29,24 @@
         ).replace(/\/+$/, '');
 
         const CHAT_API = `${API_BASE}/api/v1/ai/chat`;
+        // ===== BYOK BULUT ANAHTARI (kullanıcının KENDİ anahtarı) =====
+        // Anahtar sunucuda saklanmaz; yalnız bu tarayıcının localStorage'ında
+        // tutulur ve her sohbet isteğiyle başlık olarak gönderilir.
+        function cloudCredential() {
+            try {
+                const k = localStorage.getItem('nexus_llm_key');
+                if (!k) return null;
+                const h = { 'X-Nexus-Llm-Key': k };
+                const m = localStorage.getItem('nexus_llm_model');
+                const b = localStorage.getItem('nexus_llm_base');
+                if (m) h['X-Nexus-Llm-Model'] = m;
+                if (b) h['X-Nexus-Llm-Base'] = b;
+                return h;
+            } catch (e) { return null; }
+        }
+        function cloudKeyAktif() {
+            try { return !!localStorage.getItem('nexus_llm_key'); } catch (e) { return false; }
+        }
         const AUTH_API = `${API_BASE}/api/v1/auth`;
         const MODELS_API = `${API_BASE}/api/v1/models`;
         // Görseller backend proxy'sinden (mutlak URL) yüklenir.
@@ -70,6 +88,16 @@
                 currentTheme = currentTheme === 'dark' ? 'light' : 'dark';
                 localStorage.setItem('nexus_theme', currentTheme);
                 applyTheme(currentTheme);
+            });
+        }
+
+        // ===== SESLİ SOHBET (yeni sayfa) =====
+        const voiceToggleBtn = document.getElementById('voice-toggle');
+        if (voiceToggleBtn) {
+            voiceToggleBtn.addEventListener('click', () => {
+                const url = new URL('voice.html', window.location.href).href;
+                const win = window.open(url, '_blank', 'noopener');
+                if (!win) window.location.href = url; // popup engellendiyse aynı sekmede aç
             });
         }
 
@@ -637,14 +665,19 @@
             try {
                 const res = await fetch(CHAT_API, {
                     method: 'POST',
-                    headers: {
+                    headers: Object.assign({
                         'Content-Type': 'application/json',
                         'Authorization': token ? `Bearer ${token}` : ''
-                    },
+                    }, cloudCredential()),
                     body: JSON.stringify({
                         message: txt,
                         conversation_id: convId,
-                        agent_id: currentAgentId
+                        agent_id: currentAgentId,
+                        // Kodlama görevleri GERÇEK dosya yazsın (kullanıcı
+                        // "kodla/yaz" dediğinde onay sayılmıştır). Yıkıcı
+                        // komutlar yine backend'de engellenir.
+                        mode: "execute",
+                        confirm: true
                     })
                 });
                 const data = await res.json();
@@ -872,20 +905,9 @@
             // Add model selector and API key section at the bottom
             html += `
                 <div class="agent-modal-divider" style="margin: 16px 0; border-top: 1px solid var(--border);"></div>
-                <div style="font-size: 0.85rem; color: var(--fg-muted); margin: 8px 0; font-weight: 600;">🧠 AI Modelleri & API Key</div>
+                <div style="font-size: 0.85rem; color: var(--fg-muted); margin: 8px 0; font-weight: 600;">🧠 AI Modelleri</div>
                 <div class="provider-grid" id="provider-grid-agent-modal" style="grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));"></div>
-                
-                <div class="api-key-section" style="margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--border);">
-                    <div class="api-key-title" style="font-size: 0.85rem; font-weight: 600; color: var(--fg); margin-bottom: 8px;">🔑 API Key Ayarla</div>
-                    <div class="api-key-input-group" style="display: flex; gap: 8px;">
-                        <select id="api-key-provider-select" class="api-key-input" style="flex: 1; background: var(--input-bg); border: 1px solid var(--input-border); border-radius: var(--radius-md); padding: 8px 12px; color: var(--fg); font-size: 0.85rem;">
-                            <option value="">Sağlayıcı seçin...</option>
-                        </select>
-                        <input type="password" class="api-key-input" id="api-key-input-agent" placeholder="API key girin..." style="flex: 2; background: var(--input-bg); border: 1px solid var(--input-border); border-radius: var(--radius-md); padding: 8px 12px; color: var(--fg); font-size: 0.85rem;">
-                        <button class="api-key-save" id="api-key-save-agent" style="background: var(--accent-gradient); border: none; border-radius: var(--radius-md); padding: 8px 16px; color: #fff; font-weight: 600; font-size: 0.85rem; cursor: pointer;">Kaydet</button>
-                    </div>
-                    <div class="api-key-help" id="api-key-help-agent" style="font-size: 0.75rem; color: var(--fg-dim); margin-top: 6px;">Seçili sağlayıcı için API key girin.</div>
-                </div>
+                <!-- API Key alanı kaldırıldı: yerel Ollama modunda API anahtarı gerekmez. -->
             `;
             
             agentGrid.innerHTML = html;
@@ -1178,7 +1200,6 @@
                     activeProvider = data.active_provider;
                     activeModel = data.active_model;
                     renderAgentModalProviderGrid();
-                    populateAgentModalProviderSelect();
                 }
             } catch (e) {
                 const grid = document.getElementById('provider-grid-agent-modal');
@@ -1212,13 +1233,6 @@
             });
         }
         
-        function populateAgentModalProviderSelect() {
-            const agentApiKeyProviderSelect = document.getElementById('api-key-provider-select');
-            if (!agentModelCatalog || !agentApiKeyProviderSelect) return;
-            agentApiKeyProviderSelect.innerHTML = '<option value="">Sağlayıcı seçin...</option>' + 
-                agentModelCatalog.map(p => `<option value="${p.id}">${p.name}</option>`).join('');
-        }
-        
         function selectAgentModalProvider(providerId) {
             selectedProvider = providerId;
             const provider = agentModelCatalog.find(p => p.id === providerId);
@@ -1232,54 +1246,7 @@
                 });
             }
             
-            // Update API key section
-            const urls = {
-                'openrouter': 'https://openrouter.ai/keys'
-            };
-            const agentApiKeyHelp = document.getElementById('api-key-help-agent');
-            const agentApiKeyProviderSelect = document.getElementById('api-key-provider-select');
-            const agentApiKeyInput = document.getElementById('api-key-input-agent');
-            if (agentApiKeyHelp) agentApiKeyHelp.innerHTML = `${provider.name} API key almak için: <a href="${urls[providerId] || '#'}" target="_blank">${urls[providerId] || 'Link'}</a>`;
-            if (agentApiKeyProviderSelect) agentApiKeyProviderSelect.value = providerId;
-            if (agentApiKeyInput) agentApiKeyInput.placeholder = provider.has_api_key ? 'Key ayarlı (değiştirmek için girin)' : `${provider.name} API key girin...`;
-        }
-        
-        // Save API key from agent modal
-        const agentApiKeySave = document.getElementById('api-key-save-agent');
-        if (agentApiKeySave) {
-            agentApiKeySave.addEventListener('click', async () => {
-                const agentApiKeyProviderSelect = document.getElementById('api-key-provider-select');
-                const agentApiKeyInput = document.getElementById('api-key-input-agent');
-                const providerId = agentApiKeyProviderSelect?.value;
-                const key = agentApiKeyInput?.value.trim();
-                if (!providerId) { alert('Önce bir sağlayıcı seçin'); return; }
-                if (!key) { alert('API key girin'); return; }
-                try {
-                    const res = await fetch(MODELS_API + '/api-key', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ provider: providerId, api_key: key })
-                    });
-                    const data = await res.json();
-                    if (data.success) {
-                        showToast('API key kaydedildi');
-                        agentApiKeyInput.value = '';
-                        await loadAgentModalCatalog();
-                    } else {
-                        alert('Kaydedilemedi: ' + (data.detail || 'Hata'));
-                    }
-                } catch (e) {
-                    alert('Hata: ' + e.message);
-                }
-            });
-        }
-        
-        // Also update when provider select changes - query dynamically
-        const agentApiKeyProviderSelectForChange = document.getElementById('api-key-provider-select');
-        if (agentApiKeyProviderSelectForChange) {
-            agentApiKeyProviderSelectForChange.addEventListener('change', () => {
-                selectAgentModalProvider(agentApiKeyProviderSelectForChange.value);
-            });
+            // API Key alanı kaldırıldı: yerel Ollama modunda anahtar gerekmez.
         }
         
         // Close agent modal
@@ -1345,8 +1312,8 @@
             }
         });
 
-        // Exit project
-        document.getElementById('btn-close-project').addEventListener('click', async () => {
+        // Paneli Kapat (projeyi kapat)
+        document.getElementById('btn-hide-panel').addEventListener('click', async () => {
             // Call backend to close project
             try {
                 await fetch(FS_API + '/close-project', { method: 'POST' });
@@ -1502,35 +1469,6 @@
             wrap.querySelector('.delete-btn').addEventListener('click', (e) => { e.stopPropagation(); deleteProjectEntry(item); });
             return wrap;
         }
-
-        // Projeyi sil (iki kez onay)
-        async function deleteCurrentProject() {
-            if (!projectOpen || !currentProjectPath) { alert('Silinecek açık proje yok.'); return; }
-            if (!confirm('Bu projeyi silmek istediğinize emin misiniz? Bu işlem geri alınamaz.')) return;
-            const name = document.getElementById('project-name').textContent;
-            if (!confirm('SON ONAY: "' + name + '" klasörü diskten tamamen silinsin mi?')) return;
-            try {
-                const res = await fetch(FS_API + '/project?path=' + encodeURIComponent(currentProjectPath), { method: 'DELETE' });
-                const data = await res.json();
-                if (data.success) {
-                    projectOpen = false;
-                    currentProjectPath = null;
-                    projectPanel.classList.remove('active');
-                    document.getElementById('project-name').textContent = 'Proje';
-                    fileTree.innerHTML = '<div class="file-tree-empty">📁 Proje seçmek için 📂 butonuna tıklayın</div>';
-                    if (editorOverlay) editorOverlay.classList.remove('active');
-                    currentFilePath = null;
-                    localStorage.removeItem('current_project_path');
-                    await loadRecentProjects();
-                    showToast('🗑️ Proje silindi');
-                } else {
-                    alert('Proje silinemedi: ' + (data.detail || 'Bilinmeyen hata'));
-                }
-            } catch (e) {
-                alert('Hata: ' + e.message);
-            }
-        }
-        document.getElementById('btn-delete-project').addEventListener('click', deleteCurrentProject);
 
         // ============================================================
         // PROJECT BROWSER (OpenCode-style)
@@ -2096,9 +2034,7 @@
         const modelView = document.getElementById('model-view');
         const modelItems = document.getElementById('model-items');
         const modelListTitle = document.getElementById('model-list-title');
-        const apiKeyInput = document.getElementById('api-key-input');
-        const apiKeySave = document.getElementById('api-key-save');
-        const apiKeyHelp = document.getElementById('api-key-help');
+        // API Key girdileri kaldırıldı: yerel Ollama modunda anahtar gerekmez.
         const modelBtnText = document.getElementById('model-btn-text');
         const modelStatusDot = document.getElementById('model-status-dot');
 
@@ -2285,19 +2221,26 @@
         function renderProviderGrid() {
             if (!modelCatalog) return;
             
-            providerGrid.innerHTML = modelCatalog.map(p => `
-                <div class="provider-card ${p.id === activeProvider ? 'active' : ''} ${!p.has_api_key ? 'no-key' : ''}" data-provider="${p.id}">
+            providerGrid.innerHTML = modelCatalog.map(p => {
+                const local = !!p.local;
+                const connected = local ? !!p.available : !!p.has_api_key;
+                const statusText = local
+                    ? (connected ? 'Yerel model çalışıyor' : 'Ollama kapalı')
+                    : (connected ? 'Bağlı' : 'API Key gerekli');
+                return `
+                <div class="provider-card ${p.id === activeProvider ? 'active' : ''} ${!connected ? 'no-key' : ''}" data-provider="${p.id}">
                     <div class="provider-header">
                         <span class="provider-name">${p.name}</span>
                         <span class="provider-badge ${p.free ? 'free' : 'paid'}">${p.free ? 'Ücretsiz' : 'Ücretli'}</span>
                     </div>
                     <div class="provider-status">
-                        <span class="provider-status-dot ${p.has_api_key ? 'connected' : 'disconnected'}"></span>
-                        ${p.has_api_key ? 'Bağlı' : 'API Key gerekli'}
+                        <span class="provider-status-dot ${connected ? 'connected' : 'disconnected'}"></span>
+                        ${statusText}
                         <span style="margin-left:auto;color:var(--fg-dim)">${p.models.length} model</span>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
 
             // Add click handlers
             providerGrid.querySelectorAll('.provider-card').forEach(card => {
@@ -2314,13 +2257,7 @@
             const provider = modelCatalog.find(p => p.id === providerId);
             if (!provider) return;
 
-            // Update API key section
-            const urls = {
-                'openrouter': 'https://openrouter.ai/keys'
-            };
-            apiKeyHelp.innerHTML = `${provider.name} API key almak için: <a href="${urls[providerId] || '#'}" target="_blank">${urls[providerId] || 'Link'}</a>`;
-            apiKeyInput.value = '';
-            apiKeyInput.placeholder = provider.has_api_key ? 'Key ayarlı (değiştirmek için girin)' : `${provider.name} API key girin...`;
+            // API Key alanı kaldırıldı: yerel Ollama modunda anahtar istenmez.
 
             // Show models
             renderModelList(provider);
@@ -2331,9 +2268,10 @@
 
         // Render model list
         function renderModelList(provider) {
+            const blocked = provider.local ? provider.available === false : !provider.has_api_key;
             modelItems.innerHTML = provider.models.map(m => `
                 <div class="model-item ${m.id === activeModel && provider.id === activeProvider ? 'active' : ''}" 
-                     data-provider="${provider.id}" data-model="${m.id}" ${!provider.has_api_key ? 'style="opacity:0.5;pointer-events:none"' : ''}>
+                     data-provider="${provider.id}" data-model="${m.id}" ${blocked || m.available === false ? 'style="opacity:0.5;pointer-events:none"' : ''}>
                     <div class="model-item-info">
                         <div class="model-item-name">
                             ${m.name}
@@ -2369,13 +2307,10 @@
                     activeProvider = providerId;
                     activeModel = modelId;
                     
-                    // Update UI
+                    // Update catalog + button (ajan adı ve seçili model birlikte).
+                    await loadModelCatalog();
+                    await updateModelButton();
                     const provider = modelCatalog.find(p => p.id === providerId);
-                    const model = provider?.models.find(m => m.id === modelId);
-                    modelBtnText.textContent = model?.name || modelId;
-                    modelStatusDot.classList.remove('disconnected');
-                    
-                    // Update model list checkmarks
                     renderModelList(provider);
                     
                     // Show confirmation
@@ -2383,40 +2318,14 @@
                         modelOverlay.classList.remove('active');
                     }, 500);
                 } else {
-                    alert('Model değiştirilemedi: ' + data.detail);
+                    alert('Model değiştirilemedi: ' + (data.detail || data.error || 'bilinmeyen hata'));
                 }
             } catch (e) {
                 alert('Hata: ' + e.message);
             }
         }
 
-        // Save API key
-        apiKeySave.addEventListener('click', async () => {
-            if (!selectedProvider) {
-                alert('Önce bir sağlayıcı seçin');
-                return;
-            }
-            const key = apiKeyInput.value.trim();
-            try {
-                const res = await fetch(MODELS_API + '/api-key', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ provider: selectedProvider, api_key: key })
-                });
-                const data = await res.json();
-                if (data.success) {
-                    // Reload catalog
-                    await loadModelCatalog();
-                    // Re-select provider to update UI
-                    selectProvider(selectedProvider);
-                    alert('API key kaydedildi!');
-                } else {
-                    alert('Kaydedilemedi: ' + data.detail);
-                }
-            } catch (e) {
-                alert('Hata: ' + e.message);
-            }
-        });
+        // API Key kaydetme alanı kaldırıldı (yerel Ollama modu).
 
         // Update model button on load
         async function updateModelButton() {
@@ -2438,7 +2347,15 @@
                         } catch (e) {}
                     }
                     if (agent) {
-                        modelBtnText.textContent = agent.icon + ' ' + agent.name;
+                        let modelSuffix = '';
+                        try {
+                            const mr = await fetch(MODELS_API + '/active');
+                            const md = await mr.json();
+                            if (md.success && md.model) {
+                                modelSuffix = ' · ' + (md.provider === 'local' ? 'Yerel: ' : '') + (md.model_name || md.model);
+                            }
+                        } catch (e) {}
+                        modelBtnText.textContent = agent.icon + ' ' + agent.name + modelSuffix;
                         modelStatusDot.classList.remove('disconnected');
                         return;
                     }
@@ -2457,6 +2374,59 @@
                 modelBtnText.textContent = 'Model';
             }
         }
+
+        // ===== BULUT ANAHTARI UI (BYOK: her kullanıcı kendi anahtarını girer) =====
+        const cloudKeyBtn = document.getElementById('cloud-key-btn');
+        function cloudKeyEtiketYenile() {
+            if (!cloudKeyBtn) return;
+            try {
+                if (cloudKeyAktif()) {
+                    cloudKeyBtn.style.opacity = '1';
+                    cloudKeyBtn.title = 'Bulut model AKTİF: ' + (localStorage.getItem('nexus_llm_model') || 'varsayılan GLM') + ' — değiştirmek/kaldırmak için tıkla';
+                } else {
+                    cloudKeyBtn.style.opacity = '.55';
+                    cloudKeyBtn.title = 'Bulut model için KENDİ API anahtarını ekle (sunucuda saklanmaz)';
+                }
+            } catch (e) { /* localStorage kapalıysa başlık değişmez */ }
+        }
+        if (cloudKeyBtn) cloudKeyBtn.addEventListener('click', async () => {
+            const mevcut = localStorage.getItem('nexus_llm_key') || '';
+            const yeni = prompt(
+                'Kendi bulut API anahtarını gir (OpenRouter: sk-or-v1-… veya Z.ai anahtarı).\n' +
+                'Anahtar SUNUCUDA saklanmaz — yalnız bu tarayıcıda tutulur.\n' +
+                'İptal = değişiklik yok. Tamamen boşaltıp TAMAM = anahtarı kaldır (yerel model).', mevcut);
+            if (yeni === null) return;
+            const temiz = yeni.trim();
+            if (!temiz) {
+                localStorage.removeItem('nexus_llm_key');
+                localStorage.removeItem('nexus_llm_model');
+                localStorage.removeItem('nexus_llm_base');
+                cloudKeyEtiketYenile();
+                showToast('Anahtar kaldırıldı — yerel model kullanılacak.');
+                return;
+            }
+            localStorage.setItem('nexus_llm_key', temiz);
+            // Canlı model listesi: GLM önce (kullanıcının istediği), sonra
+            // diğer ücretsizler — listenin gelmemesi durumunda sunucu
+            // varsayılanı (GLM-5.3-Flash) kullanılır.
+            let modeller = [];
+            let glm = [];
+            try {
+                const res = await fetch(API_BASE + '/api/v1/ai/cloud/models');
+                const data = await res.json();
+                glm = (data.glm || []).map(m => m.id);
+                modeller = (data.models || []).map(m => m.id);
+            } catch (e) { /* liste gelmezse varsayılan kullanılır */ }
+            const mevcutModel = localStorage.getItem('nexus_llm_model') || '';
+            const oneriler = (glm.slice(0, 10).concat(modeller.slice(0, 5))).join('\n') ||
+                '(liste alınamadı — boş bırak: varsayılan GLM-5.3-Flash)';
+            const secim = prompt('Bulut model kimliği (önerilen: z-ai/glm-5.3-flash; listeden yaz, boş bırak = varsayılan):\n' + oneriler, mevcutModel || 'z-ai/glm-5.3-flash');
+            if (secim && secim.trim()) localStorage.setItem('nexus_llm_model', secim.trim());
+            else localStorage.removeItem('nexus_llm_model');
+            cloudKeyEtiketYenile();
+            showToast('☁️ Bulut anahtarın ayarlandı (yalnız bu tarayıcıda saklanır).');
+        });
+        cloudKeyEtiketYenile();
 
         // Load active model on page load
         updateModelButton();

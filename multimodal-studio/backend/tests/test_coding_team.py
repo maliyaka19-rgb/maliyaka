@@ -86,7 +86,8 @@ def test_task_type_routing(message, expected):
 
 
 def test_workflows_route_to_the_right_specialist():
-    assert cm.WORKFLOWS[cm.TaskType.FEATURE][0]["role"] == "task-planner"
+    # Hızlı akış: ilk adım, analiz + planı tek planda yapan code-analyst.
+    assert cm.WORKFLOWS[cm.TaskType.FEATURE][0]["role"] == "code-analyst"
 
     frontend = [s["role"] for s in cm.WORKFLOWS[cm.TaskType.FRONTEND]]
     assert "frontend-pro" in frontend
@@ -98,7 +99,7 @@ def test_workflows_route_to_the_right_specialist():
     assert "devops" in devops
 
     api = [s["role"] for s in cm.WORKFLOWS[cm.TaskType.API]]
-    assert "database-pro" in api
+    assert "integrator" in api
 
 
 def test_all_specialists_are_reachable_somewhere():
@@ -165,6 +166,7 @@ def test_main_manager_chat_delegates_coding_to_chain(monkeypatch):
     assert data["response"] == "Zincir sonucu"
     assert data["coding"] == {
         "task_id": "t1", "task_type": "frontend", "mode": "plan",
+        "status": None, "success": True,
         "experts": ["code-analyst", "frontend-pro"],
     }
     assert called == {"message": "arayüz bileşeni ekle", "mode": "plan", "via_main_manager": True}
@@ -181,7 +183,7 @@ def test_legacy_auto_chat_general_message_stays_single_agent(monkeypatch):
 
     seen = {}
 
-    async def fake_chat(message, conversation_id=None, history=None, agent_id=None):
+    async def fake_chat(message, conversation_id=None, history=None, agent_id=None, current_user=None, llm_credential=None):
         seen["agent_id"] = agent_id
         return {"success": True, "response": "selam", "conversation_id": conversation_id or "c",
                 "tools_used": [], "thinking_steps": []}
@@ -208,7 +210,7 @@ def test_main_manager_is_default_and_reviews_report(monkeypatch, tmp_path):
     calls = []
 
     async def fake_chat(message, conversation_id=None, history=None, agent_id=None,
-                        tools_override=None, system_prefix=None):
+                        tools_override=None, system_prefix=None, current_user=None):
         calls.append(agent_id)
         return {
             "success": True,

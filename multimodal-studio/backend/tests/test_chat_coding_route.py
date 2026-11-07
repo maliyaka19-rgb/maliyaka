@@ -33,9 +33,16 @@ def _fake_run_factory(seen: dict, files=None):
     return fake_run
 
 
+class _Raw:
+    """chat_endpoint'ın doğrudan test çağrıları için başlık sarıcı."""
+
+    def __init__(self, headers=None):
+        self.headers = dict(headers or {})
+
+
 def _chat(message: str, **kwargs):
     req = routes.ChatRequest(message=message, **kwargs)
-    return asyncio.run(routes.chat_endpoint(req, current_user=None))
+    return asyncio.run(routes.chat_endpoint(req, raw_request=_Raw(), current_user=None))
 
 
 def test_chat_request_defaults_to_plan_mode():
