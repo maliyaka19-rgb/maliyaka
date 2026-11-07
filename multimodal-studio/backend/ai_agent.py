@@ -254,192 +254,300 @@ def _extract_tool_json_calls(text: str, allowed_names):
 # Uygulamanın kendi kökü (backend/.. , ../) — edit akışı buraya DOKUNMAZ.
 _APP_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 
-_BUILD_TEMPLATE_HTML = """<!DOCTYPE html>
-<html lang="tr">
+# ------------------------------------------------------------------
+# GENEL MODERN ŞABLON: AURORA — bilinmeyen alanlar için TAM ÇALIŞAN
+# modern tanıtım/panel sitesi (hero, özellikler, galeri, referans,
+# iletişim formu, karanlık mod, scroll animasyonları).
+# ------------------------------------------------------------------
+
+_BUILD_TEMPLATE_HTML = r"""<!DOCTYPE html>
+<html lang="tr" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Lezzet Durağı | Yemek Sitesi</title>
+<title>Aurora — Modern Site</title>
+<meta name="description" content="Aurora: modern, hızlı, mobil uyumlu tanıtım sitesi şablonu.">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-<header class="nav">
-  <div class="nav-inner">
-    <a class="logo" href="#hero">🍽️ Lezzet Durağı</a>
-    <nav class="nav-links">
-      <a href="#menu">Menü</a>
-      <a href="#hakkimizda">Hakkımızda</a>
-      <a href="#iletisim">İletişim</a>
-    </nav>
-    <button class="nav-toggle" id="navToggle">☰</button>
+<header class="topbar">
+  <a class="brand" href="#top">✦ Aurora</a>
+  <nav class="nav" id="nav">
+    <a href="#ozellikler">Özellikler</a>
+    <a href="#galeri">Galeri</a>
+    <a href="#referans">Referanslar</a>
+    <a href="#iletisim">İletişim</a>
+  </nav>
+  <div class="tools">
+    <button id="themeBtn" class="icon-btn" title="Tema değiştir" aria-label="Tema">🌙</button>
+    <button id="navBtn" class="icon-btn" title="Menü" aria-label="Menü">☰</button>
   </div>
 </header>
 
-<section class="hero" id="hero">
-  <div class="hero-content">
-    <h1>Günlük taze mutfak — Türk mutfağının klasikleri</h1>
-    <p>Evinizdeki kadar sıcak, restoranınız kadar keyifli.</p>
-    <a class="btn primary" href="#menu">Menüyü Gör</a>
-    <a class="btn ghost" href="#iletisim">Sipariş Ver</a>
-  </div>
-</section>
+<main id="top">
+  <section class="hero">
+    <p class="eyebrow">AURORA STÜDYO</p>
+    <h1>Fikrin <span class="mark">ışıltılı</span> vitrini</h1>
+    <p class="sub">Modern, hızlı ve tamamen mobil uyumlu bir tanıtım sitesi.
+    Metinleri kendi işine göre değiştir; renk değişimini NEXUS'a söylemen
+    yeterli (örn. "renkleri mor yap").</p>
+    <div class="cta">
+      <a class="btn" href="#iletisim">Teklif Al</a>
+      <a class="btn ghost" href="#ozellikler">Neler Var?</a>
+    </div>
+    <div class="stats">
+      <div><b>120+</b><span>teslim proje</span></div>
+      <div><b>%98</b><span>memnuniyet</span></div>
+      <div><b>24 sa</b><span>ortalama teslim</span></div>
+    </div>
+  </section>
 
-<section id="menu" class="section">
-  <h2>Bugünün Menüsü</h2>
-  <div class="menu-grid" id="menuGrid"></div>
-</section>
+  <section id="ozellikler" class="block reveal">
+    <h2>Özellikler</h2>
+    <div class="grid">
+      <div class="kart"><span>⚡</span><b>Anında hız</b><p>Önbellek dostu tek dosyalık varlıklar; lighthouse puanını düşürmez.</p></div>
+      <div class="kart"><span>📱</span><b>Mobil uyum</b><p>Telefon, tablet, masaüstü — bütün ekranlarda düzgün durur.</p></div>
+      <div class="kart"><span>🎨</span><b>Tek satır marka</b><p><code>--brand</code> değişkeni tek yerden tüm sitenin rengini yönetir.</p></div>
+      <div class="kart"><span>🌙</span><b>Aydınlık/karanlık</b><p>Temayı düğmeyle değiştir; seçim tarayıcıda saklanır.</p></div>
+      <div class="kart"><span>✉️</span><b>Doğrulamalı form</b><p>İletişim formu boş/hatalı girişleri nazikçe uyarır.</p></div>
+      <div class="kart"><span>🔍</span><b>SEO dostu</b><p>Anlamlı başlıklar ve meta etiketleri hazır gelir.</p></div>
+    </div>
+  </section>
 
-<section id="hakkimizda" class="section alt">
-  <h2>Hakkımızda</h2>
-  <p>2009'dan beri her sabah pazarından alınan malzemelerle klasik Türk
-  yemeklerini hazırlıyoruz. Fırında ramazan pide, taş fırında lahmacun ve
-  ev yapımı keşkek sarsılır mı? Bize misafir olun.</p>
-</section>
+  <section id="galeri" class="block reveal">
+    <h2>Galeri</h2>
+    <div class="tiles">
+      <figure class="tile">🏔️<figcaption>Doğa serisi</figcaption></figure>
+      <figure class="tile">🏙️<figcaption>Şehir çizimleri</figcaption></figure>
+      <figure class="tile">🎨<figcaption>Poster seti</figcaption></figure>
+      <figure class="tile">📷<figcaption>Portreler</figcaption></figure>
+    </div>
+  </section>
 
-<section id="iletisim" class="section">
-  <h2>İletişim</h2>
-  <form id="orderForm" class="order-form">
-    <input type="text" name="ad" placeholder="Adınız" required>
-    <input type="tel" name="telefon" placeholder="Telefon" required>
-    <textarea name="not" rows="3" placeholder="Siparişiniz"></textarea>
-    <button class="btn primary" type="submit">Gönder</button>
-    <p class="form-note" id="formNote"></p>
-  </form>
-</section>
+  <section id="referans" class="block reveal">
+    <h2>Referanslar ne diyor?</h2>
+    <div class="quotes">
+      <blockquote>"Vitrinimiz gerçekten vitrin oldu; gelen müşteri
+      önce siteye bakmış gibi davranıyor." <b>— Elif, butik sahibi</b></blockquote>
+      <blockquote>"Sadece metin değiştirdik, bütçe değişmedi; sonuç
+      kurumsal bir ajans işi gibi." <b>— Kaan, freelance fotoğrafçı</b></blockquote>
+    </div>
+  </section>
+
+  <section id="iletisim" class="block reveal">
+    <h2>İletişim</h2>
+    <div class="iletisim-iki">
+      <form id="form" novalidate>
+        <label>Ad Soyad
+          <input id="ad" placeholder="Adın soyadın" required>
+        </label>
+        <label>E-posta
+          <input id="eposta" type="email" placeholder="ornek@posta.com" required>
+        </label>
+        <label>Mesajın
+          <textarea id="mesaj" rows="4" placeholder="Kısaca neye ihtiyacın var?" required></textarea>
+        </label>
+        <button class="btn" type="submit">Gönder 🚀</button>
+        <p id="formDurum" class="form-durum" role="status"></p>
+      </form>
+      <aside class=" bilgi">
+        <h3>Çalışma saatleri</h3>
+        <p>Hafta içi 09:00 – 18:00</p>
+        <h3>Adres</h3>
+        <p>Modern Cad. No.7, Kadıköy / İstanbul</p>
+        <h3>Doğrudan</h3>
+        <p><a href="mailto:merhaba@aurora.site">merhaba@aurora.site</a></p>
+      </aside>
+    </div>
+  </section>
+</main>
 
 <footer class="footer">
-  <p>© <span id="year"></span> Lezzet Durağı · Tüm hakları saklıdır.</p>
+  <span>© <span id="yil"></span> Aurora Studio</span>
+  <small>Bu site NEXUS tarafından üretildi.</small>
 </footer>
+
+<div id="toast" class="toast"></div>
+<button id="topBtn" class="top-btn" title="Yukarı">↑</button>
 <script src="script.js"></script>
 </body>
 </html>
 """
 
-_BUILD_TEMPLATE_CSS = """/* Lezzet Durağı — stiller */
-:root {
-  --bg: #fffaf5;
-  --ink: #2c2320;
-  --muted: #7a6a60;
-  --brand: #e2542f;
-  --brand-2: #f7a12c;
-  --card: #ffffff;
-  --border: #efe2d7;
+_BUILD_TEMPLATE_CSS = r"""/* Aurora — modern genel tema */
+:root{
+  --brand:#6366f1; --brand2:#8b5cf6; --ink:#1e293b; --bg:#f8fafc;
+  --panel:#ffffff; --muted:#64748b; --cizgi:#e2e8f0; --ok:#16a34a;
+  --radius:16px; --shadow:0 10px 30px rgba(30,41,59,.08);
 }
-* { box-sizing: border-box; margin: 0; padding: 0; }
-body {
-  font-family: "Segoe UI", system-ui, -apple-system, sans-serif;
-  background: var(--bg); color: var(--ink); line-height: 1.6;
+[data-theme="dark"]{
+  --ink:#e2e8f0; --bg:#0f172a; --panel:#1e293b; --muted:#94a3b8;
+  --cizgi:rgba(148,163,184,.18); --ok:#4ade80;
+  --shadow:0 12px 34px rgba(2,8,23,.5);
 }
-h2 { text-align: center; font-size: 1.9rem; margin-bottom: 1.4rem; }
-.section { max-width: 1100px; margin: 0 auto; padding: 3.4rem 1.2rem; }
-.section.alt { background: #fdeee3; border-radius: 18px; }
-
-.nav { position: sticky; top: 0; background: var(--card); z-index: 10;
-  border-bottom: 1px solid var(--border); }
-.nav-inner { max-width: 1100px; margin: 0 auto; display: flex;
-  align-items: center; justify-content: space-between; padding: .8rem 1.2rem; }
-.logo { font-weight: 700; color: var(--brand); text-decoration: none; font-size: 1.15rem; }
-.nav-links a { margin-left: 1rem; color: var(--ink); text-decoration: none; }
-.nav-links a:hover { color: var(--brand); }
-.nav-toggle { display: none; font-size: 1.1rem; background: none; border: 1px solid var(--border);
-  border-radius: 8px; padding: .25rem .6rem; cursor: pointer; }
-
-.hero {
-  background: linear-gradient(120deg, #ff6b3d, #f7a12c 75%);
-  color: #fff; text-align: center; padding: 4.5rem 1.2rem;
-}
-.hero h1 { font-size: clamp(1.6rem, 4vw, 2.6rem); max-width: 760px; margin: 0 auto 1rem; }
-.hero p { font-size: 1.1rem; opacity: .95; margin-bottom: 1.4rem; }
-.btn { display: inline-block; padding: .7rem 1.4rem; border-radius: 999px;
-  text-decoration: none; font-weight: 600; margin: .25rem; transition: .2s; }
-.btn.primary { background: #fff; color: var(--brand); }
-.btn.primary:hover { transform: translateY(-2px); }
-.btn.ghost { border: 1.5px solid #fff; color: #fff; }
-
-.menu-grid { display: grid; gap: 1.1rem;
-  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); }
-.dish {
-  background: var(--card); border: 1px solid var(--border);
-  border-radius: 14px; padding: 1.1rem 1.2rem;
-  box-shadow: 0 6px 18px rgba(0,0,0,.05);
-}
-.dish h3 { color: var(--brand); margin-bottom: .35rem; font-size: 1.05rem; }
-.dish p { color: var(--muted); font-size: .95rem; }
-.dish .price { display: inline-block; margin-top: .6rem; font-weight: 700;
-  color: var(--ink); background: var(--bg); border-radius: 8px;
-  padding: .15rem .55rem; border: 1px solid var(--border); }
-
-.order-form { max-width: 560px; margin: 0 auto; display: grid; gap: .7rem; }
-.order-form input, .order-form textarea {
-  padding: .7rem .9rem; border: 1px solid var(--border);
-  border-radius: 10px; font: inherit; background: var(--card);
-}
-.form-note { color: var(--muted); font-size: .9rem; }
-
-.footer { text-align: center; color: var(--muted); padding: 1.6rem 1rem;
-  border-top: 1px solid var(--border); }
-
-@media (max-width: 720px) {
-  .nav-links {
-    display: none; position: absolute; right: 1.2rem; top: 3.4rem;
-    background: var(--card); border: 1px solid var(--border);
-    border-radius: 12px; padding: .8rem 1rem; flex-direction: column;
-  }
-  .nav-links.open { display: flex; }
-  .nav-toggle { display: block; }
-}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{margin:0;font-family:system-ui,'Segoe UI',Roboto,Arial;background:var(--bg);
+  color:var(--ink);transition:background .3s,color .3s}
+.topbar{position:sticky;top:0;z-index:9;display:flex;align-items:center;
+  gap:1rem;padding:.75rem 1.2rem;background:var(--panel);
+  border-bottom:1px solid var(--cizgi)}
+.brand{font-weight:800;text-decoration:none;color:var(--ink);font-size:1.05rem}
+.nav{display:flex;gap:1rem;margin-left:auto}
+.nav a{color:var(--muted);text-decoration:none;font-weight:600;font-size:.92rem}
+.nav a:hover{color:var(--brand)}
+.icon-btn{border:1px solid var(--cizgi);background:transparent;color:var(--ink);
+  border-radius:10px;padding:.35rem .55rem;cursor:pointer;font-size:1rem}
+.tools{display:flex;gap:.4rem}
+#navBtn{display:none}
+.hero{padding:4rem 1.2rem 3rem;text-align:center;
+  background:linear-gradient(140deg,var(--brand) 0%,var(--brand2) 60%,transparent 130%);
+  color:#fff;border-radius:0 0 28px 28px}
+[data-theme="dark"] .hero{
+  background:linear-gradient(140deg,#312e81,#5b21b6 55%,#111827 130%)}
+.eyebrow{letter-spacing:.35em;font-size:.78rem;opacity:.8;margin:0 0 .6rem}
+.hero h1{font-size:clamp(2rem,5vw,3.2rem);margin:0 0 .8rem;line-height:1.15}
+.mark{background:linear-gradient(90deg,#fde68a,#fca5a5);
+  -webkit-background-clip:text;background-clip:text;color:transparent}
+.sub{max-width:640px;margin:0 auto 1.4rem;line-height:1.6;opacity:.92}
+.cta{display:flex;gap:.7rem;justify-content:center;flex-wrap:wrap}
+.btn{display:inline-block;border:0;border-radius:12px;padding:.8rem 1.3rem;
+  font-weight:700;cursor:pointer;text-decoration:none;
+  background:#fff;color:var(--brand);font-size:.95rem}
+.btn:hover{filter:brightness(.94)}
+.btn.ghost{background:rgba(255,255,255,.16);color:#fff;
+  border:1px solid rgba(255,255,255,.45)}
+.stats{display:flex;gap:2rem;justify-content:center;margin-top:2.4rem;flex-wrap:wrap}
+.stats b{display:block;font-size:1.6rem}
+.stats span{font-size:.85rem;opacity:.85}
+.block{max-width:1000px;margin:0 auto;padding:2.6rem 1.2rem 0}
+.block h2{font-size:1.5rem;margin:0 0 1.2rem}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(240px,1fr));gap:.9rem}
+.kart{background:var(--panel);border:1px solid var(--cizgi);
+  border-radius:var(--radius);padding:1.1rem;box-shadow:var(--shadow)}
+.kart span{font-size:1.5rem}
+.kart b{display:block;margin:.4rem 0 .3rem}
+.kart p{margin:0;color:var(--muted);font-size:.92rem;line-height:1.55}
+.kart code{background:rgba(99,102,241,.12);padding:.05rem .3rem;border-radius:6px}
+.tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:.8rem}
+.tile{margin:0;background:var(--panel);border:1px solid var(--cizgi);
+  border-radius:var(--radius);box-shadow:var(--shadow);font-size:2.4rem;
+  text-align:center;padding:2rem 1rem 1rem;transition:transform .25s}
+.tile:hover{transform:translateY(-4px)}
+.tile figcaption{font-size:.9rem;color:var(--muted);margin-top:.5rem}
+.quotes{display:grid;gap:.9rem}
+blockquote{margin:0;background:var(--panel);border-left:4px solid var(--brand);
+  border-radius:var(--radius);padding:1rem 1.2rem;line-height:1.6;
+  box-shadow:var(--shadow)}
+blockquote b{color:var(--muted);font-weight:600}
+.iletisim-iki{display:grid;grid-template-columns:1.4fr 1fr;gap:1rem}
+@media(max-width:760px){.iletisim-iki{grid-template-columns:1fr}
+  .nav{position:absolute;flex-direction:column;top:100%;right:1rem;
+    background:var(--panel);border:1px solid var(--cizgi);border-radius:12px;
+    padding:.6rem 1rem;display:none}.nav.acik{display:flex}#navBtn{display:block}}
+form{display:grid;gap:.7rem;background:var(--panel);border:1px solid var(--cizgi);
+  border-radius:var(--radius);box-shadow:var(--shadow);padding:1.1rem}
+label{display:grid;gap:.3rem;font-size:.88rem;font-weight:600;color:var(--muted)}
+input,textarea{border:1px solid var(--cizgi);border-radius:10px;padding:.7rem .8rem;
+  font:inherit;background:transparent;color:var(--ink);resize:vertical}
+input:focus,textarea:focus{outline:2px solid var(--brand);border-color:transparent}
+input.hatali,textarea.hatali{border-color:#dc2626}
+form .btn{justify-self:start}
+.form-durum{margin:0;font-size:.85rem;color:var(--ok);min-height:1.2em}
+.bilgi{background:var(--panel);border:1px solid var(--cizgi);
+  border-radius:var(--radius);box-shadow:var(--shadow);padding:1.1rem}
+.bilgi h3{margin:.9rem 0 .2rem;font-size:.85rem;letter-spacing:.4pt;
+  text-transform:uppercase;color:var(--muted)}
+.bilgi p{margin:0}
+.bilgi a{color:var(--brand);text-decoration:none;font-weight:600}
+.footer{display:flex;justify-content:space-between;align-items:center;gap:.5rem;
+  flex-wrap:wrap;max-width:1000px;margin:2.6rem auto 0;padding:1.2rem;
+  border-top:1px solid var(--cizgi);color:var(--muted);font-size:.85rem}
+.toast{position:fixed;left:50%;bottom:1.4rem;transform:translate(-50%,140%);
+  background:var(--ink);color:var(--bg);border-radius:999px;padding:.6rem 1.1rem;
+  font-size:.88rem;transition:transform .35s;z-index:20}
+.toast.gorundu{transform:translate(-50%,0)}
+.top-btn{position:fixed;right:1.2rem;bottom:1.2rem;width:42px;height:42px;
+  border-radius:50%;border:0;background:var(--brand);color:#fff;font-size:1.2rem;
+  cursor:pointer;opacity:0;pointer-events:none;transition:opacity .3s;z-index:19}
+.top-btn.gorunur{opacity:1;pointer-events:auto}
+.reveal{opacity:0;transform:translateY(16px);transition:opacity .6s,transform .6s}
+.reveal.girdi{opacity:1;transform:none}
 """
 
-_BUILD_TEMPLATE_JS = """/* Lezzet Durağı — davranışlar */
-const MENU = [
-  { ad: "Ev Manti", aciklama: "El açması mantı, yoğurt ve kızarmış nane.", fiyat: "₺120" },
-  { ad: "Iskender Kebap", aciklama: "Döner, tereyağı ve domates soslu.", fiyat: "₺160" },
-  { ad: "Içli Köfte", aciklama: "Bulgur ve kıyma ile klasik içli köfte.", fiyat: "₺90" },
-  { ad: "Ramazan Pide", aciklama: "Taş fırında, sıcak servis.", fiyat: "₺45" },
-  { ad: "Lahmacun", aciklama: "İnce hamur, bol soğan ve limon.", fiyat: "₺38" },
-  { ad: "Baklava", aciklama: "Fistıklı ev yapımı baklava.", fiyat: "₺80" },
-  { ad: "Kuru Fasulye", aciklama: "Yanında pilav ve turşu.", fiyat: "₺70" },
-  { ad: "Künefe", aciklama: "Yaban fıstığı ile sıcak künefe.", fiyat: "₺95" },
-];
+_BUILD_TEMPLATE_JS = r"""/* Aurora — davranışlar: tema, menü, reveal, form, scroll-top */
+const r = document.documentElement;
 
-function menuList() {
-  const grid = document.getElementById("menuGrid");
-  if (!grid) return;
-  grid.innerHTML = MENU.map((d) => {
-    return `<article class="dish">
-      <h3>${d.ad}</h3>
-      <p>${d.aciklama}</p>
-      <span class="price">${d.fiyat}</span>
-    </article>`;
-  }).join("");
+/* ---- tema ------------------------------------------------------------ */
+document.getElementById("themeBtn").onclick = () => {
+  r.dataset.theme = r.dataset.theme === "dark" ? "light" : "dark";
+  document.getElementById("themeBtn").textContent =
+    r.dataset.theme === "dark" ? "☀️" : "🌙";
+  localStorage.setItem("au_theme", r.dataset.theme);
+};
+const kayitTema = localStorage.getItem("au_theme");
+if (kayitTema) {
+  r.dataset.theme = kayitTema;
+  document.getElementById("themeBtn").textContent =
+    kayitTema === "dark" ? "☀️" : "🌙";
 }
 
-function navToggle() {
-  const btn = document.getElementById("navToggle");
-  const links = document.querySelector(".nav-links");
-  if (!btn || !links) return;
-  btn.addEventListener("click", () => links.classList.toggle("open"));
-}
+/* ---- mobil menü ------------------------------------------------------ */
+const nav = document.getElementById("nav");
+document.getElementById("navBtn").onclick = () => nav.classList.toggle("acik");
+nav.addEventListener("click", e => {
+  if (e.target.tagName === "A") nav.classList.remove("acik");
+});
 
-function orderForm() {
-  const form = document.getElementById("orderForm");
-  const note = document.getElementById("formNote");
-  if (!form) return;
-  form.addEventListener("submit", (e) => {
-    e.preventDefault();
-    const data = new FormData(form);
-    note.textContent = `Teşekkürler ${data.get("ad") || "Misafir"}! Sipariş notun alınmıştır.`;
-    form.reset();
+/* ---- scroll animasyonları ------------------------------------------- */
+const io = new IntersectionObserver(kayitlar => {
+  kayitlar.forEach(k => {
+    if (k.isIntersecting) { k.target.classList.add("girdi"); io.unobserve(k.target); }
   });
+}, { threshold: 0.12 });
+document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+
+/* ---- iletişim formu -------------------------------------------------- */
+function toast(mesaj) {
+  const t = document.getElementById("toast");
+  t.textContent = mesaj;
+  t.classList.add("gorundu");
+  clearTimeout(toast.sure);
+  toast.sure = setTimeout(() => t.classList.remove("gorundu"), 2600);
 }
 
-const yearEl = document.getElementById("year");
-if (yearEl) yearEl.textContent = new Date().getFullYear();
+document.getElementById("form").addEventListener("submit", e => {
+  e.preventDefault();
+  const ad = document.getElementById("ad");
+  const eposta = document.getElementById("eposta");
+  const mesaj = document.getElementById("mesaj");
+  let tamam = true;
+  [ad, eposta, mesaj].forEach(alan => {
+    alan.classList.remove("hatali");
+    if (!alan.value.trim() ||
+        (alan === eposta && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(alan.value))) {
+      alan.classList.add("hatali");
+      tamam = false;
+    }
+  });
+  const durum = document.getElementById("formDurum");
+  if (!tamam) { durum.textContent = "Lütfen işaretli alanları düzelt."; return; }
+  durum.textContent = "Teşekkürler " + ad.value.trim().split(" ")[0] +
+    "! Mesajın alındı (bu şablonda bir veritabanı bağlı değildir).";
+  toast("📨 Mesaj gönderildi");
+  e.target.reset();
+});
 
-menuList();
-navToggle();
-orderForm();
+/* ---- yukarı düğmesi + yıl ------------------------------------------- */
+const topBtn = document.getElementById("topBtn");
+addEventListener("scroll", () => {
+  topBtn.classList.toggle("gorunur", scrollY > 600);
+}, { passive: true });
+topBtn.onclick = () => scrollTo({ top: 0, behavior: "smooth" });
+
+document.getElementById("yil").textContent = new Date().getFullYear();
 """
+
 
 _BUILD_TEMPLATE_README = r"""# Modern Site — Hazır Başlangıç
 
@@ -898,6 +1006,7 @@ _WEATHER_TEMPLATE_HTML = r"""<!DOCTYPE html>
     <div class="now-meta">
       <span id="yer">📍 İstanbul</span>
       <span id="guncel">· güncellendi --:--</span>
+      <span id="mod" class="mod-tip">🟡 demo</span>
     </div>
   </section>
 
@@ -959,6 +1068,8 @@ select{background:var(--panel);color:var(--ink);border:1px solid var(--cizgi);
 .temp{font-size:4rem;font-weight:800;line-height:1}
 .desc{color:var(--muted);font-weight:600;margin-top:.3rem}
 .now-meta{display:flex;gap:.4rem;color:var(--muted);font-size:.85rem;margin-top:1rem}
+.mod-tip{background:var(--panel);border:1px solid var(--cizgi);
+  border-radius:999px;padding:.12rem .55rem;font-size:.72rem;align-self:center}
 .stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:.7rem;margin-top:.8rem}
 .stat{display:flex;align-items:center;gap:.7rem;padding:.9rem 1rem}
 .stat span{font-size:1.6rem}
@@ -1024,10 +1135,81 @@ const VERI = {
   },
 };
 const IKON_ADLARI = {
-  "☀️": "Güneşli", "⛅": "Parçalı Bulutlu", "☁️": "Kapalı",
-  "🌧️": "Yağmurlu", "⛈️": "Gök Gürültülü", "❄️": "Kar", "🌫️": "Puslu",
+  "☀️": "Güneşli", "🌤️": "Az Bulutlu", "⛅": "Parçalı Bulutlu",
+  "☁️": "Kapalı", "🌦️": "Çiseleme", "🌧️": "Yağmurlu",
+  "⛈️": "Gök Gürültülü", "❄️": "Kar", "🌫️": "Puslu",
 };
 const GUNLER = ["Pzt", "Sal", "Çar", "Per", "Cum", "Cmt", "Paz"];
+
+// ---- CANLI VERİ (internet): açık & anahtarsız open-meteo servisi -------
+// İnternet yoksa/servis yanıt vermezse VERI demo sözlüğüyle devam edilir.
+const KOORDINAT = {
+  "İstanbul": [41.01, 28.98], "Ankara": [39.93, 32.86],
+  "İzmir": [38.42, 27.14], "Bursa": [40.19, 29.06],
+  "Antalya": [36.88, 30.71], "Erzurum": [39.9, 41.27],
+};
+const CANLI = {};
+
+function kodIkon(k) {
+  if (k === 0) return "☀️";
+  if (k <= 2) return "🌤️";
+  if (k === 3) return "☁️";
+  if (k === 45 || k === 48) return "🌫️";
+  if (k >= 51 && k <= 57) return "🌦️";
+  if ((k >= 61 && k <= 67) || (k >= 80 && k <= 82)) return "🌧️";
+  if ((k >= 71 && k <= 77) || k === 85 || k === 86) return "❄️";
+  if (k >= 95) return "⛈️";
+  return "⛅";
+}
+
+function kodAdi(k) {
+  if (k === 0) return "Açık";
+  if (k <= 2) return "Az Bulutlu";
+  if (k === 3) return "Kapalı";
+  if (k === 45 || k === 48) return "Puslu";
+  if (k >= 51 && k <= 57) return "Çiseleme";
+  if ((k >= 61 && k <= 67) || (k >= 80 && k <= 82)) return "Yağmurlu";
+  if ((k >= 71 && k <= 77) || k === 85 || k === 86) return "Kar";
+  if (k >= 95) return "Gök Gürültülü";
+  return "Değişken";
+}
+
+async function canliCek() {
+  const koord = KOORDINAT[sehir] || KOORDINAT["İstanbul"];
+  const url = "https://api.open-meteo.com/v1/forecast" +
+    "?latitude=" + koord[0] + "&longitude=" + koord[1] +
+    "&current=temperature_2m,apparent_temperature,relative_humidity_2m," +
+    "weather_code,wind_speed_10m,surface_pressure" +
+    "&hourly=temperature_2m,weather_code&forecast_days=6" +
+    "&daily=weather_code,temperature_2m_max,temperature_2m_min&timezone=auto";
+  try {
+    const cevap = await fetch(url);
+    if (!cevap.ok) throw new Error("http " + cevap.status);
+    const j = await cevap.json();
+    const basla = Math.max(0, j.hourly.time.findIndex(
+      t => new Date(t).getTime() > Date.now()));
+    CANLI[sehir] = {
+      sicaklik: Math.round(j.current.temperature_2m),
+      hissedilen: Math.round(j.current.apparent_temperature),
+      nem: Math.round(j.current.relative_humidity_2m),
+      ruzgar: Math.round(j.current.wind_speed_10m),
+      basinc: Math.round(j.current.surface_pressure),
+      durum: kodAdi(j.current.weather_code),
+      ikon: kodIkon(j.current.weather_code),
+      saatKod: j.hourly.weather_code.slice(basla + 1, basla + 9),
+      saatlik: j.hourly.temperature_2m
+        .slice(basla + 1, basla + 9).map(Math.round),
+      gunluk: j.daily.time.slice(1, 6).map((_, i) => [
+        kodIkon(j.daily.weather_code[i + 1]),
+        Math.round(j.daily.temperature_2m_min[i + 1]),
+        Math.round(j.daily.temperature_2m_max[i + 1]),
+      ]),
+    };
+  } catch (e) {
+    delete CANLI[sehir];     // internet yok → demo veriyle devam
+  }
+  render();
+}
 
 let sehir = localStorage.getItem("hr_city") || "İstanbul";
 const cityEl = document.getElementById("city");
@@ -1035,7 +1217,7 @@ cityEl.value = sehir;
 cityEl.onchange = () => {
   sehir = cityEl.value;
   localStorage.setItem("hr_city", sehir);
-  render();
+  canliCek();
 };
 
 function ikonSicaklik(t) {
@@ -1051,7 +1233,9 @@ function gunAdi(gunSayisi) {
 }
 
 function render() {
-  const v = VERI[sehir] || VERI["İstanbul"];
+  const canliMi = !!CANLI[sehir];
+  const v = canliMi ? CANLI[sehir] : (VERI[sehir] || VERI["İstanbul"]);
+  document.getElementById("mod").textContent = canliMi ? "🟢 canlı" : "🟡 demo";
   document.getElementById("ikon").textContent = v.ikon;
   document.getElementById("sicaklik").textContent = v.sicaklik + "°";
   document.getElementById("durum").textContent = v.durum;
@@ -1072,8 +1256,11 @@ function render() {
     const hh = String(dt.getHours()).padStart(2, "0") + ":00";
     const chip = document.createElement("div");
     chip.className = "chip";
-    chip.innerHTML = "<b>" + hh + "</b><div>" +
-      (i === 0 ? v.ikon : ikonSicaklik(t)) + "</div><small>" + t + "°</small>";
+    const ikon = canliMi && v.saatKod
+      ? kodIkon(v.saatKod[i])
+      : (i === 0 ? v.ikon : ikonSicaklik(t));
+    chip.innerHTML = "<b>" + hh + "</b><div>" + ikon +
+      "</div><small>" + t + "°</small>";
     strip.appendChild(chip);
   });
 
@@ -1098,7 +1285,9 @@ if (kayitTema) document.documentElement.dataset.theme = kayitTema;
 
 document.getElementById("yil").textContent = new Date().getFullYear();
 render();
+canliCek();
 setInterval(render, 60000);
+setInterval(() => canliCek(), 15 * 60000);
 """
 
 _WEATHER_TEMPLATE_MANIFEST = r"""{
@@ -1125,9 +1314,11 @@ için `index.html` dosyasını çift tıklaman yeterli.
 - 6 şehir: İstanbul, Ankara, İzmir, Bursa, Antalya, Erzurum
 - Karanlık/aydınlık tema (kayıtlı) · PWA `manifest.json`
 
-## Veri
-`script.js` içindeki `VERI` sözlüğü örnek/demo değerlerdir. Canlı hava
-durumu için sözlüğü bir API yanıtına eşle Growing yeter — arayüz aynı kalır.
+## Veri — CANLI MOD
+İnternet varken uygulama açık ve anahtarsız **open-meteo** servisinden
+gerçek hava durumunu çeker (🟢 canlı rozeti görünür). İnternet yoksa veya
+servis yanıt vermezse `script.js` içindeki `VERI` demo sözlüğüyle çalışmaya
+devam eder (🟡 demo rozeti) — uygulama asla boş ve hatalı görünmez.
 """
 
 
@@ -1400,6 +1591,7 @@ _PRAYER_TEMPLATE_HTML = r"""<!DOCTYPE html>
     <div>
       <h1>Namaz Vakitleri</h1>
       <p id="tarih">—</p>
+      <span id="kaynak" class="kaynak">🟡 demo</span>
     </div>
     <select id="city" aria-label="Şehir">
       <option>İstanbul</option><option>Ankara</option><option>İzmir</option>
@@ -1447,6 +1639,9 @@ select{background:var(--panel);color:var(--ink);border:1px solid var(--brand2);p
 .next .big{font-size:2.4rem;font-weight:800;margin:.1rem 0;color:#fff}
 .kalan{font-weight:700;margin:0.2rem 0 .6rem}
 .bar{height:8px;background:rgba(255,255,255,.3);border-radius:999px;overflow:hidden}
+.kaynak{display:inline-block;font-size:.68rem;color:rgba(255,255,255,.72);
+  border:1px solid rgba(255,255,255,.22);border-radius:999px;
+  padding:.08rem .5rem;margin-top:.35rem}
 .bar div{height:100%;width:0;background:#fff;transition:width .4s}
 .rows{list-style:none;margin:0;padding:0}
 .rows li{display:flex;justify-content:space-between;align-items:center;background:var(--panel);padding:.85rem 1rem;border-radius:14px;margin-bottom:.55rem;font-weight:600}
@@ -1475,7 +1670,7 @@ const TABELA = {
 let city = localStorage.getItem("nv_city") || "İstanbul";
 const cityEl = document.getElementById("city");
 cityEl.value = city;
-cityEl.onchange = () => { city = cityEl.value; localStorage.setItem("nv_city", city); render(); };
+cityEl.onchange = () => { city = cityEl.value; localStorage.setItem("nv_city", city); render(); canliVakitCek(); };
 
 const rowsEl = document.getElementById("rows");
 const TR = ["Pazar", "Pazartesi", "Salı", "Çarşamba", "Perşembe", "Cuma", "Cumartesi"];
@@ -1499,7 +1694,7 @@ function hicriTarih(d) {
 }
 
 function render() {
-  const saatler = TABELA[city] || TABELA["İstanbul"];
+  const saatler = CANLI_SATLER[city] || TABELA[city] || TABELA["İstanbul"];
   const d = new Date();
   document.getElementById("tarih").textContent =
     TR[d.getDay()] + ", " + d.getDate() + " " +
@@ -1571,8 +1766,33 @@ notifBtn.onclick = async () => {
   }
 };
 
+// ---- CANLI VERİ (internet): Diyanet yöntemi (aladhan, anahtarsız) ------
+const EN_SEHIR = { "İstanbul": "Istanbul", "İzmir": "Izmir" };
+const CANLI_SATLER = {};
+
+async function canliVakitCek() {
+  const en = EN_SEHIR[city] || city.toLowerCase();
+  const url = "https://api.aladhan.com/v1/timingsByCity?city=" + en +
+    "&country=Turkey&method=13";
+  try {
+    const cevap = await fetch(url);
+    if (!cevap.ok) throw new Error("http " + cevap.status);
+    const t = (await cevap.json()).data.timings;
+    const saatler = [t.Fajr, t.Sunrise, t.Dhuhr, t.Asr, t.Maghrib, t.Isha]
+      .map(s => s.split(" ")[0]);
+    if (saatler.some(s => !/^\d{2}:\d{2}$/.test(s))) throw new Error("biçim");
+    CANLI_SATLER[city] = saatler;
+    document.getElementById("kaynak").textContent = "🟢 canlı";
+  } catch (e) {
+    document.getElementById("kaynak").textContent = "🟡 demo";
+  }
+  render();
+}
+
 render();
+canliVakitCek();
 setInterval(tik, 1000);
+setInterval(() => canliVakitCek(), 6 * 3600000);
 """
 
 _PRAYER_TEMPLATE_MANIFEST = r"""{
@@ -4191,15 +4411,20 @@ Kurallar:
                     "yeterli (örn. 'adana kebap ekle', 'renkleri yeşil yap')."
                 )
         if not files:
-            text = await self._oneshot_project_text(user_message)
-            files = self._extract_fenced_files(text or "")
-        if not files:
-            files = self._template_project(user_message)
-            notes.append(
-                "Model biçime uygun dosya üretmeyi başaramadı; hazır şablon "
-                "ile proje oluşturuldu. İsteğin ayrıntısını (konu, renk, "
-                "bölümler) yazarsan model üretimini tekrar deneriz."
-            )
+            # Küçük yerel model az rastlanan isteklerde dakikalar sonra
+            # yarım/bozuk kod döndürüyor. Varsayılan: hazır modern şablon
+            # (TAM çalışır, öz denetimden geçer). LLM yolu yalnız
+            # NEXUS_LLM_BUILD=1 ile deneme amaçlı açılabilir.
+            if os.getenv("NEXUS_LLM_BUILD", "0") == "1":
+                text = await self._oneshot_project_text(user_message)
+                files = self._extract_fenced_files(text or "")
+            if not files:
+                files = self._template_project(user_message)
+                notes.append(
+                    "Modern hazır şablon yazıldı (TAM çalışır durumda). "
+                    "İçeriği kişiselleştirmek isteresen bölümleri söylemen "
+                    "yeterli — mevcut dosyalar korunarak düzenlenir."
+                )
         if not files:
             return None
 
@@ -4215,9 +4440,19 @@ Kurallar:
                 or len(code.strip()) >= 200
             ]
             primary = max(html_entries, key=lambda f: len(f[1]))[1]
-            if len(primary.strip()) < 1500:
+            eksik_bag = [
+                ref for ref in re.findall(
+                    r'(?:src|href)="([^"\s]+\.(?:css|js))"', primary)
+                if ref not in {rel for rel, _ in files}
+            ]
+            if eksik_bag or len(primary.strip()) < 1500:
+                # YARIM PROJE YASAK: eksik referans + kısa sayfa = şablon
                 files = self._template_project(user_message)
                 notes.append(
+                    "Yerel modelin üretimi eksik/yarım görünüyordu "
+                    "(eksik: " + ", ".join(eksik_bag[:3]) + "); kalite "
+                    "kapısı TAM ÇALIŞAN hazır şablonu devreye aldı."
+                ) if eksik_bag else notes.append(
                     "Yerel modelin üretimi çok kısa ve bozuktu; kalite "
                     "kapısı hazır şablonu devreye aldı."
                 )

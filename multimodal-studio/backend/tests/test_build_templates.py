@@ -170,3 +170,77 @@ def test_all_web_templates_have_brand_var():
                 "yemek sitesi"):
         files = dict(agent._template_project(msg))
         assert "--brand" in files["styles.css"], msg
+
+
+# ------------------------------------------------------------------
+# 2026-11-07: yarım-proje yasak + internet (canlı veri) testleri
+# ------------------------------------------------------------------
+
+
+def test_unknown_domain_skips_llm_and_writes_complete_template(tmp_path):
+    """Bilinmeyen alan → LLM oneshot çalışmaz, TAM şablon dosyaları yazılır."""
+    agent = _bare(tmp_path)
+
+    def yasak(msg):
+        raise AssertionError("LLM oneshot çağrılmamalı (NEXUS_LLM_BUILD=0)")
+
+    agent._oneshot_project_text = yasak
+    result = asyncio.run(agent._write_build_files(
+        "kitap okuma takip sitesi yap ve kaydet"))
+    root = str(tmp_path)
+    names = {os.path.basename(f) for f in result["files"]}
+    assert {"index.html", "styles.css", "script.js"} <= names
+    with open(os.path.join(root, "index.html"), encoding="utf-8") as f:
+        html = f.read()
+    assert "Aurora" in html                       # modern genel şablon
+    # yarım-proje kontrolü: HTML'in tüm css/js referansları diskte var mı?
+    import re as _re
+    for ref in _re.findall(r'(?:src|href)="([^"\s]+\.(?:css|js))"', html):
+        assert os.path.exists(os.path.join(root, os.path.basename(ref))), ref
+
+
+def test_quality_gate_swaps_half_project(tmp_path):
+    """Kısa HTML + eksik referans → kalite kapısı TAM şablona döner."""
+    agent = _bare(tmp_path)
+    yarim = ("```html\n<html><body><h1>Yarım site</h1>"
+             '<script src="script.js"></script>' + "dolgu metni " * 40 +
+             "</body></html>\n```")
+    result = asyncio.run(
+        agent._write_build_files("custom panel", draft_response=yarim))
+    with open(os.path.join(str(tmp_path), "index.html"),
+              encoding="utf-8") as f:
+        html = f.read()
+    assert "Yarım site" not in html       # bozuk üretim reddedildi
+    assert "Aurora" in html               # TAM şablon devreye girdi
+
+
+def test_weather_live_layer():
+    files = dict(ai_agent.NexusAIAgent._template_project("hava durumu yap"))
+    js = files["script.js"]
+    assert "open-meteo.com" in js                 # canlı veri API'si (anahtarsız)
+    assert "CANLI[" in js and "kodIkon" in js     # canlı durum + kod→ikon
+    assert "VERI" in js                           # demo yedeği korundu
+    assert 'id="mod"' in files["index.html"]       # canlı/demo rozeti
+    assert "canlı" in js and "demo" in js
+
+
+def test_prayer_live_layer():
+    files = dict(ai_agent.NexusAIAgent._template_project("namaz vakitleri"))
+    js = files["script.js"]
+    assert "aladhan.com" in js                    # Diyanet yöntemi API'si
+    assert "canliVakitCek" in js
+    assert "CANLI_SATLER" in js
+    assert 'id="kaynak"' in files["index.html"]   # canlı/demo rozeti
+    assert "method=13" in js                      # Diyanet İşleri ↔ method 13
+
+
+def test_aurora_generic_template_quality():
+    html, css, js = (
+        ai_agent._BUILD_TEMPLATE_HTML,
+        ai_agent._BUILD_TEMPLATE_CSS,
+        ai_agent._BUILD_TEMPLATE_JS,
+    )
+    assert len(css.strip()) >= 3000 and len(js.strip()) >= 1000
+    assert "--brand" in css                       # renk düzeni çalışır
+    assert "IntersectionObserver" in js           # scroll animasyonu
+    assert 'id="form"' in html and "themeBtn" in js
