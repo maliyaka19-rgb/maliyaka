@@ -2226,7 +2226,7 @@
             const bulutKart = `
                 <div class="provider-card ${bulutAktif ? 'active' : ''}" data-provider="cloud-byok">
                     <div class="provider-header">
-                        <span class="provider-name">☁️ Bulut — GLM</span>
+                        <span class="provider-name">☁️ Bulut — OpenRouter</span>
                         <span class="provider-badge ${bulutAktif ? 'free' : 'paid'}">${bulutAktif ? 'AKTİF' : 'anahtar gerekli'}</span>
                     </div>
                     <div class="provider-status">
@@ -2274,7 +2274,7 @@
             selectedProvider = 'cloud-byok';
             providerView.style.display = 'none';
             modelView.classList.add('active');
-            modelListTitle.textContent = '☁️ Bulut GLM Modelleri';
+            modelListTitle.textContent = '☁️ OpenRouter Modelleri';
             modelItems.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--fg-dim)">⏳ Canlı fiyatlar çekiliyor…</div>';
             let glm = [];
             let ucretsiz = [];
