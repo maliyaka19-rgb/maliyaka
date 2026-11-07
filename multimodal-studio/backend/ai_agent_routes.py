@@ -113,7 +113,7 @@ async def cloud_models(raw_request: Request):
     from cloud_llm import glm_models as _glm_modeller
 
     temel = raw_request.headers.get("X-Nexus-Llm-Base") or None
-    modeller = await _ucretsiz_modeller(temel)
+    modeller = await _ucretsiz_modeller(temel, limit=40)
     glm = await _glm_modeller(temel)
     return {"success": True, "models": modeller, "glm": glm,
             "count": len(modeller), "glm_count": len(glm)}

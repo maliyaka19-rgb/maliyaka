@@ -2277,14 +2277,39 @@
             modelListTitle.textContent = '☁️ Bulut GLM Modelleri';
             modelItems.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--fg-dim)">⏳ Canlı fiyatlar çekiliyor…</div>';
             let glm = [];
+            let ucretsiz = [];
             try {
                 const res = await fetch(API_BASE + '/api/v1/ai/cloud/models');
                 const data = await res.json();
                 glm = data.glm || [];
+                ucretsiz = data.models || [];
             } catch (e) { /* boş durumda güvenli varsayılan gösterilir */ }
             const mevcut = (function(){ try { return localStorage.getItem('nexus_llm_model') || ''; } catch (e) { return ''; } })();
-            if (!glm.length) {
-                modelItems.innerHTML = `
+            const glmx = glm.map(m => `
+                    <div class="model-item ${m.id === mevcut ? 'active' : ''}" data-model="${m.id}">
+                        <div class="model-item-info">
+                            <div class="model-item-name">${m.id}${m.id === mevcut ? ' ✓' : ''}</div>
+                            <div class="model-item-desc">girdi ${m.girdi_fiyati || '?'}$ · çıktı ${m.cikti_fiyati || '?'}$ / token</div>
+                        </div>
+                        <span class="model-item-context">${m.baglam ? Math.round(m.baglam / 1000) + 'K ctx' : ''}</span>
+                    </div>`).join('');
+            const ucx = ucretsiz.map(m => `
+                    <div class="model-item ${m.id === mevcut ? 'active' : ''}" data-model="${m.id}">
+                        <div class="model-item-info">
+                            <div class="model-item-name">${m.id}${m.id === mevcut ? ' ✓' : ''}</div>
+                            <div class="model-item-desc">100% ÜCRETSİZ — $0 (günlük kullanım sınırlı olabilir)</div>
+                        </div>
+                        <span class="model-item-context">${m.baglam ? Math.round(m.baglam / 1000) + 'K ctx' : ''}</span>
+                    </div>`).join('');
+            let liste = '';
+            if (glm.length) {
+                liste += '<div style="grid-column:1/-1;padding:10px 4px 2px;font-weight:600;color:var(--fg)">⚡ GLM kuşağı — neredeyse bedava (kendi anahtarınla)</div>' + glmx;
+            }
+            if (ucretsiz.length) {
+                liste += '<div style="grid-column:1/-1;padding:12px 4px 2px;font-weight:600;color:var(--fg)">🏛️ 100% ÜCRETSİZ modeller — 0$ (OpenRouter yine anahtar doğrular, günlük sınırlı)</div>' + ucx;
+            }
+            if (!liste) {
+                liste = `
                     <div class="model-item ${mevcut ? 'active' : ''}" id="cloud-default-item">
                         <div class="model-item-info">
                             <div class="model-item-name">z-ai/glm-5.3-flash (varsayılan ⭐)</div>
@@ -2293,16 +2318,8 @@
                         <span class="model-item-context">≈0.15$/M</span>
                         ${mevcut ? '<span class="model-item-check">✓</span>' : ''}
                     </div>`;
-            } else {
-                modelItems.innerHTML = glm.map(m => `
-                    <div class="model-item ${m.id === mevcut ? 'active' : ''}" data-model="${m.id}">
-                        <div class="model-item-info">
-                            <div class="model-item-name">${m.id}${m.id === mevcut ? ' ✓' : ''}</div>
-                            <div class="model-item-desc">girdi ${m.girdi_fiyati || '?'}$ · çıktı ${m.cikti_fiyati || '?'}$ / token</div>
-                        </div>
-                        <span class="model-item-context">${m.baglam ? Math.round(m.baglam / 1000) + 'K ctx' : ''}</span>
-                    </div>`).join('');
             }
+            modelItems.innerHTML = liste;
             const durum = document.createElement('div');
             durum.style.gridColumn = '1/-1';
             durum.style.padding = '14px';
