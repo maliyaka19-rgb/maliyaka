@@ -292,6 +292,22 @@ def test_ucretsiz_model_listesi_glm_once():
     assert liste[0]["baglam"] == 262144
 
 
+def test_ucretsiz_liste_yalniz_metin_yapani_alir():
+    def handler(_istek: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"data": [
+            {"id": "a/gorunmez-embedding:free", "context_length": 8192,
+             "architecture": {"output_modalities": ["embedding"]}},
+            {"id": "b/sadece-resim:free", "context_length": 8192,
+             "architecture": {"output_modalities": ["image"]}},
+            {"id": "c/metin:free", "context_length": 8192,
+             "architecture": {"output_modalities": ["text"]}},
+        ]})
+
+    liste = asyncio.run(cloud_llm.free_models(
+        transport=httpx.MockTransport(handler)))
+    assert [m["id"] for m in liste] == ["c/metin:free"]
+
+
 def test_ucretsiz_model_listesi_hata_donusu_bos():
     def handler(_istek: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="boom")

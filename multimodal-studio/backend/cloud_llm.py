@@ -167,6 +167,12 @@ async def free_models(base_url: Optional[str] = None, limit: int = 12,
         mid = m.get("id") or ""
         if ":free" not in mid:
             continue
+        # sohbet garanti kuralı: yalnız METİN çıktı üreten modeller listelenir;
+        # yalnız-görüntü/yalnız-embedding kimlikler listeye sızmaz
+        hedef = m.get("architecture") or {}
+        cikti_tipleri = hedef.get("output_modalities") or []
+        if cikti_tipleri and "text" not in cikti_tipleri:
+            continue
         hepsi.append({
             "id": mid,
             "ad": mid,
@@ -201,6 +207,11 @@ async def glm_models(base_url: Optional[str] = None, limit: int = 12,
     for m in kayit:
         mid = m.get("id") or ""
         if "glm" not in mid.lower():
+            continue
+        # sohbet garanti kuralı: yalnız METİN çıktı üreten modeller
+        hedef = m.get("architecture") or {}
+        cikti_tipleri = hedef.get("output_modalities") or []
+        if cikti_tipleri and "text" not in cikti_tipleri:
             continue
         fiyat = m.get("pricing") or {}
         # ":batch" ve "~" (esnek fiyat) varyantları standart sohbet için ikinciye
