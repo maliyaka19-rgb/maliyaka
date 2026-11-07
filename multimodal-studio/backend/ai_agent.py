@@ -4414,9 +4414,18 @@ Kurallar:
             # Küçük yerel model az rastlanan isteklerde dakikalar sonra
             # yarım/bozuk kod döndürüyor. Varsayılan: hazır modern şablon
             # (TAM çalışır, öz denetimden geçer). LLM yolu yalnız
-            # NEXUS_LLM_BUILD=1 ile deneme amaçlı açılabilir.
+            # NEXUS_LLM_BUILD=1 ile deneme amaçlı açılabilir; model isterse
+            # NEXUS_BUILD_LLM_BUDGET saniyede yanıt vermezse aurora
+            # şablonuna güvenli düşüş yapılır.
             if os.getenv("NEXUS_LLM_BUILD", "0") == "1":
-                text = await self._oneshot_project_text(user_message)
+                try:
+                    text = await asyncio.wait_for(
+                        self._oneshot_project_text(user_message),
+                        timeout=float(os.getenv(
+                            "NEXUS_BUILD_LLM_BUDGET", "240")),
+                    )
+                except Exception:
+                    text = ""
                 files = self._extract_fenced_files(text or "")
             if not files:
                 files = self._template_project(user_message)

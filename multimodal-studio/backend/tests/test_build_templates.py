@@ -214,6 +214,26 @@ def test_quality_gate_swaps_half_project(tmp_path):
     assert "Aurora" in html               # TAM şablon devreye girdi
 
 
+def test_llm_build_budget_falls_back_to_template(tmp_path, monkeypatch):
+    """Model sürüklenirse bütçe aşılır → TAM şablon düşüşü, kilitlenmez."""
+    monkeypatch.setenv("NEXUS_LLM_BUILD", "1")
+    monkeypatch.setenv("NEXUS_BUILD_LLM_BUDGET", "0.3")
+
+    async def suruklenen(msg):
+        await asyncio.sleep(30)
+        return "asla bu metin dönmemeli"
+
+    agent = _bare(tmp_path)
+    agent._oneshot_project_text = suruklenen
+    result = asyncio.run(agent._write_build_files(
+        "özel stok takip paneli yap"))
+    with open(os.path.join(str(tmp_path), "index.html"),
+              encoding="utf-8") as f:
+        html = f.read()
+    assert "asla bu metin" not in html
+    assert "Aurora" in html               # bütçe sonunda güvenli düşüş
+
+
 def test_weather_live_layer():
     files = dict(ai_agent.NexusAIAgent._template_project("hava durumu yap"))
     js = files["script.js"]
