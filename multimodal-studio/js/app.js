@@ -2220,8 +2220,22 @@
         // Render provider grid
         function renderProviderGrid() {
             if (!modelCatalog) return;
-            
-            providerGrid.innerHTML = modelCatalog.map(p => {
+            // ☁️ Bulut (BYOK) kartı — kullanıcının baktığı yerde görünsün
+            const bulutAktif = cloudKeyAktif();
+            const bulutModel = (function(){ try { return localStorage.getItem('nexus_llm_model') || 'z-ai/glm-5.3-flash'; } catch (e) { return 'z-ai/glm-5.3-flash'; } })();
+            const bulutKart = `
+                <div class="provider-card ${bulutAktif ? 'active' : ''}" data-provider="cloud-byok">
+                    <div class="provider-header">
+                        <span class="provider-name">☁️ Bulut — GLM</span>
+                        <span class="provider-badge ${bulutAktif ? 'free' : 'paid'}">${bulutAktif ? 'AKTİF' : 'anahtar gerekli'}</span>
+                    </div>
+                    <div class="provider-status">
+                        <span class="provider-status-dot ${bulutAktif ? 'connected' : 'disconnected'}"></span>
+                        ${bulutAktif ? 'Kendi anahtarınla bulutta çalışıyor' : 'Tıkla → anahtarını gir (sunucuda SAKLANMAZ)'}
+                        <span style="margin-left:auto;color:var(--fg-dim)">${bulutAktif ? bulutModel : '≈0.15$/M · neredeyse bedava'}</span>
+                    </div>
+                </div>`;
+            providerGrid.innerHTML = bulutKart + modelCatalog.map(p => {
                 const local = !!p.local;
                 const connected = local ? !!p.available : !!p.has_api_key;
                 const statusText = local
@@ -2245,8 +2259,80 @@
             // Add click handlers
             providerGrid.querySelectorAll('.provider-card').forEach(card => {
                 card.addEventListener('click', () => {
+                    if (card.dataset.provider === 'cloud-byok') {
+                        openCloudModelView();
+                        return;
+                    }
                     const providerId = card.dataset.provider;
                     selectProvider(providerId);
+                });
+            });
+        }
+
+        // ===== ☁️ BULUT (BYOK) MODEL GÖRÜNÜMÜ =====
+        async function openCloudModelView() {
+            selectedProvider = 'cloud-byok';
+            providerView.style.display = 'none';
+            modelView.classList.add('active');
+            modelListTitle.textContent = '☁️ Bulut GLM Modelleri';
+            modelItems.innerHTML = '<div style="grid-column:1/-1;text-align:center;padding:20px;color:var(--fg-dim)">⏳ Canlı fiyatlar çekiliyor…</div>';
+            let glm = [];
+            try {
+                const res = await fetch(API_BASE + '/api/v1/ai/cloud/models');
+                const data = await res.json();
+                glm = data.glm || [];
+            } catch (e) { /* boş durumda güvenli varsayılan gösterilir */ }
+            const mevcut = (function(){ try { return localStorage.getItem('nexus_llm_model') || ''; } catch (e) { return ''; } })();
+            if (!glm.length) {
+                modelItems.innerHTML = `
+                    <div class="model-item ${mevcut ? 'active' : ''}" id="cloud-default-item">
+                        <div class="model-item-info">
+                            <div class="model-item-name">z-ai/glm-5.3-flash (varsayılan ⭐)</div>
+                            <div class="model-item-desc">${mevcut ? 'Şu an bu model kayıtlı.' : 'Canlı liste alınamadı — güvenli varsayılan.'}</div>
+                        </div>
+                        <span class="model-item-context">≈0.15$/M</span>
+                        ${mevcut ? '<span class="model-item-check">✓</span>' : ''}
+                    </div>`;
+            } else {
+                modelItems.innerHTML = glm.map(m => `
+                    <div class="model-item ${m.id === mevcut ? 'active' : ''}" data-model="${m.id}">
+                        <div class="model-item-info">
+                            <div class="model-item-name">${m.id}${m.id === mevcut ? ' ✓' : ''}</div>
+                            <div class="model-item-desc">girdi ${m.girdi_fiyati || '?'}$ · çıktı ${m.cikti_fiyati || '?'}$ / token</div>
+                        </div>
+                        <span class="model-item-context">${m.baglam ? Math.round(m.baglam / 1000) + 'K ctx' : ''}</span>
+                    </div>`).join('');
+            }
+            const durum = document.createElement('div');
+            durum.style.gridColumn = '1/-1';
+            durum.style.padding = '14px';
+            durum.style.textAlign = 'center';
+            durum.style.color = 'var(--fg-dim)';
+            durum.innerHTML = cloudKeyAktif()
+                ? '🔑 Anahtarın kayıtlı — bir model tıkla, senin tarayıcına kaydedilir.'
+                : '🔑 GLM için anahtar ŞART (ücretsiz GLM katmanı yok; neredeyse bedava). <button class="header-btn" id="cloud-key-from-modal">🔑 Anahtarımı gir</button>';
+            modelItems.appendChild(durum);
+            const girisBtn = document.getElementById('cloud-key-from-modal');
+            if (girisBtn) girisBtn.addEventListener('click', () => {
+                modelOverlay.classList.remove('active');
+                if (cloudKeyBtn) cloudKeyBtn.click();
+            });
+            modelItems.querySelectorAll('.model-item').forEach(item => {
+                item.addEventListener('click', async () => {
+                    if (!cloudKeyAktif()) {
+                        if (item.id === 'cloud-default-item') {
+                            modelOverlay.classList.remove('active');
+                            if (cloudKeyBtn) cloudKeyBtn.click();
+                            return;
+                        }
+                        showToast('🔑 Önce anahtar gir — GLM anahtarsız seçilemez (ücretsiz uç yok, kasıtlı güvenlik kuralı).');
+                        return;
+                    }
+                    const mdl = item.dataset.model || 'z-ai/glm-5.3-flash';
+                    try { localStorage.setItem('nexus_llm_model', mdl); } catch (e) { /* yok say */ }
+                    cloudKeyEtiketYenile();
+                    showToast('☁️ ' + mdl + ' seçildi — sohbetler artık bulut GLM\'den akar.');
+                    modelOverlay.classList.remove('active');
                 });
             });
         }
