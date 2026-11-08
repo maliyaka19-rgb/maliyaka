@@ -59,6 +59,9 @@
         let token = null;
         let currentUser = null;
         let convId = null;
+        // Düşünce süreci kutusu görünmesin (kullanıcı tercihi).
+        // Geri getirmek için true yap.
+        const DUSUNCE_KUTUSU = false;
         let currentChatId = null;
         let busy = false;
         let isNewUser = false;
@@ -720,8 +723,10 @@
                         </div><br>`;
                     }
 
-                    // Add thinking steps if available
-                    if (data.thinking_steps?.length) {
+                    // Düşünce süreci kutusu KALDIRILDI (kullanıcı tercihi:
+                    // cevap yazılınca ham adımlar gösterilmesin). Geri
+                    // istenirse `DUSUNCE_KUTUSU = true` yapılması yeterli.
+                    if (DUSUNCE_KUTUSU && data.thinking_steps?.length) {
                         html += buildThinkingSteps(data.thinking_steps);
                     }
                     
