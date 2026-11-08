@@ -83,7 +83,10 @@
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
             background: var(--bg-gradient);
             color: var(--fg);
+            /* telefonda adres çubuğu görünür alanı küçültür: dvh gerçeği izler
+               (JS --app-h yaşadığı cihazda yedek değişken daha kesin) */
             min-height: 100vh;
+            min-height: 100dvh;
             line-height: 1.5;
             -webkit-font-smoothing: antialiased;
             overflow: hidden;
@@ -93,7 +96,18 @@
         button { font-family: inherit; cursor: pointer; border: none; background: none; }
 
         /* ===== LAYOUT ===== */
-        .app-layout { display: flex; height: 100vh; overflow: hidden; }
+        /* 100vh telefonda gönder/yazma satırını ekran altına taşırır:
+           1) var(--app-h): app.js innerHeight ile canlı güncellenir (klavye dahil)
+           2) 100dvh: modern tarayıcıların GERÇEK görünür yüksekliği
+           3) 100vh: en eski gerileyenlere son taze */
+        .app-layout {
+            display: flex;
+            /* yedekler sırayla: en eski → dvh → JS'in CANLI ölçüsü kazanır */
+            height: 100vh;
+            height: 100dvh;
+            height: var(--app-h, 100dvh);
+            overflow: hidden;
+        }
 
         /* ===== SIDEBAR (Sabit — her zaman görünür) ===== */
         .sidebar {

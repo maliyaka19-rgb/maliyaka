@@ -109,6 +109,20 @@
             window.location.reload();
         });
 
+        // ===== TELEFON GÖRÜNÜR ALANI (--app-h canlı ölçüm) =====
+        // 100vh telefonda adres çubuğu+jest çubuğu altını da içerdiğinden
+        // alt composer ekran dışına taşar. visualViewport = GERÇEK görünür
+        // alan (klavye açılınca da küçülür) → composer daima görünür kalır.
+        function nexusAppH() {
+            const vv = window.visualViewport;
+            const h = (vv && vv.height) ? Math.round(vv.height) : window.innerHeight;
+            document.documentElement.style.setProperty('--app-h', h + 'px');
+        }
+        nexusAppH();
+        window.addEventListener('resize', nexusAppH);
+        window.addEventListener('orientationchange', () => setTimeout(nexusAppH, 120));
+        if (window.visualViewport) window.visualViewport.addEventListener('resize', nexusAppH);
+
         // ===== MOBILE SIDEBAR =====
         const sidebarOverlay = document.getElementById('sidebar-overlay');
         const menuToggleBtn = document.getElementById('menu-toggle');
