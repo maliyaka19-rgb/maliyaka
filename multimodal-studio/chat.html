@@ -979,7 +979,23 @@
                 max-width: 100%;
             }
         }
-    </style>
+            /* Gmail (Google) giriş bloğu */
+        .auth-divider {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            margin: 14px 6px 10px;
+            color: var(--fg-muted);
+            font-size: 0.75rem;
+        }
+        .auth-divider::before, .auth-divider::after {
+            content: '';
+            flex: 1;
+            height: 1px;
+            background: var(--border);
+        }
+        #gmail-btn-slot { display: flex; justify-content: center; }
+</style>
 </head>
 <body>
     <button class="theme-toggle" id="theme-toggle" title="Tema değiştir">🌙</button>
@@ -1019,6 +1035,11 @@
                         <div class="spinner" style="display:none"></div>
                     </button>
                 </form>
+
+                <div id="gmail-auth-block" style="display:none;">
+                    <div class="auth-divider"><span>veya</span></div>
+                    <div id="gmail-btn-slot"></div>
+                </div>
 
                 <div class="auth-actions" id="auth-actions">
                     <button type="button" class="guest-btn" id="guest-mode">
@@ -1419,6 +1440,55 @@
                 showToast(err.message, 'error');
             }
         });
+
+        // ===== GMAIL (GOOGLE) GİRİŞİ =====
+        // Düğme yalnız sunucuda GOOGLE_CLIENT_ID tanımlıysa görünür:
+        // Google Identity Services (client_id kamu bilgisidir, sırrı gerekmez).
+        async function gmailGirisiBaslat() {
+            try {
+                const c = await fetch(`${API_BASE}/api/v1/auth/oauth/google/config`);
+                const cfg = await c.json();
+                if (!cfg || !cfg.enabled || !cfg.client_id) return; // kapalı: gizli
+                const blok = document.getElementById('gmail-auth-block');
+                if (blok) blok.style.display = 'block';
+                await new Promise((coz, vad) => {
+                    const s = document.createElement('script');
+                    s.src = 'https://accounts.google.com/gsi/client';
+                    s.async = true;
+                    s.onload = coz;
+                    s.onerror = () => vad(new Error('Google script yüklenemedi'));
+                    document.head.appendChild(s);
+                });
+                google.accounts.id.initialize({
+                    client_id: cfg.client_id,
+                    callback: async (cev) => {
+                        try {
+                            const d = await apiCall('/oauth/token', 'POST', {
+                                provider: 'google',
+                                id_token: cev.credential
+                            });
+                            localStorage.setItem('nexus_token', d.access_token);
+                            showToast('Gmail girişi başarılı! Hoş geldiniz.', 'success');
+                            setTimeout(() => { window.location.href = '/sohbet.html'; }, 700);
+                        } catch (e) {
+                            showToast('Google girişi başarısız: ' + e.message, 'error');
+                        }
+                    }
+                });
+                google.accounts.id.renderButton(document.getElementById('gmail-btn-slot'), {
+                    theme: 'outline',
+                    size: 'large',
+                    shape: 'pill',
+                    text: 'signin_with',
+                    locale: 'tr',
+                    logo_alignment: 'left'
+                });
+            } catch (e) {
+                // Google script/Google'a erişilemezse sayfa normal giriş çalışır
+                console.warn('[Gmail giriş] gizli: ' + e.message);
+            }
+        }
+        gmailGirisiBaslat();
 
         // ===== FORGOT PASSWORD =====
         forgotPasswordBtn.addEventListener('click', (e) => {

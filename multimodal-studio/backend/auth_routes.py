@@ -21,7 +21,8 @@ from auth import (
     create_access_token, hash_password,
     verify_google_token, verify_apple_token,
     GOOGLE_CLIENT_ID, APPLE_CLIENT_ID, OAUTH_REDIRECT_URI,
-    generate_apple_client_secret, save_users
+    generate_apple_client_secret, save_users,
+    encrypt_api_key, decrypt_api_key
 )
 
 # Import AI agent to access conversation memory
@@ -46,6 +47,23 @@ class ForgotPasswordRequest(BaseModel):
 class ResetPasswordRequest(BaseModel):
     token: str
     new_password: str
+
+
+# ============================================================
+# API KEY MANAGEMENT MODELS
+# ============================================================
+
+class ApiKeyCreate(BaseModel):
+    provider: str  # openrouter, anthropic, openai, google, groq, etc.
+    api_key: str
+
+class ApiKeyResponse(BaseModel):
+    provider: str
+    has_key: bool
+    masked_key: Optional[str] = None  # sk-or-v1-xxxx... (son 4 char)
+
+class ApiKeyListResponse(BaseModel):
+    api_keys: List[ApiKeyResponse]
 
 @router.post("/register", response_model=TokenResponse, summary="Register new user")
 async def register(data: UserRegister):
@@ -128,6 +146,56 @@ async def get_me(current_user = Depends(get_current_user)):
     }
 
 
+# ============================================================
+# API KEY MANAGEMENT ENDPOINTS (per-user)
+# ============================================================
+
+@router.get("/api-keys", response_model=ApiKeyListResponse, summary="List user's API keys")
+async def list_api_keys(current_user = Depends(get_current_user)):
+    """List user's configured API keys (masked)."""
+    keys = current_user.api_keys or {}
+    result = []
+    for provider, enc_key in keys.items():
+        try:
+            decrypted = decrypt_api_key(enc_key)
+            masked = decrypted[:8] + "..." + decrypted[-4:] if len(decrypted) > 12 else "***"
+        except Exception:
+            masked = "***"
+        result.append(ApiKeyResponse(provider=provider, has_key=True, masked_key=masked))
+    return {"api_keys": result}
+
+
+@router.post("/api-keys", summary="Add/update API key for a provider")
+async def add_api_key(data: ApiKeyCreate, current_user = Depends(get_current_user)):
+    """Add or update an API key for the current user."""
+    # Validate provider
+    valid_providers = ["openrouter", "anthropic", "openai", "google", "groq", "xai", "together", "cohere"]
+    if data.provider not in valid_providers:
+        raise HTTPException(status_code=400, detail=f"Invalid provider. Valid: {valid_providers}")
+    
+    if not data.api_key or len(data.api_key) < 10:
+        raise HTTPException(status_code=400, detail="API key too short")
+    
+    # Encrypt and store
+    current_user.api_keys = current_user.api_keys or {}
+    current_user.api_keys[data.provider] = encrypt_api_key(data.api_key)
+    save_users(auth_service.users)
+    
+    return {"success": True, "message": f"API key for {data.provider} saved"}
+
+
+@router.delete("/api-keys/{provider}", summary="Delete API key for a provider")
+async def delete_api_key(provider: str, current_user = Depends(get_current_user)):
+    """Delete an API key for the current user."""
+    if not current_user.api_keys or provider not in current_user.api_keys:
+        raise HTTPException(status_code=404, detail="API key not found")
+    
+    del current_user.api_keys[provider]
+    save_users(auth_service.users)
+    
+    return {"success": True, "message": f"API key for {provider} deleted"}
+
+
 @router.post("/logout", summary="Logout (client-side token removal)")
 async def logout():
     return {"success": True, "message": "Logged out"}
@@ -140,6 +208,19 @@ async def logout():
 class OAuthTokenRequest(BaseModel):
     provider: str  # "google" or "apple"
     id_token: str
+
+@router.get("/oauth/google/config", summary="Google (Gmail) giriş yapılandırma durumu")
+async def google_oauth_config():
+    """Gmail ile giriş düğmesinin durumu.
+
+    ``client_id`` kamuya açık bilgidir (istemci tarafında Google düğmesi
+    için gerekir); sunucu sırrı ``client_secret`` HİÇBİR uç noktada
+    döndürülmez.
+    """
+    ayarli = _is_configured_oauth(GOOGLE_CLIENT_ID)
+    return {"enabled": ayarli,
+            "client_id": GOOGLE_CLIENT_ID if ayarli else ""}
+
 
 @router.post("/oauth/token", response_model=TokenResponse, summary="Exchange OAuth ID token for JWT")
 async def oauth_token(data: OAuthTokenRequest):
@@ -175,14 +256,10 @@ def _is_configured_oauth(client_id: str) -> bool:
 async def google_oauth_url(request: Request):
     """Get Google OAuth authorization URL."""
     if not _is_configured_oauth(GOOGLE_CLIENT_ID):
-        user = auth_service.get_or_create_oauth_user(
-            email="google.user@example.com",
-            provider="google",
-            provider_id="mock_google_123",
-            name="Google Kullanıcısı"
-        )
-        token = create_access_token({"sub": user.id, "email": user.email})
-        return {"url": f"http://localhost:8080/chat.html?token={token}&provider=google", "mock": True}
+        # GÜVENLİK: yapılandırılmamışken SAHTE kullanıcı/token üretilmez
+        # (eski mock akışı parolasız gerçek oturum dıştığı için kapatıldı)
+        return {"enabled": False, "url": None,
+                "detail": "Google girişi yapılandırılmamış (GOOGLE_CLIENT_ID eksik)"}
     
     import secrets
     state = secrets.token_urlsafe(32)
@@ -204,14 +281,9 @@ async def google_oauth_url(request: Request):
 async def apple_oauth_url(request: Request):
     """Get Apple OAuth authorization URL."""
     if not _is_configured_oauth(APPLE_CLIENT_ID):
-        user = auth_service.get_or_create_oauth_user(
-            email="apple.user@example.com",
-            provider="apple",
-            provider_id="mock_apple_123",
-            name="Apple Kullanıcısı"
-        )
-        token = create_access_token({"sub": user.id, "email": user.email})
-        return {"url": f"http://localhost:8080/chat.html?token={token}&provider=apple", "mock": True}
+        # GÜVENLİK: yapılandırılmamışken sahte kullanıcı/token üretilmez
+        return {"enabled": False, "url": None,
+                "detail": "Apple girişi yapılandırılmamış (APPLE_CLIENT_ID eksik)"}
     
     import secrets
     state = secrets.token_urlsafe(32)
