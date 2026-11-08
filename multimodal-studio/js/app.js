@@ -2455,7 +2455,10 @@
                             const mr = await fetch(MODELS_API + '/active');
                             const md = await mr.json();
                             if (md.success && md.model) {
-                                modelSuffix = ' · ' + (md.provider === 'local' ? 'Yerel: ' : '') + (md.model_name || md.model);
+                                // ☁️ BYOK: anahtarın tanımlıysa çıtan bulutu gösterir
+                                modelSuffix = cloudKeyAktif()
+                                    ? ' · ☁️ Bulut: ' + ((function(){ try { return localStorage.getItem('nexus_llm_model'); } catch (e) { return null; } })() || md.model_name || md.model)
+                                    : ' · ' + (md.provider === 'local' ? 'Yerel: ' : '') + (md.model_name || md.model);
                             }
                         } catch (e) {}
                         modelBtnText.textContent = agent.icon + ' ' + agent.name + modelSuffix;
@@ -2467,7 +2470,9 @@
                 const res = await fetch(MODELS_API + '/active');
                 const data = await res.json();
                 if (data.success && data.model) {
-                    modelBtnText.textContent = data.model_name || data.model;
+                    modelBtnText.textContent = cloudKeyAktif()
+                        ? '☁️ Bulut: ' + ((function(){ try { return localStorage.getItem('nexus_llm_model'); } catch (e) { return null; } })() || data.model_name || data.model)
+                        : (data.model_name || data.model);
                     modelStatusDot.classList.remove('disconnected');
                 } else {
                     modelBtnText.textContent = 'Model Seç';
@@ -2491,6 +2496,9 @@
                     cloudKeyBtn.title = 'Bulut model için KENDİ API anahtarını ekle (sunucuda saklanmaz)';
                 }
             } catch (e) { /* localStorage kapalıysa başlık değişmez */ }
+            // Ana Yönetici Ajan çıtanındaki model öjetini de tazele:
+            // anahtar/model değişince çıtan anında ☁️ Bulut/Yerel'e döner
+            try { updateModelButton(); } catch (e) { /* henüz hazır değilse sayfa yüklenince düzelir */ }
         }
         if (cloudKeyBtn) cloudKeyBtn.addEventListener('click', async () => {
             const mevcut = localStorage.getItem('nexus_llm_key') || '';
