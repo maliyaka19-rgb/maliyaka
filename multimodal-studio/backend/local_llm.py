@@ -50,7 +50,11 @@ CANDIDATE_ENDPOINTS: List[tuple] = [
 ]
 
 DETECT_TIMEOUT = 1.5
-CHAT_TIMEOUT = 120.0
+# Soğuk ilk yükleme (model Ollama'ya ilk çağrıda RAM'e otururken 45-90 sn
+# sürebilir) + yavaş CPU üretimi 120 sn sınırını patlatabiliyor; o zaman
+# "LLM boş yanıt döndürdü" görünüyordu. Varsayılan 300 sn + ayarlanabilir:
+#   set NEXUS_LOCAL_LLM_TIMEOUT=300
+CHAT_TIMEOUT = float(os.getenv("NEXUS_LOCAL_LLM_TIMEOUT", "300"))
 
 # Kucuk donanimda gercekci (Q4) oneriler; bilgilendirme amaclidir.
 RECOMMENDED_MODELS = ["qwen2.5:0.5b", "qwen2.5:1.5b", "llama3.2:1b", "llama3.2:3b"]
@@ -60,12 +64,15 @@ RECOMMENDED_MODELS = ["qwen2.5:0.5b", "qwen2.5:1.5b", "llama3.2:1b", "llama3.2:3
 # AYARLAR / GUVENLIK
 # ============================================================
 
+DEFAULT_OLLAMA_URL = "http://127.0.0.1:11434/v1"
+DEFAULT_OLLAMA_MODEL = "qwen2.5:3b"
+
 def configured_url() -> str:
-    return (os.getenv(ENV_URL) or "").strip().rstrip("/")
+    return (os.getenv(ENV_URL) or DEFAULT_OLLAMA_URL).strip().rstrip("/")
 
 
 def model_name() -> str:
-    return (os.getenv(ENV_MODEL) or "").strip()
+    return (os.getenv(ENV_MODEL) or DEFAULT_OLLAMA_MODEL).strip()
 
 
 def is_loopback(url: str) -> bool:
@@ -84,11 +91,10 @@ def is_enabled() -> bool:
 
 
 def status_note() -> str:
-    if not configured_url():
-        return "Yerel model KAPALI (NEXUS_LOCAL_LLM_URL tanimli degil)."
-    if not is_loopback(configured_url()):
+    url = configured_url()
+    if not is_loopback(url):
         return "Yerel model KAPALI: yalnizca loopback (127.0.0.1/localhost) adresleri desteklenir."
-    return f"Yerel model ACIK: {configured_url()}"
+    return f"Yerel Ollama ACIK: {url}"
 
 
 # ============================================================
@@ -161,13 +167,17 @@ async def detect(timeout: float = DETECT_TIMEOUT) -> Dict[str, Any]:
 
 async def chat(messages: List[Dict[str, Any]], model: Optional[str] = None,
                base_url: Optional[str] = None, temperature: float = 0.7,
-               max_tokens: int = 1024, timeout: float = CHAT_TIMEOUT) -> Dict[str, Any]:
+               max_tokens: int = 1024, timeout: float = CHAT_TIMEOUT,
+               tools: Optional[List[Dict[str, Any]]] = None,
+               tool_choice: str = "auto") -> Dict[str, Any]:
     """
     Yerel OpenAI-uyumlu ``/chat/completions`` cagrisi. Bulut saglayicilarla ayni
     sekli dondurur: basarida ``{"success": True, "data": {...}}``.
 
-    NOT: Yerel/kucuk modellere arac (tools) semasi GONDERILMEZ; metin yaniti
-    uretirler. Bu, arac cagrisi gerektiren gorevlerde bilincli bir sinirlamadir.
+    ``tools`` verilirse arac semasi modele iletilir. Qwen2.5 gibi araç
+    çağrısını destekleyen yerel modeller böylece dosya yazma/komut çalıştırma
+    araçlarını GERÇEKTEN çağırabilir. Desteklemeyen modeller metin yanıtı
+    üretmeye devam eder; çağıran katman bunu başarısız adım olarak işler.
     """
     base = (base_url or configured_url()).rstrip("/")
     if not base:
@@ -193,6 +203,9 @@ async def chat(messages: List[Dict[str, Any]], model: Optional[str] = None,
                 "temperature": temperature,
                 "max_tokens": max_tokens,
             }
+            if tools:
+                payload["tools"] = tools
+                payload["tool_choice"] = tool_choice
             resp = await client.post(f"{base}/chat/completions", json=payload)
             if resp.status_code != 200:
                 return {"success": False, "model": mdl,
