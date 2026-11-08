@@ -1931,4 +1931,25 @@
                 font-size: 0 !important;
             }
             #project-toggle svg { width: 16px; height: 16px; }
+            /* alt composer tam görünsün: çentik/giriş-çubuğu pastası */
+            .input-area {
+                padding-left: calc(12px + env(safe-area-inset-left, 0px));
+                padding-right: calc(12px + env(safe-area-inset-right, 0px));
+                padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+                padding-top: 10px;
+            }
+            .input-area .input-wrap { gap: 6px; align-items: stretch; }
+            /* 16px: iOS odakta otomatik yakınlaştırma yapmasın diye eşik */
+            #message-input {
+                padding: 10px 12px;
+                min-height: 44px;
+                font-size: 16px !important;
+            }
+            #send-btn {
+                padding: 10px 16px !important;
+                min-height: 44px;
+                font-size: 0.9rem !important;
+            }
+            /* otomatik satır büyüme hâlâ çalışsın — yalnız üst sınır kesildi */
+            #message-input { max-height: 140px; }
         }
