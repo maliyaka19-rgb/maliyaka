@@ -101,6 +101,14 @@
             });
         }
 
+        // ===== SAYFA YENİLE (telefonda aşağı-çek uygulamada çalışmaz) =====
+        // Uygulama-tarzı düzen (sabit yükseklik + iç kaydırma) native
+        // pull-to-refresh'i yakalamaz; tek dokunuşla güvenli tazeleme:
+        const refreshBtn = document.getElementById('refresh-btn');
+        if (refreshBtn) refreshBtn.addEventListener('click', () => {
+            window.location.reload();
+        });
+
         // ===== MOBILE SIDEBAR =====
         const sidebarOverlay = document.getElementById('sidebar-overlay');
         const menuToggleBtn = document.getElementById('menu-toggle');
