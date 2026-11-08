@@ -1876,3 +1876,59 @@
             }
         }
     
+
+        /* ===== MOBILE (A) ikon grupta tek hap • (B) safe-area (çentik çakışmasi) ===== */
+        .actions-group { display: contents; }
+        @media (max-width: 768px) {
+            .main-header {
+                padding-left: calc(10px + env(safe-area-inset-left, 0px));
+                padding-right: calc(10px + env(safe-area-inset-right, 0px));
+                padding-top: calc(8px + env(safe-area-inset-top, 0px));
+                padding-bottom: 8px;
+                min-height: 58px;
+                gap: 6px;
+            }
+            .main-header-actions { gap: 6px; align-items: center; }
+            .actions-group {
+                display: inline-flex;
+                gap: 2px;
+                padding: 2px;
+                border: 1px solid var(--border);
+                border-radius: 999px;
+                background: var(--bg-surface-elevated);
+                flex-shrink: 0;
+            }
+            .main-header-actions .icon-btn {
+                min-width: 34px !important;
+                width: 34px;
+                height: 34px;
+                padding: 4px !important;
+                font-size: 0.95rem !important;
+                border: none !important;
+                background: transparent !important;
+                border-radius: 999px;
+            }
+            .main-header-actions .icon-btn:hover { background: var(--accent-soft) !important; }
+            .main-header-actions .model-btn {
+                min-width: 0;
+                max-width: 46vw;
+                padding: 6px 10px;
+                font-size: 0.78rem !important;
+                border-width: 1px !important;
+                box-shadow: none;
+            }
+            #model-btn-text {
+                display: inline-block;
+                max-width: 34vw;
+                overflow: hidden;
+                text-overflow: ellipsis;
+                white-space: nowrap;
+                vertical-align: middle;
+            }
+            #project-toggle {
+                min-width: 34px !important;
+                padding: 8px !important;
+                font-size: 0 !important;
+            }
+            #project-toggle svg { width: 16px; height: 16px; }
+        }

@@ -2,13 +2,13 @@
 <html lang="tr" data-theme="light">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
     <title>NEXUS-CORE — Sohbet</title>
     <link rel="icon" href="data:,">
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="css/style.css?v=69">
+    <link rel="stylesheet" href="css/style.css?v=70">
     <script>
         // Tema ilk boyamadan önce uygulanır (yanlış tema titremesini engeller).
         try { document.documentElement.setAttribute('data-theme', localStorage.getItem('nexus_theme') || 'light'); } catch (e) {}
@@ -119,7 +119,8 @@
                     <h3 class="main-header-title" id="chat-title">Yeni Sohbet</h3>
                 </div>
                 <div class="main-header-actions">
-                    <button class="header-btn icon-btn" id="voice-toggle" title="Sesli Sohbet" aria-label="Sesli sohbete geç">
+                    <div class="actions-group">
+                        <button class="header-btn icon-btn" id="voice-toggle" title="Sesli Sohbet" aria-label="Sesli sohbete geç">
                         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
                             <path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-6-3z"></path>
                             <path d="M19 10v2a7 7 0 0 1-14 0v-2"></path>
@@ -130,6 +131,7 @@
                     <button class="header-btn icon-btn" id="theme-toggle" title="Tema değiştir" aria-label="Tema değiştir">🌙</button>
                     <button class="header-btn icon-btn" id="cloud-key-btn" title="Bulut model için KENDİ API anahtarını ekle (sunucuda saklanmaz)" aria-label="Bulut API anahtarı ayarları">☁️</button>
                     <a class="header-btn icon-btn" id="telegram-link" href="telegram.html" title="Telegram entegrasyonu (bot kontrol & sohbet)" aria-label="Telegram entegrasyonu" style="text-decoration:none;color:inherit;display:inline-flex;align-items:center;justify-content:center">✈️</a>
+                    </div>
                     <button class="model-btn" id="model-btn" title="AI Model seç">
                         <span class="model-dot" id="model-status-dot"></span>
                         <span id="model-btn-text">Model</span>
