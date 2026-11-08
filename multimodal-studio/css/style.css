@@ -1949,7 +1949,11 @@
             .input-area {
                 padding-left: calc(12px + env(safe-area-inset-left, 0px));
                 padding-right: calc(12px + env(safe-area-inset-right, 0px));
-                padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+                /* ANDROID CHROME garanti payı: bazı cihazlarda alt çubuk ölçüsü
+                   env'e sızmaz → composer fiziksel olarak 46px yukarı taşınır
+                   (boşalan şerit composer'ın kendi zemin rengiyle dolduğundan
+                   doğal görünür) */
+                padding-bottom: calc(12px + 46px + env(safe-area-inset-bottom, 0px));
                 padding-top: 10px;
             }
             .input-area .input-wrap { gap: 6px; align-items: stretch; }
